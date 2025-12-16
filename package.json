@@ -1,0 +1,14 @@
+{
+  "name": "motion-solid-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "package",
+    "playground"
+  ],
+  "scripts": {
+    "dev": "bun --filter @motion-solid/playground dev",
+    "build": "bun --filter motion-solid build",
+    "build:playground": "bun --filter @motion-solid/playground build"
+  }
+}

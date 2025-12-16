@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+:root {
+  --app-bg: #f6f7fb;
+  --app-text: rgba(0, 0, 0, 0.88);
+}
+
+:root[data-theme="dark"] {
+  --app-bg: #0b0c10;
+  --app-text: rgba(255, 255, 255, 0.92);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--app-text);
+}
