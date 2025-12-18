@@ -14,13 +14,15 @@ function Example() {
   return (
     <>
       <button onClick={() => setOpen((v) => !v)}>Toggle</button>
-      <AnimatePresence when={open()}>
-        <motion.div
-          initial={{ opacity: 0, x: "100px" }}
-          animate={{ opacity: 1, x: "0" }}
-          exit={{ opacity: 0, x: "-100px" }}
-          transition={{ duration: 0.6 }}
-        />
+      <AnimatePresence>
+        {open() && (
+          <motion.div
+            initial={{ opacity: 0, x: "100px" }}
+            animate={{ opacity: 1, x: "0" }}
+            exit={{ opacity: 0, x: "-100px" }}
+            transition={{ duration: 0.6 }}
+          />
+        )}
       </AnimatePresence>
     </>
   );
