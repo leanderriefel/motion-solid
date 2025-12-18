@@ -222,26 +222,53 @@ function KeyframesDemo() {
 
 function ListDemo() {
   const [items, setItems] = createSignal([1, 2, 3]);
+  const [selected, setSelected] = createSignal(1);
+  const [expanded, setExpanded] = createSignal<number | null>(null);
   let nextId = 4;
 
+  const reset = () => {
+    setItems([1, 2, 3]);
+    setSelected(1);
+    setExpanded(null);
+    nextId = 4;
+  };
+
   const addItem = () => {
-    setItems((prev) => [...prev, nextId++]);
+    const id = nextId++;
+    setItems((prev) => [...prev, id]);
+  };
+
+  const shuffleItems = () => {
+    setItems((prev) => {
+      const next = [...prev];
+      for (let i = next.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = next[i]!;
+        next[i] = next[j]!;
+        next[j] = tmp;
+      }
+      return next;
+    });
   };
 
   const removeItem = (id: number) => {
-    setItems((prev) => prev.filter((i) => i !== id));
+    const next = items().filter((i) => i !== id);
+    setItems(next);
+
+    if (selected() === id) setSelected(next[0] ?? id);
+    if (expanded() === id) setExpanded(null);
   };
 
   return (
     <div class="space-y-3">
-      <div class="flex gap-2">
-        <button class={`${buttonClasses} ui-control flex-1`} onClick={addItem}>
-          Add item
+      <div class="grid gap-2 sm:grid-cols-3">
+        <button class={`${buttonClasses} ui-control`} onClick={addItem}>
+          Add
         </button>
-        <button
-          class={`${buttonClasses} ui-control flex-1`}
-          onClick={() => setItems([1, 2, 3])}
-        >
+        <button class={`${buttonClasses} ui-control`} onClick={shuffleItems}>
+          Shuffle
+        </button>
+        <button class={`${buttonClasses} ui-control`} onClick={reset}>
           Reset
         </button>
       </div>
@@ -251,19 +278,51 @@ function ListDemo() {
           {items().map((item) => (
             <motion.div
               key={item}
-              class="ui-subpanel flex items-center justify-between rounded-lg border p-3"
+              layout
+              class="ui-subpanel relative overflow-hidden rounded-lg border p-3"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.2 }}
             >
-              <span class="text-sm font-medium">Item {item}</span>
-              <button
-                class="text-xs ui-muted hover:text-red-500"
-                onClick={() => removeItem(item)}
-              >
-                Remove
-              </button>
+              <div class="flex items-center justify-between gap-3">
+                <button
+                  class="text-left text-sm font-medium"
+                  onClick={() => setSelected(item)}
+                >
+                  Item {item}
+                </button>
+                <div class="flex items-center gap-3">
+                  <button
+                    class="text-xs ui-muted hover:text-current"
+                    onClick={() =>
+                      setExpanded((current) => (current === item ? null : item))
+                    }
+                  >
+                    {expanded() === item ? "Collapse" : "Expand"}
+                  </button>
+                  <button
+                    class="text-xs ui-muted hover:text-red-500"
+                    onClick={() => removeItem(item)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+
+              <Show when={expanded() === item}>
+                <div class="mt-2 text-xs ui-muted">
+                  Expanded content changes height, pushing siblings.
+                </div>
+              </Show>
+
+              <Show when={selected() === item}>
+                <motion.div
+                  layoutId="underline"
+                  class="absolute inset-x-3 bottom-1 h-0.5 rounded-full"
+                  style={{ background: "rgba(99, 102, 241, 1)" }}
+                />
+              </Show>
             </motion.div>
           ))}
         </AnimatePresence>
@@ -356,6 +415,149 @@ function VariantsDemo() {
         State: {active() ? "active" : "inactive"}
       </span>
     </div>
+  );
+}
+
+function SharedLayoutDemo() {
+  const tabs = ["Home", "About", "Contact"] as const;
+  const [activeTab, setActiveTab] = createSignal<(typeof tabs)[number]>("Home");
+
+  return (
+    <div class="space-y-4">
+      <div class="flex gap-1 ui-subpanel rounded-lg border p-1">
+        {tabs.map((tab) => (
+          <button
+            class="relative flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors"
+            style={{
+              color: activeTab() === tab ? "white" : undefined,
+            }}
+            onClick={() => setActiveTab(tab)}
+          >
+            {activeTab() === tab && (
+              <motion.div
+                layoutId="active-tab"
+                class="absolute inset-0 rounded-md"
+                style={{ background: "rgba(99, 102, 241, 1)" }}
+                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              />
+            )}
+            <span class="relative z-10">{tab}</span>
+          </button>
+        ))}
+      </div>
+      <div class="ui-subpanel rounded-lg border p-4 text-sm">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab()}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.15 }}
+          >
+            Content for <strong>{activeTab()}</strong> tab
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function LayoutPositionDemo() {
+  const [expanded, setExpanded] = createSignal(false);
+
+  return (
+    <div class="space-y-4">
+      <button
+        class={`${buttonClasses} ui-control w-full`}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {expanded() ? "Collapse" : "Expand"}
+      </button>
+      <div
+        class="grid gap-3"
+        style={{
+          "grid-template-columns": expanded() ? "1fr" : "1fr 1fr",
+        }}
+      >
+        {[1, 2, 3, 4].map((item) => (
+          <motion.div
+            layout
+            class="ui-subpanel grid place-items-center rounded-lg border p-4 text-sm font-medium"
+            style={{
+              height: expanded() ? "80px" : "60px",
+            }}
+            transition={{ type: "spring", stiffness: 500, damping: 35 }}
+          >
+            Item {item}
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CardExpandDemo() {
+  const [selectedId, setSelectedId] = createSignal<number | null>(null);
+  const cards = [
+    { id: 1, title: "Spring", color: "rgba(99, 102, 241, 1)" },
+    { id: 2, title: "Summer", color: "rgba(236, 72, 153, 1)" },
+    { id: 3, title: "Autumn", color: "rgba(245, 158, 11, 1)" },
+    { id: 4, title: "Winter", color: "rgba(59, 130, 246, 1)" },
+  ];
+
+  return (
+    <>
+      <div class="grid grid-cols-2 gap-2">
+        {cards.map((card) => (
+          <motion.div
+            layoutId={`card-${card.id}`}
+            class="cursor-pointer rounded-lg p-3 text-center text-sm font-medium text-white"
+            style={{ background: card.color }}
+            onClick={() => setSelectedId(card.id)}
+            transition={{ type: "spring", stiffness: 500, damping: 35 }}
+          >
+            {card.title}
+          </motion.div>
+        ))}
+      </div>
+
+      <AnimatePresence>
+        {selectedId() !== null && (
+          <motion.div
+            class="fixed inset-0 z-50 grid place-items-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setSelectedId(null)}
+            style={{
+              background: "rgba(0, 0, 0, 0.5)",
+              "backdrop-filter": "blur(4px)",
+            }}
+          >
+            <motion.div
+              layoutId={`card-${selectedId()}`}
+              class="w-full max-w-xs cursor-pointer rounded-2xl p-6 text-center text-white"
+              style={{
+                background: cards.find((c) => c.id === selectedId())?.color,
+              }}
+              onClick={(e: MouseEvent) => {
+                e.stopPropagation();
+                setSelectedId(null);
+              }}
+              transition={{ type: "spring", stiffness: 500, damping: 35 }}
+            >
+              <h3 class="text-xl font-bold">
+                {cards.find((c) => c.id === selectedId())?.title}
+              </h3>
+              <p class="mt-2 text-sm opacity-90">
+                Click to close this expanded card
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -488,6 +690,27 @@ export default function App() {
 
           <DemoCard title="Variants" description="Named animation states">
             <VariantsDemo />
+          </DemoCard>
+
+          <DemoCard
+            title="Shared Layout"
+            description="Animate between elements with layoutId"
+          >
+            <SharedLayoutDemo />
+          </DemoCard>
+
+          <DemoCard
+            title="Layout Position"
+            description="Smooth grid layout transitions"
+          >
+            <LayoutPositionDemo />
+          </DemoCard>
+
+          <DemoCard
+            title="Card Expand"
+            description="Expand cards with shared layout"
+          >
+            <CardExpandDemo />
           </DemoCard>
 
           <DemoCard

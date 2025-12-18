@@ -173,30 +173,33 @@ export const animateMotionValue = <V extends AnyResolvedKeyframe>(
  * Legacy API - starts a motion value animation directly.
  * Prefer using `animateMotionValue` for the curried pattern.
  */
-export const startMotionValueAnimation = (args: {
+export const startMotionValueAnimation = <V extends AnyResolvedKeyframe>(args: {
   name: string;
-  motionValue: MotionValue<string | number>;
+  motionValue: MotionValue<V>;
   keyframes: unknown;
   transition?: Transition;
 }): AnimationPlaybackControlsWithThen | undefined => {
   const { name, motionValue, keyframes, transition } = args;
+  const current = motionValue.get();
 
-  const resolvedTarget: AnyResolvedKeyframe | AnyResolvedKeyframe[] | null =
-    Array.isArray(keyframes)
-      ? (keyframes.filter(
-          (v) => typeof v === "string" || typeof v === "number",
-        ) as AnyResolvedKeyframe[])
-      : typeof keyframes === "string" || typeof keyframes === "number"
-        ? (keyframes as AnyResolvedKeyframe)
-        : null;
+  const isMatchingKeyframe = (value: unknown): value is V => {
+    if (typeof value !== "string" && typeof value !== "number") return false;
+    return typeof value === typeof current;
+  };
+
+  const resolvedTarget: V | V[] | null = Array.isArray(keyframes)
+    ? (keyframes.filter(isMatchingKeyframe) as V[])
+    : isMatchingKeyframe(keyframes)
+      ? (keyframes as V)
+      : null;
 
   if (resolvedTarget === null) return undefined;
   if (Array.isArray(resolvedTarget) && resolvedTarget.length === 0)
     return undefined;
 
-  const targetToAnimate =
+  const targetToAnimate: V | V[] =
     Array.isArray(resolvedTarget) && resolvedTarget.length === 1
-      ? resolvedTarget[0]
+      ? resolvedTarget[0]!
       : resolvedTarget;
 
   let controls: AnimationPlaybackControlsWithThen | undefined;
@@ -204,8 +207,8 @@ export const startMotionValueAnimation = (args: {
   void motionValue.start((complete) => {
     const startAnimation = animateMotionValue(
       name,
-      motionValue as MotionValue<AnyResolvedKeyframe>,
-      targetToAnimate as AnyResolvedKeyframe | AnyResolvedKeyframe[],
+      motionValue,
+      targetToAnimate,
       transition as ValueTransition,
     );
 

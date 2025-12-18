@@ -1,4 +1,11 @@
-import { createEffect, createUniqueId, onCleanup, untrack } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createRenderEffect,
+  createUniqueId,
+  onCleanup,
+  untrack,
+} from "solid-js";
 import type { SetStoreFunction } from "solid-js/store";
 import type {
   AnyResolvedKeyframe,
@@ -29,6 +36,7 @@ import { startMotionValueAnimation } from "./motion-value";
 import { buildHTMLStyles, createRenderState } from "./render";
 import { resolveDefinitionToTarget, getTransitionForKey } from "./variants";
 import type { PresenceContextValue } from "../component/presence";
+import { createLayoutNode, layoutManager } from "../layout/layout-manager";
 
 type TransformTemplate = (
   transform: Record<string, string | number>,
@@ -59,6 +67,15 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     onCleanup(unregister);
   });
 
+  let projectionTransform: string | null = null;
+  let projectionOpacity: number | null = null;
+  let prevProjectionOpacity: number | null = null;
+
+  let wasProjectionTransformActive = false;
+  let restoreInlineTransform: string | null = null;
+
+  let layoutNode: ReturnType<typeof createLayoutNode> | null = null;
+
   const renderToDom = () => {
     const element = state.element;
     if (!element) return;
@@ -80,6 +97,59 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       values,
       options.transformTemplate as TransformTemplate | undefined,
     );
+
+    const hasMotionTransform = renderState.style.transform !== undefined;
+
+    if (projectionTransform !== null) {
+      if (!wasProjectionTransformActive) {
+        restoreInlineTransform = element.style.transform;
+        wasProjectionTransformActive = true;
+      }
+
+      let baseTransform = renderState.style.transform;
+
+      if (baseTransform === undefined) {
+        if (typeof getComputedStyle === "function") {
+          const computed = getComputedStyle(element).transform;
+          baseTransform = computed === "none" ? "" : computed;
+        } else {
+          baseTransform = "";
+        }
+      }
+
+      const combinedTransform =
+        baseTransform === "" || baseTransform === "none"
+          ? projectionTransform
+          : `${projectionTransform} ${baseTransform}`;
+
+      renderState.style.transform = combinedTransform;
+    } else if (wasProjectionTransformActive) {
+      if (!hasMotionTransform) {
+        renderState.style.transform = restoreInlineTransform ?? "";
+      }
+
+      restoreInlineTransform = null;
+      wasProjectionTransformActive = false;
+    }
+
+    if (projectionOpacity !== null) {
+      const baseOpacity = renderState.style.opacity;
+      if (baseOpacity === undefined) {
+        renderState.style.opacity = String(projectionOpacity);
+      } else {
+        const parsed = parseFloat(baseOpacity);
+        renderState.style.opacity = Number.isNaN(parsed)
+          ? baseOpacity
+          : String(parsed * projectionOpacity);
+      }
+    } else if (
+      prevProjectionOpacity !== null &&
+      renderState.style.opacity === undefined
+    ) {
+      renderState.style.opacity = "";
+    }
+
+    prevProjectionOpacity = projectionOpacity;
 
     // Apply styles (use direct property assignment for camelCase keys)
     for (const key in renderState.style) {
@@ -122,6 +192,76 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
   createEffect(() => {
     if (state.element) scheduleRender();
+  });
+
+  const applyProjection = (
+    update: { transform?: string | null; opacity?: number | null },
+    immediate: boolean,
+  ) => {
+    if ("transform" in update) projectionTransform = update.transform ?? null;
+    if ("opacity" in update) projectionOpacity = update.opacity ?? null;
+
+    if (immediate) {
+      renderToDom();
+    } else {
+      scheduleRender();
+    }
+  };
+
+  const layoutEnabled = createMemo(
+    () => Boolean(options.layout) || Boolean(options.layoutId),
+  );
+
+  const getLayoutNodeOptions = () => ({
+    layout: options.layout,
+    layoutId: options.layoutId,
+    layoutCrossfade: options.layoutCrossfade,
+    transition: options.transition as Transition | undefined,
+    onBeforeLayoutMeasure: options.onBeforeLayoutMeasure,
+    onLayoutMeasure: options.onLayoutMeasure,
+    onLayoutAnimationStart: options.onLayoutAnimationStart,
+    onLayoutAnimationComplete: options.onLayoutAnimationComplete,
+  });
+
+  createEffect(() => {
+    const element = state.element;
+    if (!element || !layoutEnabled()) return;
+
+    const node = createLayoutNode({
+      element,
+      options: untrack(getLayoutNodeOptions),
+      apply: applyProjection,
+      render: renderToDom,
+      scheduleRender,
+    });
+
+    layoutNode = node;
+    layoutManager.register(node);
+
+    onCleanup(() => {
+      layoutManager.unregister(node);
+      if (layoutNode === node) layoutNode = null;
+    });
+  });
+
+  createEffect(() => {
+    const enabled = layoutEnabled();
+    const nextOptions = getLayoutNodeOptions();
+    const node = layoutNode;
+
+    if (!enabled || !node) return;
+
+    layoutManager.updateNodeOptions(node, nextOptions);
+    layoutManager.scheduleUpdate();
+  });
+
+  createRenderEffect(() => {
+    const enabled = layoutEnabled();
+    void options.layoutDependency;
+
+    if (!enabled) return;
+
+    layoutManager.scheduleUpdate();
   });
 
   const running = new Map<

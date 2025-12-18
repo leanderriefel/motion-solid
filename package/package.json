@@ -15,7 +15,8 @@
   "dependencies": {
     "@solid-primitives/refs": "^1.1.2",
     "@solid-primitives/transition-group": "^1.1.2",
-    "motion-dom": "^12.23.23"
+    "motion-dom": "^12.23.23",
+    "motion-utils": "^12.23.6"
   },
   "devDependencies": {
     "solid-js": "^1.9.10",
