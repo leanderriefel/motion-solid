@@ -2,12 +2,76 @@
 
 :root {
   --app-bg: #f6f7fb;
-  --app-text: rgba(0, 0, 0, 0.88);
+  --app-text: rgba(15, 23, 42, 0.92);
+  --muted-text: rgba(15, 23, 42, 0.65);
+
+  --panel-bg: rgba(255, 255, 255, 0.84);
+  --panel-border: rgba(15, 23, 42, 0.1);
+  --panel-shadow: 0 18px 55px rgba(2, 6, 23, 0.12);
+
+  --subpanel-bg: rgba(255, 255, 255, 0.6);
+  --subpanel-border: rgba(15, 23, 42, 0.08);
+
+  --card-bg: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(15, 23, 42, 0.1);
+  --card-shadow: 0 10px 24px rgba(2, 6, 23, 0.1);
+
+  --control-bg: rgba(255, 255, 255, 0.46);
+  --control-bg-hover: rgba(255, 255, 255, 0.62);
+  --control-bg-active: rgba(255, 255, 255, 0.72);
+  --control-border: rgba(15, 23, 42, 0.12);
+
+  --chip-bg: rgba(148, 163, 184, 0.14);
+  --chip-border: rgba(148, 163, 184, 0.24);
+
+  --ring: rgba(99, 102, 241, 0.35);
+  --accent: rgb(99, 102, 241);
+
+  --code-bg: rgba(99, 102, 241, 0.08);
+  --code-border: rgba(99, 102, 241, 0.18);
+  --code-text: rgba(79, 70, 229, 0.95);
+
+  --list-bg: rgba(255, 255, 255, 0.3);
+  --list-bg-hover: rgba(255, 255, 255, 0.44);
+  --list-bg-selected: rgba(99, 102, 241, 0.12);
+  --list-border-selected: rgba(99, 102, 241, 0.4);
 }
 
 :root[data-theme="dark"] {
   --app-bg: #0b0c10;
-  --app-text: rgba(255, 255, 255, 0.92);
+  --app-text: rgba(226, 232, 240, 0.92);
+  --muted-text: rgba(226, 232, 240, 0.64);
+
+  --panel-bg: rgba(15, 23, 42, 0.82);
+  --panel-border: rgba(148, 163, 184, 0.18);
+  --panel-shadow: 0 20px 60px rgba(0, 0, 0, 0.52);
+
+  --subpanel-bg: rgba(2, 6, 23, 0.62);
+  --subpanel-border: rgba(148, 163, 184, 0.14);
+
+  --card-bg: rgba(15, 23, 42, 0.78);
+  --card-border: rgba(148, 163, 184, 0.18);
+  --card-shadow: 0 10px 26px rgba(0, 0, 0, 0.46);
+
+  --control-bg: rgba(2, 6, 23, 0.46);
+  --control-bg-hover: rgba(2, 6, 23, 0.58);
+  --control-bg-active: rgba(2, 6, 23, 0.7);
+  --control-border: rgba(148, 163, 184, 0.2);
+
+  --chip-bg: rgba(148, 163, 184, 0.12);
+  --chip-border: rgba(148, 163, 184, 0.18);
+
+  --ring: rgba(99, 102, 241, 0.48);
+  --accent: rgb(129, 140, 248);
+
+  --code-bg: rgba(129, 140, 248, 0.16);
+  --code-border: rgba(129, 140, 248, 0.22);
+  --code-text: rgba(165, 180, 252, 0.95);
+
+  --list-bg: rgba(2, 6, 23, 0.4);
+  --list-bg-hover: rgba(2, 6, 23, 0.56);
+  --list-bg-selected: rgba(129, 140, 248, 0.14);
+  --list-border-selected: rgba(129, 140, 248, 0.45);
 }
 
 html,
@@ -17,6 +81,134 @@ body,
 }
 
 body {
-  background: var(--app-bg);
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(
+      900px 560px at 16% -10%,
+      rgba(99, 102, 241, 0.18),
+      transparent 60%
+    ),
+    radial-gradient(
+      760px 480px at 92% 10%,
+      rgba(16, 185, 129, 0.14),
+      transparent 60%
+    ),
+    radial-gradient(
+      760px 480px at 74% 110%,
+      rgba(236, 72, 153, 0.1),
+      transparent 60%
+    ),
+    var(--app-bg);
   color: var(--app-text);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial,
+    "Apple Color Emoji",
+    "Segoe UI Emoji";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.ui-muted {
+  color: var(--muted-text);
+}
+
+.ui-panel {
+  background-color: var(--panel-bg);
+  border-color: var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(16px) saturate(1.15);
+}
+
+.ui-subpanel {
+  background-color: var(--subpanel-bg);
+  border-color: var(--subpanel-border);
+}
+
+.ui-card {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+.ui-control {
+  background-color: var(--control-bg);
+  border-color: var(--control-border);
+  color: var(--app-text);
+}
+
+.ui-control:hover {
+  background-color: var(--control-bg-hover);
+}
+
+.ui-control:active {
+  background-color: var(--control-bg-active);
+}
+
+.ui-control:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.ui-input {
+  background-color: var(--control-bg);
+  border-color: var(--control-border);
+  color: var(--app-text);
+}
+
+.ui-input::placeholder {
+  color: var(--muted-text);
+  opacity: 1;
+}
+
+.ui-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.42);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.ui-chip {
+  background-color: var(--chip-bg);
+  border-color: var(--chip-border);
+}
+
+.ui-list-item {
+  background-color: var(--list-bg);
+  border-color: var(--panel-border);
+}
+
+.ui-list-item:hover {
+  background-color: var(--list-bg-hover);
+}
+
+.ui-list-item[data-selected="true"] {
+  background-color: var(--list-bg-selected);
+  border-color: var(--list-border-selected);
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+code {
+  padding: 0.12em 0.35em;
+  border: 1px solid var(--code-border);
+  border-radius: 0.5rem;
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
+::selection {
+  background: rgba(99, 102, 241, 0.28);
 }

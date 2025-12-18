@@ -2,18 +2,20 @@
   "name": "motion-solid",
   "version": "0.0.1",
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
   "scripts": {
     "build": "zshy",
-    "test": "bun test ./test.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "solid-js": ">=1.0.0"
   },
   "dependencies": {
-    "motion": "^12.23.26",
-    "motion-dom": "^12.23.23",
-    "motion-utils": "^12.23.6"
+    "@solid-primitives/refs": "^1.1.2",
+    "@solid-primitives/transition-group": "^1.1.2",
+    "motion-dom": "^12.23.23"
   },
   "devDependencies": {
     "solid-js": "^1.9.10",
@@ -23,6 +25,13 @@
   "zshy": {
     "exports": {
       ".": "./src/index.ts"
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.cts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     }
   },
   "files": [

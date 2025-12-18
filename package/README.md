@@ -5,11 +5,11 @@ SolidJS motion components powered by Motion One (`motion`).
 ## Usage
 
 ```tsx
-import { createSignal } from "solid-js"
-import { motion, AnimatePresence } from "motion-solid"
+import { createSignal } from "solid-js";
+import { motion, AnimatePresence } from "motion-solid";
 
 function Example() {
-  const [open, setOpen] = createSignal(true)
+  const [open, setOpen] = createSignal(true);
 
   return (
     <>
@@ -23,7 +23,7 @@ function Example() {
         />
       </AnimatePresence>
     </>
-  )
+  );
 }
 ```
 
