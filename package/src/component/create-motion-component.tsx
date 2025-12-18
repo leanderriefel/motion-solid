@@ -1,5 +1,10 @@
 import type { Component, ComponentProps } from "solid-js";
-import { mergeProps, splitProps } from "solid-js";
+import {
+  createMemo,
+  createRenderEffect,
+  mergeProps,
+  splitProps,
+} from "solid-js";
 import { createDynamic } from "solid-js/web";
 import { createStore } from "solid-js/store";
 import { mergeRefs } from "@solid-primitives/refs";
@@ -12,6 +17,7 @@ import type {
 import { createMotionState } from "../state";
 import { useAnimationState } from "../animation";
 import { useGestures, useDragGesture } from "../gestures";
+import { layoutManager } from "../layout/layout-manager";
 import { MotionStateContext, useMotionState } from "./context";
 import { useMotionConfig } from "./motion-config";
 import { motionKeys } from "./motion-keys";
@@ -48,6 +54,23 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         if (motionOptions.custom !== undefined) return motionOptions.custom;
         return presence?.custom();
       },
+    });
+
+    const layoutEnabled = createMemo(
+      () =>
+        Boolean(resolvedMotionOptions.layout) ||
+        Boolean(resolvedMotionOptions.layoutId),
+    );
+
+    createRenderEffect(() => {
+      if (!layoutEnabled()) return;
+
+      void elementProps.class;
+      void (elementProps as { classList?: unknown }).classList;
+      void elementProps.style;
+      void elementProps.children;
+
+      layoutManager.scheduleUpdate();
     });
 
     const [state, setState] = createStore(

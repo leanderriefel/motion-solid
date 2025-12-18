@@ -7,6 +7,7 @@ import type {
 } from "motion-dom";
 import type { Axis, AxisDelta, Box, Delta } from "motion-utils";
 import { startMotionValueAnimation } from "../animation/motion-value";
+import { isTransitionDefined } from "../animation/transition-utils";
 
 export type LayoutAnimationType =
   | boolean
@@ -48,10 +49,12 @@ type LayoutNode = {
   delta: Delta | null;
   projectionProgress: MotionValue<number>;
   projectionAnimation: AnimationPlaybackControlsWithThen | null;
+  projectionCycleId: number;
 
   opacity: MotionValue<number>;
   opacityAnimation: AnimationPlaybackControlsWithThen | null;
   opacityActive: boolean;
+  opacityCycleId: number;
 
   apply: ProjectionUpdateHandler;
   render: () => void;
@@ -68,19 +71,47 @@ const DEFAULT_LAYOUT_TRANSITION: ValueTransition = {
   mass: 1,
 };
 
-const resolveLayoutTransition = (transition?: Transition): Transition => {
+const resolveLayoutTransition = (transition?: Transition): ValueTransition => {
   if (!transition) return DEFAULT_LAYOUT_TRANSITION;
 
-  const hasLayoutOverride =
-    typeof transition === "object" &&
-    transition !== null &&
-    "layout" in transition &&
-    (transition as { layout?: unknown }).layout !== undefined;
+  // Framer Motion semantics (approx):
+  // - If `transition.layout` is provided, use it for layout animations.
+  // - Otherwise, use the root transition.
+  // - If neither defines an animation (e.g. only `delay` is provided), fall back to
+  //   our default layout spring, while still inheriting root `delay`.
+  //
+  // Note: We return a ValueTransition (not the full Transition) to avoid passing
+  // nested per-value keys through to motion-dom animation options.
 
-  if (!hasLayoutOverride) return DEFAULT_LAYOUT_TRANSITION;
+  if (typeof transition !== "object" || transition === null) {
+    return DEFAULT_LAYOUT_TRANSITION;
+  }
 
-  const layout = (transition as { layout?: ValueTransition }).layout;
-  return layout ?? DEFAULT_LAYOUT_TRANSITION;
+  const root = transition as unknown as ValueTransition;
+  const rootDelay = root.delay;
+
+  const layoutOverride = (transition as { layout?: unknown }).layout;
+
+  let resolved: ValueTransition;
+
+  if (layoutOverride !== undefined) {
+    if (layoutOverride && typeof layoutOverride === "object") {
+      const layoutTransition = layoutOverride as ValueTransition;
+      resolved = isTransitionDefined(layoutTransition)
+        ? layoutTransition
+        : DEFAULT_LAYOUT_TRANSITION;
+    } else {
+      resolved = DEFAULT_LAYOUT_TRANSITION;
+    }
+  } else {
+    resolved = isTransitionDefined(root) ? root : DEFAULT_LAYOUT_TRANSITION;
+  }
+
+  if (rootDelay !== undefined && resolved.delay === undefined) {
+    return { ...resolved, delay: rootDelay };
+  }
+
+  return resolved;
 };
 
 const resolveLayoutType = (
@@ -283,6 +314,7 @@ class LayoutIdStack {
 
         if (shouldCrossfadeNew) {
           node.opacityAnimation?.stop();
+          const cycleId = ++node.opacityCycleId;
           node.opacityAnimation =
             startMotionValueAnimation({
               name: "opacity",
@@ -292,6 +324,7 @@ class LayoutIdStack {
             }) ?? null;
 
           node.opacityAnimation?.finished.then(() => {
+            if (node.opacityCycleId !== cycleId) return;
             node.opacityActive = false;
             node.apply({ opacity: null }, false);
           });
@@ -299,6 +332,7 @@ class LayoutIdStack {
 
         if (shouldCrossfadePrev) {
           prevLead.opacityAnimation?.stop();
+          const cycleId = ++prevLead.opacityCycleId;
           prevLead.opacityAnimation =
             startMotionValueAnimation({
               name: "opacity",
@@ -308,6 +342,7 @@ class LayoutIdStack {
             }) ?? null;
 
           prevLead.opacityAnimation?.finished.then(() => {
+            if (prevLead.opacityCycleId !== cycleId) return;
             prevLead.opacityActive = false;
             prevLead.apply({ opacity: null }, false);
           });
@@ -329,13 +364,57 @@ class LayoutIdStack {
 
     if (this.lead === node) {
       this.snapshot = node.latestBox ?? node.prevBox ?? this.snapshot;
-      this.lead = null;
+
+      const nextLead: LayoutNode | null =
+        (this.prevLead && this.members.has(this.prevLead)
+          ? this.prevLead
+          : null) ??
+        this.members.values().next().value ??
+        null;
+
+      this.lead = nextLead;
       this.prevLead = null;
+
+      if (nextLead && this.snapshot) {
+        nextLead.prevBox = this.snapshot;
+      }
+
       return;
     }
 
     if (this.prevLead === node) {
       this.prevLead = null;
+    }
+  }
+
+  relegate(node: LayoutNode): void {
+    if (this.lead !== node) return;
+
+    this.snapshot = node.latestBox ?? node.prevBox ?? this.snapshot;
+
+    let nextLead: LayoutNode | null = null;
+
+    if (
+      this.prevLead &&
+      this.prevLead !== node &&
+      this.members.has(this.prevLead)
+    ) {
+      nextLead = this.prevLead;
+    } else {
+      for (const member of this.members) {
+        if (member === node) continue;
+        nextLead = member;
+        break;
+      }
+    }
+
+    if (!nextLead) return;
+
+    this.lead = nextLead;
+    this.prevLead = null;
+
+    if (this.snapshot) {
+      nextLead.prevBox = this.snapshot;
     }
   }
 
@@ -358,6 +437,7 @@ class LayoutManager {
 
   private removeWindowListeners: VoidFunction | null = null;
   private mutationObserver: MutationObserver | null = null;
+  private resizeObserver: ResizeObserver | null = null;
 
   register(node: LayoutNode): void {
     this.nodes.add(node);
@@ -368,12 +448,19 @@ class LayoutManager {
     }
 
     this.ensureObservers();
+
+    // Observe this element for size changes
+    this.resizeObserver?.observe(node.element);
+
     this.scheduleUpdate();
   }
 
   unregister(node: LayoutNode): void {
     this.nodes.delete(node);
     this.nodeByElement.delete(node.element);
+
+    // Stop observing this element
+    this.resizeObserver?.unobserve(node.element);
 
     if (node.options.layoutId) {
       const stack = this.stacks.get(node.options.layoutId);
@@ -408,6 +495,15 @@ class LayoutManager {
 
       this.scheduleUpdate();
     }
+  }
+
+  relegate(node: LayoutNode): void {
+    const layoutId = node.options.layoutId;
+    if (!layoutId) return;
+
+    const stack = this.stacks.get(layoutId);
+    stack?.relegate(node);
+    this.scheduleUpdate();
   }
 
   scheduleUpdate(): void {
@@ -517,6 +613,8 @@ class LayoutManager {
 
     node.options.onLayoutAnimationStart?.();
 
+    const cycleId = ++node.projectionCycleId;
+
     node.projectionAnimation =
       startMotionValueAnimation({
         name: "layout",
@@ -526,6 +624,7 @@ class LayoutManager {
       }) ?? null;
 
     node.projectionAnimation?.finished.then(() => {
+      if (node.projectionCycleId !== cycleId) return;
       node.delta = null;
       node.apply({ transform: null }, false);
       node.options.onLayoutAnimationComplete?.();
@@ -553,6 +652,19 @@ class LayoutManager {
       };
     }
 
+    // Create ResizeObserver for layout elements
+    if (!this.resizeObserver && typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(() => {
+        if (this.isFlushing) return;
+        this.scheduleUpdate();
+      });
+
+      // Observe all currently registered nodes
+      for (const node of this.nodes) {
+        this.resizeObserver.observe(node.element);
+      }
+    }
+
     if (this.mutationObserver) return;
     if (typeof MutationObserver === "undefined") return;
     if (typeof document === "undefined") return;
@@ -561,6 +673,9 @@ class LayoutManager {
     if (!root) return;
 
     const observer = new MutationObserver((mutations) => {
+      // Ignore mutations triggered by our own flush operations
+      if (this.isFlushing) return;
+
       for (const mutation of mutations) {
         if (mutation.type === "childList" || mutation.type === "attributes") {
           this.scheduleUpdate();
@@ -585,6 +700,9 @@ class LayoutManager {
 
     this.mutationObserver?.disconnect();
     this.mutationObserver = null;
+
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
   }
 }
 
@@ -608,13 +726,17 @@ export const createLayoutNode = (args: {
     delta: null,
     projectionProgress,
     projectionAnimation: null,
+    projectionCycleId: 0,
     opacity,
     opacityAnimation: null,
     opacityActive: false,
+    opacityCycleId: 0,
     apply: args.apply,
     render: args.render,
     scheduleRender: args.scheduleRender,
     stop: () => {
+      node.projectionCycleId++;
+      node.opacityCycleId++;
       node.projectionAnimation?.stop();
       node.opacityAnimation?.stop();
       node.projectionProgress.stop();

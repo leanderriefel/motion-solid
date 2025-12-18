@@ -73,6 +73,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
   let wasProjectionTransformActive = false;
   let restoreInlineTransform: string | null = null;
+  let projectionBaseTransform: string | null = null;
 
   let layoutNode: ReturnType<typeof createLayoutNode> | null = null;
 
@@ -103,19 +104,24 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     if (projectionTransform !== null) {
       if (!wasProjectionTransformActive) {
         restoreInlineTransform = element.style.transform;
+        // Snapshot the element's base transform before applying projection.
+        // We must not read computed transforms on subsequent frames because the computed
+        // value would include the projection transform we apply inline, causing compounding.
+        if (typeof getComputedStyle === "function") {
+          const computed = getComputedStyle(element).transform;
+          projectionBaseTransform = computed === "none" ? "" : computed;
+        } else {
+          projectionBaseTransform = restoreInlineTransform ?? "";
+        }
         wasProjectionTransformActive = true;
       }
 
       let baseTransform = renderState.style.transform;
 
-      if (baseTransform === undefined) {
-        if (typeof getComputedStyle === "function") {
-          const computed = getComputedStyle(element).transform;
-          baseTransform = computed === "none" ? "" : computed;
-        } else {
-          baseTransform = "";
-        }
-      }
+      // If Motion isn't generating a transform, fall back to the snapshotted base transform.
+      // Never read computed styles here (see comment above).
+      if (baseTransform === undefined)
+        baseTransform = projectionBaseTransform ?? "";
 
       const combinedTransform =
         baseTransform === "" || baseTransform === "none"
@@ -129,6 +135,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       }
 
       restoreInlineTransform = null;
+      projectionBaseTransform = null;
       wasProjectionTransformActive = false;
     }
 
@@ -223,7 +230,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     onLayoutAnimationComplete: options.onLayoutAnimationComplete,
   });
 
-  createEffect(() => {
+  createRenderEffect(() => {
     const element = state.element;
     if (!element || !layoutEnabled()) return;
 
@@ -370,6 +377,13 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     };
     const isPresent = presence?.isPresent() ?? true;
     const isExiting = presence ? !isPresent : false;
+
+    if (!wasExiting && isExiting) {
+      const node = layoutNode;
+      if (node?.options.layoutId) {
+        layoutManager.relegate(node);
+      }
+    }
 
     if (wasExiting && !isExiting) {
       exitCycleId++;
