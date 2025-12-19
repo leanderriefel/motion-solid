@@ -1,2 +1,7 @@
 export { useGestures, type GestureOptions } from "./use-gestures";
-export { useDragGesture, type DragGestureOptions } from "./use-drag";
+export {
+  useDragGesture,
+  createDragControls,
+  type DragGestureOptions,
+  type DragControls,
+} from "./use-drag";

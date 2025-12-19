@@ -21,6 +21,23 @@ import { getDefaultTransition } from "./default-transitions";
 import { isTransitionDefined } from "./transition-utils";
 
 /**
+ * TODO: Enable WAAPI (Web Animations API) for hardware-accelerated animations.
+ *
+ * Currently all animations use JSAnimation (main thread) because:
+ * 1. We always set `onUpdate` to sync MotionValue state, which disqualifies WAAPI
+ * 2. MotionValues don't have `owner` property set (needed by motion-dom)
+ *
+ * To enable WAAPI for opacity/transform/clipPath/filter:
+ * 1. Set `motionValue.owner = { current: element, getProps: () => options }` after mount
+ * 2. Don't set internal `onUpdate` - motion-dom's NativeAnimationExtended handles
+ *    syncing MotionValue on finish/interruption via `updateMotionValue()`
+ * 3. May need to coordinate with our custom `renderToDom` to avoid conflicts
+ *
+ * WAAPI benefits: runs on compositor thread, 60fps even when main thread is busy.
+ * See: motion-dom/dist/es/animation/waapi/supports/waapi.mjs
+ */
+
+/**
  * Animate a MotionValue to a target value or keyframes.
  *
  * This follows the framer-motion pattern: returns a curried function that

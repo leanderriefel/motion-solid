@@ -3,12 +3,12 @@ import type { ElementTag, HTMLElements, SVGElements } from "../types";
 import {
   createMotionComponent,
   type MotionProps,
-} from "./create-motion-component";
+} from "./create-motion-component.tsx";
 
 export {
   createMotionComponent,
   type MotionProps,
-} from "./create-motion-component";
+} from "./create-motion-component.tsx";
 export { MotionStateContext, useMotionState } from "./context";
 export {
   MotionConfig,
@@ -16,7 +16,8 @@ export {
   useMotionConfig,
   type MotionConfigContextValue,
   type MotionConfigProps,
-} from "./motion-config";
+  type ReducedMotionConfig,
+} from "./motion-config.tsx";
 export { motionKeys } from "./motion-keys";
 export {
   AnimatePresence,
@@ -26,7 +27,7 @@ export {
   usePresenceData,
   type AnimatePresenceProps,
   type PresenceContextValue,
-} from "./presence";
+} from "./presence.tsx";
 
 /**
  * Cache of created motion components to avoid recreating them

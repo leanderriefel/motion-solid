@@ -124,6 +124,30 @@ export const resolveVariantLabelsToTarget = (args: {
   return resolved;
 };
 
+/**
+ * Get inherited variants from parent state, if inherit is not disabled.
+ * Default behavior (inherit=true) is to inherit variants from parent.
+ */
+const getInheritedVariants = (
+  options: MotionOptions,
+  state: MotionState,
+): Variants | null => {
+  // If inherit is explicitly false, don't inherit from parent
+  if (options.inherit === false) return null;
+
+  // Walk up the parent chain to find variants
+  let parent = state.parent;
+  while (parent) {
+    const parentVariants = parent.options.variants;
+    if (parentVariants) {
+      return parentVariants as Variants;
+    }
+    parent = parent.parent;
+  }
+
+  return null;
+};
+
 export const resolveDefinitionToTarget = (args: {
   definition: unknown;
   options: MotionOptions;
@@ -135,14 +159,30 @@ export const resolveDefinitionToTarget = (args: {
   if (isTargetAndTransition(definition)) return definition;
 
   if (isVariantLabels(definition)) {
-    const variants = options.variants;
-    if (!variants) return null;
-    return resolveVariantLabelsToTarget({
-      labels: definition,
-      variants: variants as Variants,
-      options,
-      state,
-    });
+    // First, try to resolve from local variants
+    const localVariants = options.variants as Variants | undefined;
+    if (localVariants) {
+      const result = resolveVariantLabelsToTarget({
+        labels: definition,
+        variants: localVariants,
+        options,
+        state,
+      });
+      if (result) return result;
+    }
+
+    // If local variants didn't resolve, try inherited variants (unless inherit=false)
+    const inheritedVariants = getInheritedVariants(options, state);
+    if (inheritedVariants) {
+      return resolveVariantLabelsToTarget({
+        labels: definition,
+        variants: inheritedVariants,
+        options,
+        state,
+      });
+    }
+
+    return null;
   }
 
   return null;

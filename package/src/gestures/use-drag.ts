@@ -31,6 +31,51 @@ interface DragConstraints {
 }
 
 /**
+ * DragControls interface for programmatic drag control
+ */
+export interface DragControls {
+  /**
+   * Start a drag gesture programmatically
+   */
+  start: (event: PointerEvent, options?: { snapToCursor?: boolean }) => void;
+}
+
+/**
+ * Create a DragControls object for programmatic drag control
+ */
+export const createDragControls = (): DragControls => {
+  const subscribers = new Set<
+    (event: PointerEvent, options?: { snapToCursor?: boolean }) => void
+  >();
+
+  return {
+    start: (event: PointerEvent, options?: { snapToCursor?: boolean }) => {
+      // Notify all subscribers (draggable elements) about the programmatic drag start
+      for (const subscriber of subscribers) {
+        subscriber(event, options);
+      }
+    },
+    // Internal method to allow elements to subscribe
+    _subscribe: (
+      callback: (
+        event: PointerEvent,
+        options?: { snapToCursor?: boolean },
+      ) => void,
+    ): (() => void) => {
+      subscribers.add(callback);
+      return () => subscribers.delete(callback);
+    },
+  } as DragControls & {
+    _subscribe: (
+      callback: (
+        event: PointerEvent,
+        options?: { snapToCursor?: boolean },
+      ) => void,
+    ) => () => void;
+  };
+};
+
+/**
  * Apply elastic effect to a value that exceeds constraints
  */
 const applyElastic = (
@@ -56,23 +101,39 @@ const applyElastic = (
 const resolveConstraints = (
   constraints: DragConstraints | { current: Element } | undefined,
   element: Element,
+  onMeasureDragConstraints?: (
+    constraints: DragConstraints,
+  ) => DragConstraints | void,
 ): DragConstraints | null => {
   if (!constraints) return null;
+
+  let resolved: DragConstraints;
 
   // If it's a ref to an element, calculate relative constraints
   if ("current" in constraints && constraints.current instanceof Element) {
     const parentRect = constraints.current.getBoundingClientRect();
     const elementRect = element.getBoundingClientRect();
 
-    return {
+    resolved = {
       top: parentRect.top - elementRect.top,
       left: parentRect.left - elementRect.left,
       right: parentRect.right - elementRect.right,
       bottom: parentRect.bottom - elementRect.bottom,
     };
+  } else {
+    resolved = constraints as DragConstraints;
   }
 
-  return constraints as DragConstraints;
+  // Call onMeasureDragConstraints callback if provided
+  if (onMeasureDragConstraints) {
+    const result = onMeasureDragConstraints(resolved);
+    // If the callback returns modified constraints, use them
+    if (result) {
+      resolved = result;
+    }
+  }
+
+  return resolved;
 };
 
 /**
@@ -102,17 +163,39 @@ export const useDragGesture = (args: DragGestureOptions) => {
     const dragX = options.drag === true || options.drag === "x";
     const dragY = options.drag === true || options.drag === "y";
 
-    // Get or create motion values for x and y
-    let mvX = state.values.x as MotionValue<number> | undefined;
-    let mvY = state.values.y as MotionValue<number> | undefined;
+    // Use external motion values if provided (_dragX, _dragY), otherwise create/get internal ones
+    let mvX: MotionValue<number> | undefined;
+    let mvY: MotionValue<number> | undefined;
 
-    if (!mvX && dragX) {
-      mvX = motionValue(0);
-      setState("values", "x", mvX);
+    // Check for external motion values
+    const externalMvX = options._dragX as MotionValue<number> | undefined;
+    const externalMvY = options._dragY as MotionValue<number> | undefined;
+
+    if (dragX) {
+      if (externalMvX) {
+        mvX = externalMvX;
+        // Store in state values so animations can access it
+        setState("values", "x", mvX);
+      } else {
+        mvX = state.values.x as MotionValue<number> | undefined;
+        if (!mvX) {
+          mvX = motionValue(0);
+          setState("values", "x", mvX);
+        }
+      }
     }
-    if (!mvY && dragY) {
-      mvY = motionValue(0);
-      setState("values", "y", mvY);
+
+    if (dragY) {
+      if (externalMvY) {
+        mvY = externalMvY;
+        setState("values", "y", mvY);
+      } else {
+        mvY = state.values.y as MotionValue<number> | undefined;
+        if (!mvY) {
+          mvY = motionValue(0);
+          setState("values", "y", mvY);
+        }
+      }
     }
 
     // Drag state
@@ -123,6 +206,7 @@ export const useDragGesture = (args: DragGestureOptions) => {
     let lastTime = 0;
     let velocity: Point = { x: 0, y: 0 };
     let lockedDirection: "x" | "y" | null = null;
+    let activePointerId: number | null = null;
 
     // Options
     const elastic =
@@ -130,6 +214,8 @@ export const useDragGesture = (args: DragGestureOptions) => {
     const momentum = options.dragMomentum !== false;
     const directionLock = options.dragDirectionLock === true;
     const snapToOrigin = options.dragSnapToOrigin === true;
+    // dragPropagation: if false (default), stop propagation to prevent parent draggables from activating
+    const propagateDrag = options.dragPropagation === true;
 
     const createDragInfo = (point: Point): DragInfo => ({
       point,
@@ -157,15 +243,33 @@ export const useDragGesture = (args: DragGestureOptions) => {
       lastTime = now;
     };
 
-    const onPointerDown = (event: PointerEvent) => {
-      if (options.dragListener === false) return;
+    const startDrag = (
+      event: PointerEvent,
+      programmaticOptions?: { snapToCursor?: boolean },
+    ) => {
+      if (options.dragListener === false && !programmaticOptions) return;
 
-      // Only respond to primary button
-      if (event.button !== 0) return;
+      // Only respond to primary button for normal events
+      if (!programmaticOptions && event.button !== 0) return;
 
       isDragging = true;
+      activePointerId = event.pointerId;
       lockedDirection = null;
-      startPoint = { x: event.clientX, y: event.clientY };
+
+      const point = { x: event.clientX, y: event.clientY };
+
+      // For snapToCursor, center the element on the cursor
+      if (programmaticOptions?.snapToCursor) {
+        const rect = element.getBoundingClientRect();
+        const centerOffset = {
+          x: event.clientX - (rect.left + rect.width / 2),
+          y: event.clientY - (rect.top + rect.height / 2),
+        };
+        if (mvX) mvX.set(mvX.get() + centerOffset.x);
+        if (mvY) mvY.set(mvY.get() + centerOffset.y);
+      }
+
+      startPoint = point;
       lastPoint = startPoint;
       lastTime = performance.now();
       velocity = { x: 0, y: 0 };
@@ -182,8 +286,20 @@ export const useDragGesture = (args: DragGestureOptions) => {
       options.onDragStart?.(event, createDragInfo(startPoint));
     };
 
+    const onPointerDown = (event: PointerEvent) => {
+      // Stop propagation to prevent parent draggables from activating
+      if (!propagateDrag) {
+        event.stopPropagation();
+      }
+
+      startDrag(event);
+    };
+
     const onPointerMove = (event: PointerEvent) => {
       if (!isDragging) return;
+      // Only respond to the pointer that started the drag
+      if (activePointerId !== null && event.pointerId !== activePointerId)
+        return;
 
       const point = { x: event.clientX, y: event.clientY };
       updateVelocity(point);
@@ -211,10 +327,13 @@ export const useDragGesture = (args: DragGestureOptions) => {
       let newX = startValues.x + offsetX;
       let newY = startValues.y + offsetY;
 
-      // Get constraints
+      // Get constraints (with onMeasureDragConstraints callback)
       const constraints = resolveConstraints(
         options.dragConstraints as DragConstraints | { current: Element },
         element,
+        options.onMeasureDragConstraints as
+          | ((constraints: DragConstraints) => DragConstraints | void)
+          | undefined,
       );
 
       // Apply elastic effect at boundaries
@@ -246,8 +365,12 @@ export const useDragGesture = (args: DragGestureOptions) => {
 
     const onPointerUp = (event: PointerEvent) => {
       if (!isDragging) return;
+      // Only respond to the pointer that started the drag
+      if (activePointerId !== null && event.pointerId !== activePointerId)
+        return;
 
       isDragging = false;
+      activePointerId = null;
       setState("activeGestures", "drag", false);
 
       const point = { x: event.clientX, y: event.clientY };
@@ -255,10 +378,13 @@ export const useDragGesture = (args: DragGestureOptions) => {
 
       options.onDragEnd?.(event, info);
 
-      // Get constraints for final position
+      // Get constraints for final position (with onMeasureDragConstraints callback)
       const constraints = resolveConstraints(
         options.dragConstraints as DragConstraints | { current: Element },
         element,
+        options.onMeasureDragConstraints as
+          | ((constraints: DragConstraints) => DragConstraints | void)
+          | undefined,
       );
 
       // Calculate final position
@@ -336,14 +462,35 @@ export const useDragGesture = (args: DragGestureOptions) => {
 
     const onPointerCancel = (event: PointerEvent) => {
       if (!isDragging) return;
+      // Only respond to the pointer that started the drag
+      if (activePointerId !== null && event.pointerId !== activePointerId)
+        return;
 
       isDragging = false;
+      activePointerId = null;
       setState("activeGestures", "drag", false);
 
       // Snap back to start position
       if (mvX) mvX.set(startValues.x);
       if (mvY) mvY.set(startValues.y);
     };
+
+    // Subscribe to dragControls for programmatic drag start
+    let unsubscribeDragControls: (() => void) | undefined;
+    const dragControls = options.dragControls as
+      | (DragControls & {
+          _subscribe?: (
+            callback: (
+              event: PointerEvent,
+              options?: { snapToCursor?: boolean },
+            ) => void,
+          ) => () => void;
+        })
+      | undefined;
+
+    if (dragControls && typeof dragControls._subscribe === "function") {
+      unsubscribeDragControls = dragControls._subscribe(startDrag);
+    }
 
     // Add event listeners
     const htmlElement = element as HTMLElement;
@@ -361,6 +508,7 @@ export const useDragGesture = (args: DragGestureOptions) => {
       htmlElement.removeEventListener("pointermove", onPointerMove);
       htmlElement.removeEventListener("pointerup", onPointerUp);
       htmlElement.removeEventListener("pointercancel", onPointerCancel);
+      unsubscribeDragControls?.();
     });
   });
 };

@@ -1,17 +1,16 @@
 import {
-  children,
   createContext,
-  createEffect,
-  createSignal,
   createUniqueId,
   onCleanup,
-  untrack,
-  For,
   useContext,
   type Accessor,
   type FlowComponent,
   type JSX,
+  createSignal,
+  createEffect,
 } from "solid-js";
+import { createListTransition } from "@solid-primitives/transition-group";
+import { resolveElements } from "@solid-primitives/refs";
 
 export type AnimatePresenceMode = "sync" | "wait" | "popLayout";
 
@@ -78,7 +77,7 @@ export interface PresenceContextValue {
   /**
    * Mark a registered descendant as safe to remove.
    */
-  onExitComplete: (id: string) => void;
+  onExitComplete: (id: string, element?: Element) => void;
 }
 
 export const PresenceContext = createContext<PresenceContextValue | null>(null);
@@ -100,11 +99,8 @@ export const usePresence = (): [
   if (!presence) return [isPresent, undefined];
 
   const id = createUniqueId();
-
-  createEffect(() => {
-    const unregister = presence.register(id);
-    onCleanup(unregister);
-  });
+  const unregister = presence.register(id);
+  onCleanup(unregister);
 
   const safeToRemove = () => {
     presence.onExitComplete(id);
@@ -128,6 +124,7 @@ type PresenceChildProps = {
   initial: Accessor<boolean>;
   custom: Accessor<unknown>;
   onExitComplete?: () => void;
+  register?: (id: string) => VoidFunction;
   children?: JSX.Element;
 };
 
@@ -135,20 +132,37 @@ const PresenceChild: FlowComponent<PresenceChildProps> = (props) => {
   const completed = new Map<string, boolean>();
   const [didCompleteExit, setDidCompleteExit] = createSignal(false);
 
+  // This ensures that we don't complete the exit immediately if no one has registered yet.
+  // We wait one microtask to allow registrations to happen.
+  let isChecking = false;
+
   const maybeCompleteExit = () => {
     if (props.isPresent()) {
       setDidCompleteExit(false);
       return;
     }
 
-    if (didCompleteExit()) return;
+    if (didCompleteExit() || isChecking) return;
 
-    for (const done of completed.values()) {
-      if (!done) return;
-    }
+    isChecking = true;
+    queueMicrotask(() => {
+      isChecking = false;
 
-    setDidCompleteExit(true);
-    props.onExitComplete?.();
+      if (!props.isPresent() && !didCompleteExit()) {
+        let allDone = true;
+        for (const done of completed.values()) {
+          if (!done) {
+            allDone = false;
+            break;
+          }
+        }
+
+        if (allDone) {
+          setDidCompleteExit(true);
+          props.onExitComplete?.();
+        }
+      }
+    });
   };
 
   const register = (id: string) => {
@@ -191,231 +205,227 @@ const PresenceChild: FlowComponent<PresenceChildProps> = (props) => {
   );
 };
 
-type PresenceItem = {
-  key: string;
-  element: JSX.Element;
-  isPresent: Accessor<boolean>;
-  setIsPresent: (value: boolean) => void;
-  initial: Accessor<boolean>;
+type AnimatePresenceContentProps = {
+  pendingExits: Map<Element, () => void>;
+  updateExitCount: VoidFunction;
+  exitCount: Accessor<number>;
+  mode: Accessor<AnimatePresenceMode>;
+  root: Accessor<ShadowRoot | HTMLElement | undefined>;
+  children?: JSX.Element;
 };
 
-const isRenderableChild = (child: unknown): child is JSX.Element =>
-  child !== null && child !== undefined && child !== true && child !== false;
+type MotionExitMarker = {
+  __motionIsAnimatingExit?: boolean;
+};
+
+/**
+ * Render AnimatePresence children *under* the PresenceContext provider.
+ *
+ * This is important: resolving children (and thus creating Motion components)
+ * must happen with the provider in scope, otherwise `usePresenceContext()` will
+ * be `null` and exit handoff can't work.
+ */
+const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
+  props,
+) => {
+  const resolved = resolveElements(() => props.children).toArray;
+
+  let isWaiting = false;
+  let queued: Element[] | null = null;
+  let previous = resolved();
+
+  const getSource = () => {
+    const current = resolved();
+    const mode = props.mode();
+
+    if (mode !== "wait") {
+      isWaiting = false;
+      queued = null;
+      previous = current;
+      return current;
+    }
+
+    const exiting = props.exitCount() > 0;
+
+    if (isWaiting) {
+      if (!exiting) {
+        const next = queued ?? current;
+        isWaiting = false;
+        queued = null;
+        previous = next;
+        return next;
+      }
+
+      queued = current;
+      return previous;
+    }
+
+    const prevSet = new Set(previous);
+
+    if (exiting) {
+      const hasAdded = current.some((el) => !prevSet.has(el));
+
+      if (hasAdded) {
+        isWaiting = true;
+        queued = current;
+        return previous;
+      }
+
+      previous = current;
+      return current;
+    }
+
+    const currentSet = new Set(current);
+    const hasRemoved = previous.some((el) => !currentSet.has(el));
+    const hasAdded = current.some((el) => !prevSet.has(el));
+
+    if (hasRemoved && hasAdded) {
+      isWaiting = true;
+      queued = current;
+      const unchanged = current.filter((el) => prevSet.has(el));
+      previous = unchanged;
+      return unchanged;
+    }
+
+    previous = current;
+    return current;
+  };
+
+  const applyPopLayout = (el: Element) => {
+    if (typeof getComputedStyle !== "function") return;
+
+    const root = props.root();
+    const rootElement = root
+      ? "host" in root
+        ? root.host
+        : root
+      : el.parentElement;
+
+    if (!(rootElement instanceof HTMLElement)) return;
+
+    const rootStyle = getComputedStyle(rootElement);
+    if (rootStyle.position === "static") {
+      rootElement.style.position = "relative";
+    }
+
+    const borderTop = parseFloat(rootStyle.borderTopWidth) || 0;
+    const borderLeft = parseFloat(rootStyle.borderLeftWidth) || 0;
+
+    const target = el as HTMLElement | SVGElement;
+    const prevTransform = target.style.transform;
+    target.style.transform = "none";
+    const layoutRect = target.getBoundingClientRect();
+    target.style.transform = prevTransform;
+
+    const rootRect = rootElement.getBoundingClientRect();
+
+    const top =
+      layoutRect.top - rootRect.top - borderTop + rootElement.scrollTop;
+    const left =
+      layoutRect.left - rootRect.left - borderLeft + rootElement.scrollLeft;
+
+    target.style.position = "absolute";
+    target.style.top = `${top}px`;
+    target.style.left = `${left}px`;
+    target.style.width = `${layoutRect.width}px`;
+    target.style.height = `${layoutRect.height}px`;
+  };
+
+  const rendered = createListTransition(getSource, {
+    exitMethod: "keep-index",
+    onChange: ({ removed, finishRemoved }) => {
+      const exitingElements = removed.filter(
+        (el): el is Element => el instanceof Element,
+      );
+
+      if (exitingElements.length === 0) {
+        finishRemoved(removed);
+        return;
+      }
+
+      const mode = props.mode();
+
+      for (const el of exitingElements) {
+        if (mode === "popLayout") applyPopLayout(el);
+
+        props.pendingExits.set(el, () => finishRemoved([el]));
+
+        // Safety check: if after a tick the element hasn't started an animation, remove it.
+        // This handles non-motion elements.
+        setTimeout(() => {
+          const marker = el as unknown as MotionExitMarker;
+          if (marker.__motionIsAnimatingExit) return;
+          if (!props.pendingExits.has(el)) return;
+          const finish = props.pendingExits.get(el)!;
+          props.pendingExits.delete(el);
+          props.updateExitCount();
+          finish();
+        }, 0);
+      }
+
+      props.updateExitCount();
+    },
+  });
+
+  return rendered as unknown as JSX.Element;
+};
 
 export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
-  const resolved = children(() => props.children);
-  const mode = () => props.mode ?? "sync";
   const custom = () => props.custom;
+  const initial = () => props.initial ?? true;
+  const mode: Accessor<AnimatePresenceMode> = () => props.mode ?? "sync";
+  const root = () => props.root;
 
   const [isPresentInParent, safeToRemove] = usePresence();
 
-  let isInitialRender = true;
-  createEffect(() => {
-    isInitialRender = false;
-  });
+  // We need to track exiting elements to know when to finish them.
+  // element -> finishRemoved callback
+  const pendingExits = new Map<Element, () => void>();
+  const [exitCount, setExitCount] = createSignal(0);
+  const updateExitCount = () => setExitCount(pendingExits.size);
 
-  const [rendered, setRendered] = createSignal<PresenceItem[]>([]);
-  const [pendingChildren, setPendingChildren] = createSignal<
-    JSX.Element[] | null
-  >(null);
-
-  const keyMap = new WeakMap<object, string>();
-  let nextKey = 0;
-
-  const getKey = (child: JSX.Element, index: number): string => {
-    if (typeof child === "string" || typeof child === "number")
-      return String(child);
-
-    if (child && typeof child === "object") {
-      if (typeof Element !== "undefined" && child instanceof Element) {
-        const attr = child.getAttribute("key");
-        if (attr) return attr;
-      }
-
-      const existing = keyMap.get(child as object);
-      if (existing) return existing;
-
-      const generated = `presence-${nextKey++}`;
-      keyMap.set(child as object, generated);
-      return generated;
+  const onExitComplete = (id: string, el?: Element) => {
+    // If it's an element-based completion (handoff)
+    if (el && pendingExits.has(el)) {
+      const finish = pendingExits.get(el)!;
+      pendingExits.delete(el);
+      updateExitCount();
+      finish();
     }
 
-    return `presence-index-${index}`;
-  };
+    if (pendingExits.size === 0) {
+      props.onExitComplete?.();
 
-  const updateRendered = (nextChildren: JSX.Element[]) => {
-    const current = untrack(() => rendered());
-    const currentByKey = new Map<string, PresenceItem>();
-    const currentKeys: string[] = [];
-
-    for (const item of current) {
-      currentByKey.set(item.key, item);
-      currentKeys.push(item.key);
-    }
-
-    const nextKeys = nextChildren.map((child, i) => getKey(child, i));
-    const nextKeySet = new Set(nextKeys);
-
-    const exitingItems: PresenceItem[] = [];
-    for (const item of current) {
-      if (nextKeySet.has(item.key)) {
-        item.setIsPresent(true);
-      } else {
-        item.setIsPresent(false);
-        exitingItems.push(item);
+      if (props.propagate && !isPresentInParent()) {
+        safeToRemove?.();
       }
     }
-
-    if (mode() === "wait" && exitingItems.length > 0) {
-      setPendingChildren(nextChildren);
-      setRendered(current);
-      return;
-    }
-
-    if (mode() === "wait") {
-      setPendingChildren(null);
-    }
-
-    const nextItems: PresenceItem[] = [];
-
-    for (let i = 0; i < nextChildren.length; i++) {
-      const key = nextKeys[i]!;
-      const element = nextChildren[i]!;
-      const existing = currentByKey.get(key);
-
-      if (existing) {
-        existing.element = element;
-        nextItems.push(existing);
-        continue;
-      }
-
-      const initialAllowed =
-        props.initial !== false || !isInitialRender ? true : false;
-
-      const [isPresent, setIsPresent] = createSignal(true);
-
-      nextItems.push({
-        key,
-        element,
-        isPresent,
-        setIsPresent,
-        initial: () => initialAllowed,
-      });
-    }
-
-    if (exitingItems.length > 0) {
-      const presentKeySet = new Set(nextKeys);
-
-      for (let oldIndex = 0; oldIndex < currentKeys.length; oldIndex++) {
-        const key = currentKeys[oldIndex]!;
-        if (presentKeySet.has(key)) continue;
-
-        const exiting = currentByKey.get(key);
-        if (!exiting) continue;
-
-        let anchorKey: string | null = null;
-        for (let j = oldIndex - 1; j >= 0; j--) {
-          const prevKey = currentKeys[j]!;
-          if (presentKeySet.has(prevKey)) {
-            anchorKey = prevKey;
-            break;
-          }
-        }
-
-        let insertIndex = 0;
-
-        if (anchorKey) {
-          const anchorIndex = nextItems.findIndex(
-            (item) => item.key === anchorKey,
-          );
-          insertIndex = Math.max(0, anchorIndex + 1);
-        }
-
-        while (insertIndex < nextItems.length) {
-          const candidate = nextItems[insertIndex];
-          if (!candidate) break;
-          if (untrack(() => candidate.isPresent())) break;
-          insertIndex++;
-        }
-
-        nextItems.splice(insertIndex, 0, exiting);
-      }
-    }
-
-    setRendered(nextItems);
   };
 
-  const commitPendingChildrenIfReady = () => {
-    if (mode() !== "wait") return;
-
-    const current = untrack(() => rendered());
-    const hasExiting = current.some((item) => !untrack(() => item.isPresent()));
-    if (hasExiting) return;
-
-    const pending = untrack(() => pendingChildren());
-    if (!pending) return;
-
-    setPendingChildren(null);
-    updateRendered(pending);
+  // Register isn't used for the Handoff flow usually, but we keep it for API compat
+  const register = (id: string) => {
+    return () => {};
   };
 
-  const handleAllExitsComplete = () => {
-    props.onExitComplete?.();
-    commitPendingChildrenIfReady();
-
-    if (
-      props.propagate &&
-      !isPresentInParent() &&
-      untrack(() => rendered()).length === 0
-    ) {
-      safeToRemove?.();
-    }
+  const context: PresenceContextValue = {
+    isPresent: isPresentInParent, // Pass through parent presence (or true if root)
+    initial: () => initial(),
+    custom,
+    register,
+    onExitComplete,
   };
-
-  const handleItemExitComplete = (key: string) => {
-    setRendered((prev) => prev.filter((item) => item.key !== key));
-
-    const remaining = untrack(() => rendered());
-    const stillExiting = remaining.some(
-      (item) => !untrack(() => item.isPresent()),
-    );
-
-    if (!stillExiting) handleAllExitsComplete();
-  };
-
-  createEffect(() => {
-    if (isPresentInParent()) return;
-    if (props.propagate) return;
-    safeToRemove?.();
-  });
-
-  createEffect(() => {
-    const next = resolved
-      .toArray()
-      .filter(isRenderableChild) as unknown as JSX.Element[];
-
-    if (props.propagate && !isPresentInParent()) {
-      const current = untrack(() => rendered());
-      for (const item of current) item.setIsPresent(false);
-      if (current.length === 0) handleAllExitsComplete();
-      return;
-    }
-
-    updateRendered(next);
-  });
 
   return (
-    <For each={rendered()}>
-      {(item) => (
-        <PresenceChild
-          isPresent={item.isPresent}
-          initial={item.initial}
-          custom={custom}
-          onExitComplete={() => handleItemExitComplete(item.key)}
-        >
-          {item.element}
-        </PresenceChild>
-      )}
-    </For>
+    <PresenceContext.Provider value={context}>
+      <AnimatePresenceContent
+        pendingExits={pendingExits}
+        updateExitCount={updateExitCount}
+        exitCount={exitCount}
+        mode={mode}
+        root={root}
+      >
+        {props.children}
+      </AnimatePresenceContent>
+    </PresenceContext.Provider>
   );
 };

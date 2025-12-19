@@ -9,5 +9,6 @@ export default defineConfig({
     alias: {
       "motion-solid": path.resolve(__dirname, "../package/src/index.ts"),
     },
+    dedupe: ["solid-js", "solid-js/web"],
   },
 });

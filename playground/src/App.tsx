@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, Show } from "solid-js";
+import { createSignal, For, onCleanup, Show } from "solid-js";
 import type { JSX } from "solid-js";
 import { AnimatePresence, motion } from "motion-solid";
 
@@ -158,8 +158,8 @@ function PresenceDemo() {
       </button>
 
       <div class="flex h-28 items-center justify-center">
-        <AnimatePresence>
-          {show() && (
+        <AnimatePresence mode="popLayout">
+          <Show when={show()}>
             <motion.div
               class="grid h-20 w-20 place-items-center rounded-2xl text-sm font-semibold text-white"
               style={{
@@ -173,7 +173,7 @@ function PresenceDemo() {
             >
               Hello
             </motion.div>
-          )}
+          </Show>
         </AnimatePresence>
       </div>
     </div>
@@ -222,13 +222,11 @@ function KeyframesDemo() {
 
 function ListDemo() {
   const [items, setItems] = createSignal([1, 2, 3]);
-  const [selected, setSelected] = createSignal(1);
   const [expanded, setExpanded] = createSignal<number | null>(null);
   let nextId = 4;
 
   const reset = () => {
     setItems([1, 2, 3]);
-    setSelected(1);
     setExpanded(null);
     nextId = 4;
   };
@@ -255,7 +253,6 @@ function ListDemo() {
     const next = items().filter((i) => i !== id);
     setItems(next);
 
-    if (selected() === id) setSelected(next[0] ?? id);
     if (expanded() === id) setExpanded(null);
   };
 
@@ -275,56 +272,47 @@ function ListDemo() {
 
       <div class="space-y-2">
         <AnimatePresence>
-          {items().map((item) => (
-            <motion.div
-              key={item}
-              layout
-              class="ui-subpanel relative overflow-hidden rounded-lg border p-3"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div class="flex items-center justify-between gap-3">
-                <button
-                  class="text-left text-sm font-medium"
-                  onClick={() => setSelected(item)}
-                >
-                  Item {item}
-                </button>
-                <div class="flex items-center gap-3">
-                  <button
-                    class="text-xs ui-muted hover:text-current"
-                    onClick={() =>
-                      setExpanded((current) => (current === item ? null : item))
-                    }
-                  >
-                    {expanded() === item ? "Collapse" : "Expand"}
-                  </button>
-                  <button
-                    class="text-xs ui-muted hover:text-red-500"
-                    onClick={() => removeItem(item)}
-                  >
-                    Remove
-                  </button>
+          <For each={items()}>
+            {(item) => (
+              <motion.div
+                key={item}
+                layout="position"
+                class="ui-subpanel relative overflow-hidden rounded-lg border p-3"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-left text-sm font-medium">Item {item}</span>
+                  <div class="flex items-center gap-3">
+                    <button
+                      class="text-xs ui-muted hover:text-current"
+                      onClick={() =>
+                        setExpanded((current) =>
+                          current === item ? null : item,
+                        )
+                      }
+                    >
+                      {expanded() === item ? "Collapse" : "Expand"}
+                    </button>
+                    <button
+                      class="text-xs ui-muted hover:text-red-500"
+                      onClick={() => removeItem(item)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <Show when={expanded() === item}>
-                <div class="mt-2 text-xs ui-muted">
-                  Expanded content changes height, pushing siblings.
-                </div>
-              </Show>
-
-              <Show when={selected() === item}>
-                <motion.div
-                  layoutId="underline"
-                  class="absolute inset-x-3 bottom-1 h-0.5 rounded-full"
-                  style={{ background: "rgba(99, 102, 241, 1)" }}
-                />
-              </Show>
-            </motion.div>
-          ))}
+                <Show when={expanded() === item}>
+                  <div class="mt-2 text-xs ui-muted">
+                    Expanded content changes height, pushing siblings.
+                  </div>
+                </Show>
+              </motion.div>
+            )}
+          </For>
         </AnimatePresence>
       </div>
     </div>
@@ -344,7 +332,7 @@ function ModalDemo() {
       </button>
 
       <AnimatePresence>
-        {open() && (
+        <Show when={open()}>
           <motion.div
             class="fixed inset-0 z-50 grid place-items-center p-4"
             initial={{ opacity: 0 }}
@@ -377,7 +365,7 @@ function ModalDemo() {
               </button>
             </motion.div>
           </motion.div>
-        )}
+        </Show>
       </AnimatePresence>
     </>
   );
@@ -433,29 +421,34 @@ function SharedLayoutDemo() {
             }}
             onClick={() => setActiveTab(tab)}
           >
-            {activeTab() === tab && (
+            <Show when={activeTab() === tab}>
               <motion.div
                 layoutId="active-tab"
                 class="absolute inset-0 rounded-md"
                 style={{ background: "rgba(99, 102, 241, 1)" }}
-                transition={{ type: "spring", stiffness: 500, damping: 35 }}
               />
-            )}
+            </Show>
             <span class="relative z-10">{tab}</span>
           </button>
         ))}
       </div>
       <div class="ui-subpanel rounded-lg border p-4 text-sm">
         <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab()}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-          >
-            Content for <strong>{activeTab()}</strong> tab
-          </motion.div>
+          {(() => {
+            const tab = activeTab();
+
+            return (
+              <motion.div
+                key={tab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.15 }}
+              >
+                Content for <strong>{tab}</strong> tab
+              </motion.div>
+            );
+          })()}
         </AnimatePresence>
       </div>
     </div>
@@ -479,18 +472,24 @@ function LayoutPositionDemo() {
           "grid-template-columns": expanded() ? "1fr" : "1fr 1fr",
         }}
       >
-        {[1, 2, 3, 4].map((item) => (
-          <motion.div
-            layout
-            class="ui-subpanel grid place-items-center rounded-lg border p-4 text-sm font-medium"
-            style={{
-              height: expanded() ? "80px" : "60px",
-            }}
-            transition={{ type: "spring", stiffness: 500, damping: 35 }}
-          >
-            Item {item}
-          </motion.div>
-        ))}
+        <For each={[1, 2, 3, 4]}>
+          {(item) => (
+            <motion.div
+              layoutId={`position-item-${item}`}
+              class="ui-subpanel grid place-items-center rounded-lg border"
+              style={{
+                height: expanded() ? "80px" : "60px",
+              }}
+            >
+              <motion.p
+                layoutId={`position-item-content-${item}`}
+                class="p-4 text-sm font-medium"
+              >
+                Item {item}
+              </motion.p>
+            </motion.div>
+          )}
+        </For>
       </div>
     </div>
   );
@@ -508,54 +507,71 @@ function CardExpandDemo() {
   return (
     <>
       <div class="grid grid-cols-2 gap-2">
-        {cards.map((card) => (
-          <motion.div
-            layoutId={`card-${card.id}`}
-            class="cursor-pointer rounded-lg p-3 text-center text-sm font-medium text-white"
-            style={{ background: card.color }}
-            onClick={() => setSelectedId(card.id)}
-            transition={{ type: "spring", stiffness: 500, damping: 35 }}
-          >
-            {card.title}
-          </motion.div>
-        ))}
+        <For each={cards}>
+          {(card) => (
+            <Show
+              when={selectedId() !== card.id}
+              fallback={<div class="size-full" />}
+            >
+              <motion.div
+                layoutId={`card-${card.id}`}
+                class="cursor-pointer rounded-lg p-3 text-center font-medium text-white"
+                style={{
+                  background: card.color,
+                }}
+                onClick={() => setSelectedId(card.id)}
+              >
+                <motion.p
+                  layoutId={`card-content-${card.id}`}
+                  class="p-3 text-center font-medium text-white"
+                >
+                  {card.title}
+                </motion.p>
+              </motion.div>
+            </Show>
+          )}
+        </For>
       </div>
 
       <AnimatePresence>
-        {selectedId() !== null && (
-          <motion.div
-            class="fixed inset-0 z-50 grid place-items-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            onClick={() => setSelectedId(null)}
-            style={{
-              background: "rgba(0, 0, 0, 0.5)",
-              "backdrop-filter": "blur(4px)",
-            }}
-          >
-            <motion.div
-              layoutId={`card-${selectedId()}`}
-              class="w-full max-w-xs cursor-pointer rounded-2xl p-6 text-center text-white"
-              style={{
-                background: cards.find((c) => c.id === selectedId())?.color,
-              }}
-              onClick={(e: MouseEvent) => {
-                e.stopPropagation();
-                setSelectedId(null);
-              }}
-              transition={{ type: "spring", stiffness: 500, damping: 35 }}
-            >
-              <h3 class="text-xl font-bold">
-                {cards.find((c) => c.id === selectedId())?.title}
-              </h3>
-              <p class="mt-2 text-sm opacity-90">
-                Click to close this expanded card
-              </p>
-            </motion.div>
-          </motion.div>
-        )}
+        <Show when={selectedId() !== null}>
+          {(() => {
+            const id = selectedId();
+            if (id === null) return null;
+            const card = cards.find((c) => c.id === id);
+
+            return (
+              <motion.div
+                class="fixed inset-0 z-50 grid place-items-center p-4"
+                transition={{ duration: 0.15 }}
+                onClick={() => setSelectedId(null)}
+                style={{
+                  background: "rgba(0, 0, 0, 0.5)",
+                  "backdrop-filter": "blur(4px)",
+                }}
+              >
+                <motion.div
+                  layoutId={`card-${id}`}
+                  class="w-full max-w-xs cursor-pointer rounded-2xl p-6 text-center font-medium text-white"
+                  style={{
+                    background: card?.color,
+                  }}
+                  onClick={(e: MouseEvent) => {
+                    e.stopPropagation();
+                    setSelectedId(null);
+                  }}
+                >
+                  <motion.p
+                    layoutId={`card-content-${id}`}
+                    class="p-3 text-center font-medium text-white"
+                  >
+                    {card?.title}
+                  </motion.p>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </Show>
       </AnimatePresence>
     </>
   );
@@ -593,24 +609,26 @@ function ToastDemo() {
 
       <div class="min-h-[100px] space-y-2">
         <AnimatePresence>
-          {toasts().map((toast) => (
-            <motion.div
-              key={toast.id}
-              class="ui-card flex items-center justify-between rounded-lg border p-3"
-              initial={{ opacity: 0, y: -10, x: 20 }}
-              animate={{ opacity: 1, y: 0, x: 0 }}
-              exit={{ opacity: 0, x: 30 }}
-              transition={{ duration: 0.2 }}
-            >
-              <span class="text-sm">{toast.message}</span>
-              <button
-                class="text-xs ui-muted"
-                onClick={() => removeToast(toast.id)}
+          <For each={toasts()}>
+            {(toast) => (
+              <motion.div
+                layout
+                class="ui-card flex items-center justify-between rounded-lg border p-3"
+                initial={{ opacity: 0, y: -10, x: 20 }}
+                animate={{ opacity: 1, y: 0, x: 0 }}
+                exit={{ opacity: 0, x: 30 }}
+                transition={{ duration: 0.2 }}
               >
-                Dismiss
-              </button>
-            </motion.div>
-          ))}
+                <span class="text-sm">{toast.message}</span>
+                <button
+                  class="text-xs ui-muted"
+                  onClick={() => removeToast(toast.id)}
+                >
+                  Dismiss
+                </button>
+              </motion.div>
+            )}
+          </For>
         </AnimatePresence>
       </div>
     </div>
@@ -638,6 +656,16 @@ export default function App() {
 
   return (
     <div class="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+      <div
+        class="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          background: `
+            radial-gradient(900px 560px at 16% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
+            radial-gradient(760px 480px at 92% 10%, rgba(16, 185, 129, 0.14), transparent 60%),
+            radial-gradient(760px 480px at 74% 110%, rgba(236, 72, 153, 0.1), transparent 60%)
+          `,
+        }}
+      />
       <div class="mx-auto max-w-6xl">
         <header class="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -739,7 +767,7 @@ export default function App() {
           <p>
             Built with{" "}
             <a
-              href="https://github.com/sst/motion-solid"
+              href="https://github.com/leanderriefeldt/motion-solid"
               class="underline hover:text-current"
             >
               motion-solid

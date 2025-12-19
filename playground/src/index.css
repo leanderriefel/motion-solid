@@ -83,23 +83,7 @@ body,
 body {
   margin: 0;
   overflow-x: hidden;
-  background:
-    radial-gradient(
-      900px 560px at 16% -10%,
-      rgba(99, 102, 241, 0.18),
-      transparent 60%
-    ),
-    radial-gradient(
-      760px 480px at 92% 10%,
-      rgba(16, 185, 129, 0.14),
-      transparent 60%
-    ),
-    radial-gradient(
-      760px 480px at 74% 110%,
-      rgba(236, 72, 153, 0.1),
-      transparent 60%
-    ),
-    var(--app-bg);
+  background: var(--app-bg);
   color: var(--app-text);
   font-family:
     ui-sans-serif,

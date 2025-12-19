@@ -9,6 +9,7 @@ export {
   useMotionConfig,
   type MotionConfigContextValue,
   type MotionConfigProps,
+  type ReducedMotionConfig,
   motionKeys,
   AnimatePresence,
   PresenceContext,
@@ -19,7 +20,7 @@ export {
   type PresenceContextValue,
   motion,
   type MotionProxy,
-} from "./component";
+} from "./component/index.tsx";
 
 export { useAnimationState } from "./animation";
 
@@ -30,6 +31,13 @@ export {
   type AnimationTypeValuesMap,
   buildAnimationTypeMotionValues,
 } from "./animation";
+
+export {
+  stagger,
+  isStaggerFunction,
+  type StaggerOptions,
+  type StaggerFunction,
+} from "./animation/stagger";
 
 // Types
 export type {
@@ -51,4 +59,6 @@ export { isSVGElement, isHTMLElement } from "./types";
 
 export { createMotionState } from "./state";
 
-export { useGestures } from "./gestures";
+export { useGestures, createDragControls, type DragControls } from "./gestures";
+
+export { useReducedMotion } from "./hooks";

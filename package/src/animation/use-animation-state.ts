@@ -12,6 +12,7 @@ import type {
   AnimationPlaybackControlsWithThen,
   MotionValue,
   Transition,
+  VariantLabels,
 } from "motion-dom";
 import {
   motionValue,
@@ -34,8 +35,13 @@ import {
 } from "./keyframes";
 import { startMotionValueAnimation } from "./motion-value";
 import { buildHTMLStyles, createRenderState } from "./render";
-import { resolveDefinitionToTarget, getTransitionForKey } from "./variants";
+import {
+  resolveDefinitionToTarget,
+  getTransitionForKey,
+  isVariantLabels,
+} from "./variants";
 import type { PresenceContextValue } from "../component/presence";
+import type { MotionConfigContextValue } from "../component/motion-config";
 import { createLayoutNode, layoutManager } from "../layout/layout-manager";
 
 type TransformTemplate = (
@@ -48,24 +54,78 @@ export interface AnimationStateOptions {
   setState: SetStoreFunction<MotionState>;
   options: MotionOptions;
   presence: PresenceContextValue | null;
+  getElement?: () => Element | null;
+  motionConfig?: MotionConfigContextValue | null;
+  /** Get additional delay from parent orchestration (stagger/delayChildren) */
+  getOrchestrationDelay?: () => number;
+  /** Parent orchestration context for beforeChildren/afterChildren coordination */
+  parentOrchestration?: {
+    childrenCanStart: () => Promise<void>;
+    getWhen: () => false | "beforeChildren" | "afterChildren" | undefined;
+  } | null;
+  /** Callback to signal that this component's animation has completed */
+  signalAnimationComplete?: () => void;
+  /**
+   * For this component as a parent: orchestration context we provide to children.
+   * Used to signal parent completion and wait for children.
+   */
+  childOrchestration?: {
+    getWhen: () => false | "beforeChildren" | "afterChildren" | undefined;
+    waitForChildren: () => Promise<void>;
+    signalParentComplete: () => void;
+  } | null;
 }
 
+// Transform properties that should be disabled when reduced motion is active
+const transformPropertiesSet = new Set([
+  "x",
+  "y",
+  "z",
+  "rotate",
+  "rotateX",
+  "rotateY",
+  "rotateZ",
+  "scale",
+  "scaleX",
+  "scaleY",
+  "scaleZ",
+  "skew",
+  "skewX",
+  "skewY",
+  "translateX",
+  "translateY",
+  "translateZ",
+  "perspective",
+]);
+
 export const useAnimationState = (args: AnimationStateOptions): void => {
-  const { state, setState, options, presence } = args;
+  const {
+    state,
+    setState,
+    options,
+    presence,
+    getElement,
+    motionConfig,
+    getOrchestrationDelay,
+    parentOrchestration,
+    signalAnimationComplete,
+    childOrchestration,
+  } = args;
 
   const latestValues = new Map<string, AnyResolvedKeyframe>();
   const renderState = createRenderState();
   const prevStyle = new Map<string, string>();
   const prevVars = new Map<string, string>();
   let frameId: number | null = null;
+  let renderMicrotaskScheduled = false;
+  let isUnmounted = false;
 
   const presenceId = presence ? createUniqueId() : null;
 
-  createEffect(() => {
-    if (!presence || !presenceId) return;
+  if (presence && presenceId) {
     const unregister = presence.register(presenceId);
     onCleanup(unregister);
-  });
+  }
 
   let projectionTransform: string | null = null;
   let projectionOpacity: number | null = null;
@@ -183,6 +243,18 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   };
 
   const scheduleRender = () => {
+    if (renderMicrotaskScheduled) return;
+
+    if (typeof queueMicrotask === "function") {
+      renderMicrotaskScheduled = true;
+      queueMicrotask(() => {
+        renderMicrotaskScheduled = false;
+        if (isUnmounted) return;
+        renderToDom();
+      });
+      return;
+    }
+
     if (typeof requestAnimationFrame === "undefined") return;
     if (frameId !== null) return;
     frameId = requestAnimationFrame(() => {
@@ -192,9 +264,143 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   };
 
   onCleanup(() => {
+    const el = getElement ? getElement() : state.element;
+
+    /**
+     * AnimatePresence exit handoff:
+     * when a Motion component is unmounted, Solid disposes all reactive effects.
+     * AnimatePresence keeps the *DOM element* in the tree via `createListTransition`,
+     * so we need to run the exit animation imperatively and keep rendering MotionValue
+     * changes to the element until completion.
+     */
+    if (presence && presenceId && el) {
+      queueMicrotask(() => {
+        // Only run the handoff if AnimatePresence actually kept the element in the DOM.
+        if (!(el instanceof Element) || !el.isConnected) return;
+
+        // Tell AnimatePresence to wait for us.
+        (el as any).__motionIsAnimatingExit = true;
+
+        // Minimal render scheduler (doesn't depend on Solid reactivity).
+        let handoffFrame: number | null = null;
+        let handoffScheduled = false;
+
+        const scheduleHandoffRender = () => {
+          if (handoffScheduled) return;
+          handoffScheduled = true;
+
+          if (typeof requestAnimationFrame === "function") {
+            handoffFrame = requestAnimationFrame(() => {
+              handoffFrame = null;
+              handoffScheduled = false;
+              renderToDom();
+            });
+            return;
+          }
+
+          if (typeof queueMicrotask === "function") {
+            queueMicrotask(() => {
+              handoffScheduled = false;
+              renderToDom();
+            });
+            return;
+          }
+
+          handoffScheduled = false;
+          renderToDom();
+        };
+
+        // Keep MotionValue -> DOM rendering alive during handoff.
+        const unsubscribers: VoidFunction[] = [];
+        for (const [key, mv] of Object.entries(state.values)) {
+          latestValues.set(key, mv.get());
+          unsubscribers.push(
+            mv.on("change", (next) => {
+              latestValues.set(key, next as AnyResolvedKeyframe);
+              scheduleHandoffRender();
+            }),
+          );
+        }
+
+        const cleanupHandoff = () => {
+          for (const unsub of unsubscribers) unsub();
+          if (
+            handoffFrame !== null &&
+            typeof cancelAnimationFrame === "function"
+          ) {
+            cancelAnimationFrame(handoffFrame);
+          }
+          delete (el as any).__motionIsAnimatingExit;
+        };
+
+        // Ensure we render at least once in handoff mode.
+        scheduleHandoffRender();
+
+        const exitDef = options.exit;
+        if (!exitDef) {
+          cleanupHandoff();
+          presence.onExitComplete(presenceId, el);
+          return;
+        }
+
+        const target = resolveDefinitionToTarget({
+          definition: exitDef,
+          options,
+          state,
+        });
+
+        if (!target) {
+          cleanupHandoff();
+          presence.onExitComplete(presenceId, el);
+          return;
+        }
+
+        const exitKeys = Object.keys(target).filter(
+          (k) => k !== "transition" && k !== "transitionEnd",
+        );
+
+        const promises: Array<Promise<unknown>> = [];
+
+        for (const key of exitKeys) {
+          const keyframes = (target as Record<string, unknown>)[key];
+          const transition = (target as Record<string, unknown>).transition;
+          const perKeyTransition = getTransitionForKey(
+            (transition as Transition | undefined) ?? options.transition,
+            key,
+          );
+
+          const mv = state.values[key];
+          if (!mv) continue;
+
+          const controls = startMotionValueAnimation({
+            name: key,
+            motionValue: mv as MotionValue<string | number>,
+            keyframes,
+            transition: perKeyTransition as Transition | undefined,
+          });
+
+          if (controls) promises.push(controls.finished);
+        }
+
+        if (promises.length === 0) {
+          cleanupHandoff();
+          presence.onExitComplete(presenceId, el);
+          return;
+        }
+
+        void Promise.allSettled(promises).then(() => {
+          cleanupHandoff();
+          presence.onExitComplete(presenceId, el);
+        });
+      });
+    }
+
+    isUnmounted = true;
+    renderMicrotaskScheduled = false;
     if (frameId !== null && typeof cancelAnimationFrame !== "undefined") {
       cancelAnimationFrame(frameId);
     }
+    stopAll();
   });
 
   createEffect(() => {
@@ -223,6 +429,8 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     layout: options.layout,
     layoutId: options.layoutId,
     layoutCrossfade: options.layoutCrossfade,
+    layoutScroll: options.layoutScroll,
+    layoutRoot: options.layoutRoot,
     transition: options.transition as Transition | undefined,
     onBeforeLayoutMeasure: options.onBeforeLayoutMeasure,
     onLayoutMeasure: options.onLayoutMeasure,
@@ -400,6 +608,26 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       whileInView: options.whileInView,
       animate: options.animate,
     };
+
+    // Update activeVariants state to track which variant labels are active
+    for (const type of animationTypes) {
+      const definition = definitions[type];
+      untrack(() => {
+        if (isVariantLabels(definition)) {
+          setState("activeVariants", type, definition as VariantLabels);
+        } else {
+          setState("activeVariants", type, undefined);
+        }
+      });
+    }
+    // Also track initial variant
+    untrack(() => {
+      if (isVariantLabels(options.initial)) {
+        setState("activeVariants", "initial", options.initial as VariantLabels);
+      } else {
+        setState("activeVariants", "initial", undefined);
+      }
+    });
 
     const resolvedTargetsByType: AnimationTypeTargets = {};
     for (const type of animationTypes) {
@@ -588,66 +816,127 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       if (!nextActiveKeyToType.has(key)) stopKey(key);
     }
 
-    const startedKeys: string[] = [];
+    // Determine if we need to wait before starting animations
+    const parentWhen = parentOrchestration?.getWhen();
+    const childWhen = childOrchestration?.getWhen();
+    const needsToWaitForParent = parentWhen === "beforeChildren";
+    const needsToWaitForChildren = childWhen === "afterChildren";
 
-    for (const [key, type] of nextActiveKeyToType.entries()) {
-      const keyframes = nextActiveKeyToKeyframes.get(key);
-      if (keyframes === undefined) continue;
+    /**
+     * Start animations for all keys that need to be animated.
+     * This is extracted as a function so it can be called either synchronously
+     * or after waiting for orchestration.
+     */
+    const startAnimations = () => {
+      const startedKeys: string[] = [];
 
-      const mv = (nextValues as MotionValues)[key];
-      if (!mv) continue;
+      for (const [key, type] of nextActiveKeyToType.entries()) {
+        const keyframes = nextActiveKeyToKeyframes.get(key);
+        if (keyframes === undefined) continue;
 
-      const shouldRestart =
-        prevType.get(key) !== type ||
-        !areKeyframesEqual(prevKeyframes.get(key), keyframes);
+        const mv = (nextValues as MotionValues)[key];
+        if (!mv) continue;
 
-      prevType.set(key, type);
-      prevKeyframes.set(key, keyframes);
+        const shouldRestart =
+          prevType.get(key) !== type ||
+          !areKeyframesEqual(prevKeyframes.get(key), keyframes);
 
-      if (!shouldRestart) continue;
+        prevType.set(key, type);
+        prevKeyframes.set(key, keyframes);
 
-      stopKey(key);
+        if (!shouldRestart) continue;
 
+        stopKey(key);
+
+        const target = activeTargetsByType[type];
+        const transition =
+          (target?.transition as Transition | undefined) ??
+          (options.transition as Transition | undefined);
+        const perKeyTransition = getTransitionForKey(transition, key);
+
+        // Apply reduced motion: instant transition for transform properties
+        const shouldReduceMotion = motionConfig?.isReducedMotion() ?? false;
+        let finalTransition = perKeyTransition as Transition | undefined;
+        if (shouldReduceMotion && transformPropertiesSet.has(key)) {
+          finalTransition = { duration: 0 };
+        }
+
+        // Apply orchestration delay from parent (stagger/delayChildren)
+        const orchestrationDelay = getOrchestrationDelay?.() ?? 0;
+        if (orchestrationDelay > 0) {
+          const existingDelay =
+            (finalTransition as Record<string, unknown> | undefined)?.delay ??
+            0;
+          finalTransition = {
+            ...finalTransition,
+            delay:
+              (typeof existingDelay === "number" ? existingDelay : 0) +
+              orchestrationDelay,
+          };
+        }
+
+        const controls = startMotionValueAnimation({
+          name: key,
+          motionValue: mv as MotionValue<string | number>,
+          keyframes,
+          transition: finalTransition,
+        });
+
+        if (controls) {
+          running.set(key, { type, controls });
+          startedKeys.push(key);
+        }
+
+        const final = pickFinalFromKeyframes(keyframes);
+        if (final !== null) untrack(() => setState("goals", key, final));
+      }
+
+      if (typeof options.onAnimationStart === "function") {
+        const startedAnimateKey = startedKeys.some(
+          (k) => running.get(k)?.type === "animate",
+        );
+        if (startedAnimateKey && resolvedTargetsByType.animate) {
+          options.onAnimationStart(resolvedTargetsByType.animate);
+        }
+      }
+    };
+
+    // Handle orchestration waiting
+    if (needsToWaitForParent || needsToWaitForChildren) {
+      // Start animations asynchronously after waiting
+      void (async () => {
+        // Wait for parent to complete first (beforeChildren from parent's perspective)
+        if (needsToWaitForParent && parentOrchestration) {
+          await parentOrchestration.childrenCanStart();
+        }
+
+        // Wait for children to complete first (afterChildren from this component's perspective)
+        if (needsToWaitForChildren && childOrchestration) {
+          await childOrchestration.waitForChildren();
+        }
+
+        // Check if we were unmounted while waiting
+        if (isUnmounted) return;
+
+        startAnimations();
+      })();
+    } else {
+      // Start animations synchronously (no orchestration waiting needed)
+      startAnimations();
+    }
+
+    // If the currently active \"animate\" definition finished, call onAnimationComplete.
+    // We approximate \"finished\" as \"all keys currently controlled by animate have finished\".\
+    // Also apply transitionEnd for all animation types, not just animate.
+    for (const type of animationTypes) {
       const target = activeTargetsByType[type];
-      const transition =
-        (target?.transition as Transition | undefined) ??
-        (options.transition as Transition | undefined);
-      const perKeyTransition = getTransitionForKey(transition, key);
+      if (!target) continue;
 
-      const controls = startMotionValueAnimation({
-        name: key,
-        motionValue: mv as MotionValue<string | number>,
-        keyframes,
-        transition: perKeyTransition as Transition | undefined,
-      });
-
-      if (controls) {
-        running.set(key, { type, controls });
-        startedKeys.push(key);
-      }
-
-      const final = pickFinalFromKeyframes(keyframes);
-      if (final !== null) untrack(() => setState("goals", key, final));
-    }
-
-    if (typeof options.onAnimationStart === "function") {
-      const startedAnimateKey = startedKeys.some(
-        (k) => running.get(k)?.type === "animate",
-      );
-      if (startedAnimateKey && resolvedTargetsByType.animate) {
-        options.onAnimationStart(resolvedTargetsByType.animate);
-      }
-    }
-
-    // If the currently active "animate" definition finished, call onAnimationComplete.
-    // We approximate "finished" as "all keys currently controlled by animate have finished".
-    const animateTarget = activeTargetsByType.animate;
-    if (animateTarget && typeof options.onAnimationComplete === "function") {
-      const animateKeys = Object.keys(animateTarget).filter(
+      const typeKeys = Object.keys(target).filter(
         (k) => k !== "transition" && k !== "transitionEnd",
       );
 
-      const finishedPromises = animateKeys
+      const typePromises = typeKeys
         .map((k) => running.get(k))
         .filter(
           (
@@ -655,15 +944,35 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           ): v is {
             type: AnimationType;
             controls: AnimationPlaybackControlsWithThen;
-          } => Boolean(v && v.type === "animate"),
+          } => Boolean(v && v.type === type),
         )
         .map((v) => v.controls.finished);
 
-      if (finishedPromises.length > 0) {
-        void Promise.allSettled(finishedPromises).then(() => {
-          options.onAnimationComplete?.(animateTarget);
+      if (typePromises.length > 0) {
+        void Promise.allSettled(typePromises).then(() => {
+          // Call onAnimationComplete callback for animate type only
+          if (
+            type === "animate" &&
+            typeof options.onAnimationComplete === "function"
+          ) {
+            options.onAnimationComplete(target);
+          }
 
-          const end = animateTarget.transitionEnd;
+          // Signal parent orchestration that this component's animation completed
+          if (type === "animate" && signalAnimationComplete) {
+            signalAnimationComplete();
+          }
+
+          // For beforeChildren: signal that children can now start
+          if (type === "animate" && childOrchestration) {
+            const when = childOrchestration.getWhen();
+            if (when === "beforeChildren") {
+              childOrchestration.signalParentComplete();
+            }
+          }
+
+          // Apply transitionEnd values for all animation types
+          const end = target.transitionEnd;
           if (end && typeof end === "object" && end !== null) {
             for (const [k, v] of Object.entries(end)) {
               if (!isStringOrNumber(v)) continue;
@@ -689,7 +998,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       const exitTarget = activeTargetsByType.exit;
       if (!exitTarget) {
         // No `exit` target provided, complete immediately.
-        presence.onExitComplete(presenceId);
+        presence.onExitComplete(presenceId, element || undefined);
         return;
       }
 
@@ -714,11 +1023,11 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
         void Promise.allSettled(exitPromises).then(() => {
           if (exitCycleId !== cycleId) return;
           if (presence.isPresent()) return;
-          presence.onExitComplete(presenceId);
+          presence.onExitComplete(presenceId, element || undefined);
         });
       } else {
         // No tracked exit animations, complete immediately
-        presence.onExitComplete(presenceId);
+        presence.onExitComplete(presenceId, element || undefined);
       }
     }
   });

@@ -36,12 +36,17 @@ type LayoutNodeOptions = LayoutCallbacks & {
   layout?: LayoutAnimationType;
   layoutId?: string;
   layoutCrossfade?: boolean;
+  layoutScroll?: boolean;
+  layoutRoot?: boolean;
   transition?: Transition;
 };
 
 type LayoutNode = {
   element: HTMLElement | SVGElement;
   options: LayoutNodeOptions;
+
+  parent: LayoutNode | null;
+  children: Set<LayoutNode>;
 
   prevBox: Box | null;
   latestBox: Box | null;
@@ -60,15 +65,16 @@ type LayoutNode = {
   render: () => void;
   scheduleRender: () => void;
 
+  updateProjection: (immediate?: boolean) => void;
+  syncScaleCorrectionSubscriptions: () => void;
+
   stop: () => void;
   destroy: () => void;
 };
 
 const DEFAULT_LAYOUT_TRANSITION: ValueTransition = {
-  type: "spring",
-  stiffness: 500,
-  damping: 35,
-  mass: 1,
+  type: "tween",
+  duration: 0.1,
 };
 
 const resolveLayoutTransition = (transition?: Transition): ValueTransition => {
@@ -131,6 +137,16 @@ const isValidBox = (box: Box): boolean => {
   );
 };
 
+const hasValidSize = (box: Box): boolean => {
+  const width = box.x.max - box.x.min;
+  const height = box.y.max - box.y.min;
+  return width > 0.5 && height > 0.5;
+};
+
+const isUsableBox = (box: Box): boolean => {
+  return isValidBox(box) && hasValidSize(box);
+};
+
 const boxEquals = (a: Box, b: Box, threshold = 0.5): boolean => {
   return (
     Math.abs(a.x.min - b.x.min) <= threshold &&
@@ -138,6 +154,44 @@ const boxEquals = (a: Box, b: Box, threshold = 0.5): boolean => {
     Math.abs(a.y.min - b.y.min) <= threshold &&
     Math.abs(a.y.max - b.y.max) <= threshold
   );
+};
+
+/**
+ * Get the current visual box of a node, taking animation progress into account.
+ * This interpolates between prevBox and latestBox based on projectionProgress.
+ */
+const getVisualBox = (node: LayoutNode): Box | null => {
+  const latestBox = node.latestBox;
+  const prevBox = node.prevBox;
+
+  // If no animation is running or we don't have both boxes, return latestBox
+  if (!node.delta || !prevBox || !latestBox) {
+    return latestBox ?? prevBox;
+  }
+
+  const progress = node.projectionProgress.get();
+
+  // If animation is complete, return the final box
+  if (progress >= 1) {
+    return latestBox;
+  }
+
+  // If animation hasn't started, return the starting box
+  if (progress <= 0) {
+    return prevBox;
+  }
+
+  // Interpolate between prevBox and latestBox based on progress
+  return {
+    x: {
+      min: mixNumber(prevBox.x.min, latestBox.x.min, progress),
+      max: mixNumber(prevBox.x.max, latestBox.x.max, progress),
+    },
+    y: {
+      min: mixNumber(prevBox.y.min, latestBox.y.min, progress),
+      max: mixNumber(prevBox.y.max, latestBox.y.max, progress),
+    },
+  };
 };
 
 const calcLength = (axis: Axis): number => axis.max - axis.min;
@@ -236,41 +290,244 @@ const isDeltaIdentity = (delta: Delta, threshold = 0.0001): boolean => {
   );
 };
 
-const buildProjectionTransform = (
-  delta: Delta,
+const clampProgress = (progress: number): number =>
+  Math.min(1, Math.max(0, progress));
+
+const safeInvert = (value: number): number => {
+  if (!Number.isFinite(value) || value === 0) return 1;
+  return 1 / value;
+};
+
+type AccumulatedTransform = {
+  translateX: number;
+  translateY: number;
+  scaleX: number;
+  scaleY: number;
+  originX: number;
+  originY: number;
+};
+
+const getNodeCenter = (node: LayoutNode): { x: number; y: number } => {
+  const box = node.latestBox ?? node.prevBox;
+  if (!box) return { x: 0, y: 0 };
+
+  return {
+    x: mixNumber(box.x.min, box.x.max, 0.5),
+    y: mixNumber(box.y.min, box.y.max, 0.5),
+  };
+};
+
+const getNodeCurrentTransform = (
+  node: LayoutNode,
+): {
+  translateX: number;
+  translateY: number;
+  scaleX: number;
+  scaleY: number;
+} => {
+  if (!node.delta) {
+    return { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1 };
+  }
+
+  const p = clampProgress(node.projectionProgress.get());
+
+  return {
+    translateX: mixNumber(node.delta.x.translate, 0, p),
+    translateY: mixNumber(node.delta.y.translate, 0, p),
+    scaleX: mixNumber(node.delta.x.scale, 1, p),
+    scaleY: mixNumber(node.delta.y.scale, 1, p),
+  };
+};
+
+const getAccumulatedParentTransform = (
+  node: LayoutNode,
+): AccumulatedTransform => {
+  const result: AccumulatedTransform = {
+    translateX: 0,
+    translateY: 0,
+    scaleX: 1,
+    scaleY: 1,
+    originX: 0,
+    originY: 0,
+  };
+
+  const ancestors: LayoutNode[] = [];
+  let current = node.parent;
+  while (current) {
+    ancestors.push(current);
+    current = current.parent;
+  }
+
+  // Process from root to immediate parent
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const ancestor = ancestors[i]!;
+    const transform = getNodeCurrentTransform(ancestor);
+    const origin = getNodeCenter(ancestor);
+
+    // CSS transform: translate(T) scale(S) around origin O
+    // transforms point P to: O + S * (P - O) + T = S*P + (1-S)*O + T
+    //
+    // For accumulated transform A followed by new transform B:
+    // B(A(P)) = B(A.scale * P + A.offset)
+    //         = B.scale * (A.scale * P + A.offset) + B.offset
+    //         = (B.scale * A.scale) * P + (B.scale * A.offset + B.offset)
+    //
+    // where offset = (1-scale)*origin + translate
+
+    const ancestorOffsetX =
+      (1 - transform.scaleX) * origin.x + transform.translateX;
+    const ancestorOffsetY =
+      (1 - transform.scaleY) * origin.y + transform.translateY;
+
+    // New accumulated offset = newScale * oldOffset + newOffset
+    const newOffsetX =
+      transform.scaleX *
+        (result.scaleX * 0 +
+          (result.scaleX - 1) * result.originX +
+          result.translateX) +
+      ancestorOffsetX;
+    const newOffsetY =
+      transform.scaleY *
+        (result.scaleY * 0 +
+          (result.scaleY - 1) * result.originY +
+          result.translateY) +
+      ancestorOffsetY;
+
+    result.scaleX *= transform.scaleX;
+    result.scaleY *= transform.scaleY;
+    result.translateX = newOffsetX - (result.scaleX - 1) * origin.x;
+    result.translateY = newOffsetY - (result.scaleY - 1) * origin.y;
+    result.originX = origin.x;
+    result.originY = origin.y;
+  }
+
+  return result;
+};
+
+const applyTransformToPoint = (
+  transform: AccumulatedTransform,
+  pointX: number,
+  pointY: number,
+): { x: number; y: number } => {
+  // CSS transform: translate(T) scale(S) around origin O
+  // P' = O + S * (P - O) + T = S*P + (1-S)*O + T
+  const x =
+    transform.scaleX * pointX +
+    (1 - transform.scaleX) * transform.originX +
+    transform.translateX;
+  const y =
+    transform.scaleY * pointY +
+    (1 - transform.scaleY) * transform.originY +
+    transform.translateY;
+
+  return { x, y };
+};
+
+const buildNodeProjectionTransform = (
+  node: LayoutNode,
   progress: number,
 ): string | null => {
-  const p = Math.min(1, Math.max(0, progress));
+  const p = clampProgress(progress);
+  const parentTransform = getAccumulatedParentTransform(node);
+  const nodeCenter = getNodeCenter(node);
 
-  const translateX = mixNumber(delta.x.translate, 0, p);
-  const translateY = mixNumber(delta.y.translate, 0, p);
-  const scaleX = mixNumber(delta.x.scale, 1, p);
-  const scaleY = mixNumber(delta.y.scale, 1, p);
+  if (!node.delta) {
+    // No animation, just counteract parent scale
+    const scaleX = safeInvert(parentTransform.scaleX);
+    const scaleY = safeInvert(parentTransform.scaleY);
+
+    const isIdentity =
+      Math.abs(scaleX - 1) <= 0.0001 && Math.abs(scaleY - 1) <= 0.0001;
+
+    if (isIdentity) return null;
+
+    return `translate3d(0px, 0px, 0) scale(${scaleX}, ${scaleY})`;
+  }
+
+  // What the node wants in absolute page coordinates
+  const desiredTranslateX = mixNumber(node.delta.x.translate, 0, p);
+  const desiredTranslateY = mixNumber(node.delta.y.translate, 0, p);
+  const desiredScaleX = mixNumber(node.delta.x.scale, 1, p);
+  const desiredScaleY = mixNumber(node.delta.y.scale, 1, p);
+
+  // Where the node's center should be in page coords
+  const desiredCenterX = nodeCenter.x + desiredTranslateX;
+  const desiredCenterY = nodeCenter.y + desiredTranslateY;
+
+  // Where the node's center ends up after parent transform (before node's own transform)
+  const afterParent = applyTransformToPoint(
+    parentTransform,
+    nodeCenter.x,
+    nodeCenter.y,
+  );
+
+  // Local translation needed to reach desired position
+  // Note: parent scale affects our translation, so we need to account for it
+  const localTranslateX =
+    (desiredCenterX - afterParent.x) / parentTransform.scaleX;
+  const localTranslateY =
+    (desiredCenterY - afterParent.y) / parentTransform.scaleY;
+
+  // Local scale to counteract parent scale and achieve desired scale
+  const localScaleX = desiredScaleX / parentTransform.scaleX;
+  const localScaleY = desiredScaleY / parentTransform.scaleY;
+
+  // Sanitize values
+  let tx = localTranslateX;
+  let ty = localTranslateY;
+  let sx = localScaleX;
+  let sy = localScaleY;
+
+  if (!Number.isFinite(tx)) tx = 0;
+  if (!Number.isFinite(ty)) ty = 0;
+  if (!Number.isFinite(sx) || sx === 0) sx = 1;
+  if (!Number.isFinite(sy) || sy === 0) sy = 1;
 
   const isIdentity =
-    Math.abs(translateX) <= 0.5 &&
-    Math.abs(translateY) <= 0.5 &&
-    Math.abs(scaleX - 1) <= 0.0001 &&
-    Math.abs(scaleY - 1) <= 0.0001;
+    Math.abs(tx) <= 0.5 &&
+    Math.abs(ty) <= 0.5 &&
+    Math.abs(sx - 1) <= 0.0001 &&
+    Math.abs(sy - 1) <= 0.0001;
 
   if (isIdentity) return null;
 
-  return `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`;
+  return `translate3d(${tx}px, ${ty}px, 0) scale(${sx}, ${sy})`;
 };
 
-const measurePageBox = (element: Element): Box => {
+/**
+ * Measure the page box of an element, accounting for scroll offsets.
+ * If scrollContainers is provided, their scroll positions are factored in.
+ */
+const measurePageBox = (
+  element: Element,
+  scrollContainers?: Set<Element>,
+): Box => {
   const rect = element.getBoundingClientRect();
   const scrollX = typeof window === "undefined" ? 0 : window.scrollX;
   const scrollY = typeof window === "undefined" ? 0 : window.scrollY;
 
+  let extraScrollX = 0;
+  let extraScrollY = 0;
+
+  // Account for scroll offsets in ancestor scroll containers marked with layoutScroll
+  if (scrollContainers) {
+    for (const container of scrollContainers) {
+      // Check if the element is a descendant of this container
+      if (container.contains(element)) {
+        extraScrollX += container.scrollLeft;
+        extraScrollY += container.scrollTop;
+      }
+    }
+  }
+
   return {
     x: {
-      min: rect.left + scrollX,
-      max: rect.right + scrollX,
+      min: rect.left + scrollX + extraScrollX,
+      max: rect.right + scrollX + extraScrollX,
     },
     y: {
-      min: rect.top + scrollY,
-      max: rect.bottom + scrollY,
+      min: rect.top + scrollY + extraScrollY,
+      max: rect.bottom + scrollY + extraScrollY,
     },
   };
 };
@@ -288,25 +545,34 @@ class LayoutIdStack {
     if (prevLead && prevLead !== node) {
       this.prevLead = prevLead;
       this.lead = node;
-      this.snapshot = prevLead.latestBox ?? prevLead.prevBox ?? this.snapshot;
+      // Use the current visual box (accounting for animation progress) for smooth interrupts
+      this.snapshot = getVisualBox(prevLead) ?? this.snapshot;
 
-      if (this.snapshot) {
+      // Only use snapshot if it's valid (has non-zero size)
+      const hasValidSnapshot = this.snapshot && isUsableBox(this.snapshot);
+
+      if (hasValidSnapshot) {
         node.prevBox = this.snapshot;
       }
 
-      const shouldCrossfadeNew = node.options.layoutCrossfade !== false;
-      const shouldCrossfadePrev = prevLead.options.layoutCrossfade !== false;
+      // Only crossfade if we have a valid snapshot to animate from
+      const shouldCrossfadeNew =
+        hasValidSnapshot && node.options.layoutCrossfade !== false;
+      const shouldCrossfadePrev =
+        hasValidSnapshot && prevLead.options.layoutCrossfade !== false;
 
       if (shouldCrossfadeNew) {
         node.opacityActive = true;
         node.opacity.set(0);
-        node.apply({ opacity: 0 }, false);
+        // Apply immediately to prevent flash of full opacity
+        node.apply({ opacity: 0 }, true);
       }
 
       if (shouldCrossfadePrev) {
         prevLead.opacityActive = true;
         prevLead.opacity.set(1);
-        prevLead.apply({ opacity: 1 }, false);
+        // Apply immediately to maintain current opacity
+        prevLead.apply({ opacity: 1 }, true);
       }
 
       if (shouldCrossfadeNew || shouldCrossfadePrev) {
@@ -354,7 +620,7 @@ class LayoutIdStack {
 
     this.lead = node;
 
-    if (this.snapshot) {
+    if (this.snapshot && isUsableBox(this.snapshot)) {
       node.prevBox = this.snapshot;
     }
   }
@@ -363,7 +629,8 @@ class LayoutIdStack {
     this.members.delete(node);
 
     if (this.lead === node) {
-      this.snapshot = node.latestBox ?? node.prevBox ?? this.snapshot;
+      // Use the current visual box for smooth interrupts
+      this.snapshot = getVisualBox(node) ?? this.snapshot;
 
       const nextLead: LayoutNode | null =
         (this.prevLead && this.members.has(this.prevLead)
@@ -375,7 +642,7 @@ class LayoutIdStack {
       this.lead = nextLead;
       this.prevLead = null;
 
-      if (nextLead && this.snapshot) {
+      if (nextLead && this.snapshot && isUsableBox(this.snapshot)) {
         nextLead.prevBox = this.snapshot;
       }
 
@@ -390,7 +657,8 @@ class LayoutIdStack {
   relegate(node: LayoutNode): void {
     if (this.lead !== node) return;
 
-    this.snapshot = node.latestBox ?? node.prevBox ?? this.snapshot;
+    // Use the current visual box for smooth interrupts
+    this.snapshot = getVisualBox(node) ?? this.snapshot;
 
     let nextLead: LayoutNode | null = null;
 
@@ -413,7 +681,7 @@ class LayoutIdStack {
     this.lead = nextLead;
     this.prevLead = null;
 
-    if (this.snapshot) {
+    if (this.snapshot && isUsableBox(this.snapshot)) {
       nextLead.prevBox = this.snapshot;
     }
   }
@@ -423,7 +691,7 @@ class LayoutIdStack {
   }
 
   hasSnapshot(): boolean {
-    return this.snapshot !== null;
+    return this.snapshot !== null && isUsableBox(this.snapshot);
   }
 }
 
@@ -434,6 +702,7 @@ class LayoutManager {
 
   private scheduled = false;
   private isFlushing = false;
+  private flushCooldown = false; // Prevent ResizeObserver from triggering immediate re-flush
 
   private removeWindowListeners: VoidFunction | null = null;
   private mutationObserver: MutationObserver | null = null;
@@ -458,6 +727,14 @@ class LayoutManager {
   unregister(node: LayoutNode): void {
     this.nodes.delete(node);
     this.nodeByElement.delete(node.element);
+
+    if (node.parent) node.parent.children.delete(node);
+    node.parent = null;
+
+    for (const child of node.children) {
+      child.parent = null;
+    }
+    node.children.clear();
 
     // Stop observing this element
     this.resizeObserver?.unobserve(node.element);
@@ -511,10 +788,45 @@ class LayoutManager {
     if (this.scheduled) return;
 
     this.scheduled = true;
-    queueMicrotask(() => {
+
+    const run = () => {
       this.scheduled = false;
       this.flush();
-    });
+    };
+
+    // Coalesce multiple layout invalidations into a single frame.
+    if (typeof requestAnimationFrame !== "undefined") {
+      requestAnimationFrame(run);
+    } else {
+      queueMicrotask(run);
+    }
+  }
+
+  private rebuildTree(nodes: LayoutNode[]): void {
+    for (const node of nodes) {
+      node.parent = null;
+      node.children.clear();
+    }
+
+    for (const node of nodes) {
+      // If this node is marked as layoutRoot, don't connect it to any parent
+      // This makes it a root of its own layout tree (for sticky positioning etc.)
+      if (node.options.layoutRoot) {
+        continue;
+      }
+
+      let parentEl = node.element.parentElement;
+
+      while (parentEl) {
+        const parentNode = this.nodeByElement.get(parentEl);
+        if (parentNode) {
+          node.parent = parentNode;
+          parentNode.children.add(node);
+          break;
+        }
+        parentEl = parentEl.parentElement;
+      }
+    }
   }
 
   flush(): void {
@@ -525,31 +837,79 @@ class LayoutManager {
 
     const nodes = Array.from(this.nodes);
 
+    // Early exit if no nodes
+    if (nodes.length === 0) {
+      this.isFlushing = false;
+      return;
+    }
+
+    // Only measure nodes that have layout enabled
+    const layoutNodes = nodes.filter(
+      (n) => n.options.layout || n.options.layoutId,
+    );
+
+    // Early exit if no nodes need measuring
+    if (layoutNodes.length === 0) {
+      this.isFlushing = false;
+      return;
+    }
+
+    // Only rebuild tree if we have work to do
+    this.rebuildTree(nodes);
+
+    const depthCache = new Map<LayoutNode, number>();
+    const getDepth = (node: LayoutNode): number => {
+      const cached = depthCache.get(node);
+      if (cached !== undefined) return cached;
+
+      const depth = node.parent ? getDepth(node.parent) + 1 : 0;
+      depthCache.set(node, depth);
+      return depth;
+    };
+
+    // Sort layout nodes by depth
+    layoutNodes.sort((a, b) => getDepth(a) - getDepth(b));
+
+    // Collect scroll containers (nodes marked with layoutScroll)
+    const scrollContainers = new Set<Element>();
+    for (const node of layoutNodes) {
+      if (node.options.layoutScroll) {
+        scrollContainers.add(node.element);
+      }
+    }
+
     // Notify before measure using last snapshot.
-    for (const node of nodes) {
+    for (const node of layoutNodes) {
       const prevBox = node.prevBox;
       if (prevBox) node.options.onBeforeLayoutMeasure?.(prevBox);
     }
 
-    // Remove transforms to measure transform-free layouts.
-    const previousTransforms: Array<[Element, string]> = [];
-    for (const node of nodes) {
+    // Only remove/restore transforms for nodes we're measuring
+    const previousTransforms: Array<[HTMLElement | SVGElement, string]> = [];
+    for (const node of layoutNodes) {
       const el = node.element;
       previousTransforms.push([el, el.style.transform]);
       el.style.transform = "none";
     }
 
+    // Force a single synchronous layout
     const measurements = new Map<LayoutNode, Box>();
-    for (const node of nodes) {
-      measurements.set(node, measurePageBox(node.element));
+    for (const node of layoutNodes) {
+      measurements.set(
+        node,
+        measurePageBox(
+          node.element,
+          scrollContainers.size > 0 ? scrollContainers : undefined,
+        ),
+      );
     }
 
-    // Restore transforms.
+    // Restore transforms in a single batch
     for (const [el, transform] of previousTransforms) {
-      (el as HTMLElement | SVGElement).style.transform = transform;
+      el.style.transform = transform;
     }
 
-    for (const node of nodes) {
+    for (const node of layoutNodes) {
       const box = measurements.get(node);
       if (!box) continue;
       if (!isValidBox(box)) continue;
@@ -569,6 +929,12 @@ class LayoutManager {
       }
 
       if (!prevBox) {
+        node.prevBox = box;
+        continue;
+      }
+
+      // Skip animation if prevBox is invalid (zero-sized, etc.)
+      if (!isUsableBox(prevBox)) {
         node.prevBox = box;
         continue;
       }
@@ -594,7 +960,20 @@ class LayoutManager {
       node.prevBox = box;
     }
 
+    // Sync subscriptions and apply scale-correction transforms only for layout nodes
+    for (const node of layoutNodes) {
+      node.syncScaleCorrectionSubscriptions();
+      node.updateProjection(false);
+    }
+
     this.isFlushing = false;
+
+    // Set a cooldown to prevent ResizeObserver from immediately re-triggering
+    // flush after our transform changes cause browser layout
+    this.flushCooldown = true;
+    requestAnimationFrame(() => {
+      this.flushCooldown = false;
+    });
   }
 
   private startLayoutAnimation(
@@ -608,8 +987,8 @@ class LayoutManager {
     node.projectionProgress.stop();
     node.projectionProgress.set(0);
 
-    const initialTransform = buildProjectionTransform(delta, 0);
-    node.apply({ transform: initialTransform }, true);
+    node.syncScaleCorrectionSubscriptions();
+    node.updateProjection(true);
 
     node.options.onLayoutAnimationStart?.();
 
@@ -626,7 +1005,7 @@ class LayoutManager {
     node.projectionAnimation?.finished.then(() => {
       if (node.projectionCycleId !== cycleId) return;
       node.delta = null;
-      node.apply({ transform: null }, false);
+      node.updateProjection(false);
       node.options.onLayoutAnimationComplete?.();
     });
   }
@@ -655,7 +1034,11 @@ class LayoutManager {
     // Create ResizeObserver for layout elements
     if (!this.resizeObserver && typeof ResizeObserver !== "undefined") {
       this.resizeObserver = new ResizeObserver(() => {
-        if (this.isFlushing) return;
+        // Skip if we're in the middle of flushing or in post-flush cooldown
+        // The cooldown prevents the ResizeObserver from re-triggering flush
+        // immediately after our transform changes cause a layout
+        if (this.isFlushing || this.flushCooldown) return;
+
         this.scheduleUpdate();
       });
 
@@ -664,6 +1047,12 @@ class LayoutManager {
         this.resizeObserver.observe(node.element);
       }
     }
+
+    // Note: We intentionally don't use a global MutationObserver as it's too aggressive
+    // and can cause performance issues. Layout changes should be detected via:
+    // 1. ResizeObserver for size changes on layout elements
+    // 2. Explicit layoutDependency tracking for app state changes
+    // 3. register/unregister calls for element mount/unmount
 
     if (this.mutationObserver) return;
     if (typeof MutationObserver === "undefined") return;
@@ -674,10 +1063,10 @@ class LayoutManager {
 
     const observer = new MutationObserver((mutations) => {
       // Ignore mutations triggered by our own flush operations
-      if (this.isFlushing) return;
+      if (this.isFlushing || this.flushCooldown) return;
 
       for (const mutation of mutations) {
-        if (mutation.type === "childList" || mutation.type === "attributes") {
+        if (mutation.type === "childList") {
           this.scheduleUpdate();
           break;
         }
@@ -687,8 +1076,6 @@ class LayoutManager {
     observer.observe(root, {
       childList: true,
       subtree: true,
-      attributes: true,
-      attributeFilter: ["class"],
     });
 
     this.mutationObserver = observer;
@@ -718,22 +1105,70 @@ export const createLayoutNode = (args: {
   const projectionProgress = motionValue(1);
   const opacity = motionValue(1);
 
+  let latestProjectionTransform: string | null = null;
+
+  const scaleCorrectionSubscriptions = new Map<LayoutNode, VoidFunction>();
+
   const node: LayoutNode = {
     element: args.element,
     options: args.options,
+
+    parent: null,
+    children: new Set(),
+
     prevBox: null,
     latestBox: null,
+
     delta: null,
     projectionProgress,
     projectionAnimation: null,
     projectionCycleId: 0,
+
     opacity,
     opacityAnimation: null,
     opacityActive: false,
     opacityCycleId: 0,
+
     apply: args.apply,
     render: args.render,
     scheduleRender: args.scheduleRender,
+
+    updateProjection: (immediate = false) => {
+      const progress = node.delta ? node.projectionProgress.get() : 1;
+      const transform = buildNodeProjectionTransform(node, progress);
+
+      if (transform === latestProjectionTransform) return;
+      latestProjectionTransform = transform;
+
+      node.apply({ transform }, immediate);
+    },
+
+    syncScaleCorrectionSubscriptions: () => {
+      const nextAncestors = new Set<LayoutNode>();
+      let current = node.parent;
+
+      while (current) {
+        nextAncestors.add(current);
+        current = current.parent;
+      }
+
+      for (const [ancestor, unsubscribe] of scaleCorrectionSubscriptions) {
+        if (nextAncestors.has(ancestor)) continue;
+        unsubscribe();
+        scaleCorrectionSubscriptions.delete(ancestor);
+      }
+
+      for (const ancestor of nextAncestors) {
+        if (scaleCorrectionSubscriptions.has(ancestor)) continue;
+
+        const unsubscribe = ancestor.projectionProgress.on("change", () => {
+          node.updateProjection(false);
+        });
+
+        scaleCorrectionSubscriptions.set(ancestor, unsubscribe);
+      }
+    },
+
     stop: () => {
       node.projectionCycleId++;
       node.opacityCycleId++;
@@ -742,17 +1177,24 @@ export const createLayoutNode = (args: {
       node.projectionProgress.stop();
       node.opacity.stop();
     },
+
     destroy: () => {
       node.stop();
       node.delta = null;
+      latestProjectionTransform = null;
+
+      for (const unsub of scaleCorrectionSubscriptions.values()) {
+        unsub();
+      }
+      scaleCorrectionSubscriptions.clear();
+
       node.apply({ transform: null, opacity: null }, false);
     },
   };
 
-  const unsubscribeProjection = projectionProgress.on("change", (latest) => {
+  const unsubscribeProjection = projectionProgress.on("change", () => {
     if (!node.delta) return;
-    const transform = buildProjectionTransform(node.delta, latest);
-    node.apply({ transform }, false);
+    node.updateProjection(false);
   });
 
   const unsubscribeOpacity = opacity.on("change", (latest) => {
