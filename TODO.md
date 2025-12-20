@@ -32,6 +32,3 @@
 - [ ] **LayoutGroup** - coordinate layout animations across siblings
 - [ ] **Path animations** - `pathLength`, `pathSpacing`, `pathOffset` for SVG
 
-## Cleanup
-
-- [ ] **resolveMotionValueKeyframes** - exported but never called, possibly dead code - keyframes.ts:43-68

@@ -39,30 +39,3 @@ export const areKeyframesEqual = (a: unknown, b: unknown): boolean => {
   }
   return a === b;
 };
-
-export const resolveMotionValueKeyframes = (args: {
-  motionValue: MotionValue<string | number>;
-  keyframes: unknown;
-  transition?: Transition;
-}): AnyResolvedKeyframe[] | null => {
-  const { motionValue, keyframes, transition } = args;
-  const from =
-    isRecord(transition) && isStringOrNumber(transition.from)
-      ? transition.from
-      : undefined;
-
-  if (Array.isArray(keyframes)) {
-    const resolved = keyframes.filter(
-      isStringOrNumber,
-    ) as AnyResolvedKeyframe[];
-    if (resolved.length === 0) return null;
-    if (from !== undefined && resolved[0] !== from) return [from, ...resolved];
-    return resolved;
-  }
-
-  if (!isStringOrNumber(keyframes)) return null;
-
-  const origin = from ?? motionValue.get();
-  if (origin === keyframes) return [keyframes];
-  return [origin, keyframes];
-};

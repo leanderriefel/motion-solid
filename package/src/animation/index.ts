@@ -10,7 +10,6 @@ export {
   pickInitialFromKeyframes,
   pickFinalFromKeyframes,
   areKeyframesEqual,
-  resolveMotionValueKeyframes,
 } from "./keyframes";
 export { animateMotionValue, startMotionValueAnimation } from "./motion-value";
 export { getFinalKeyframe } from "./get-final-keyframe";
