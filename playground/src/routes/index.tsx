@@ -1,9 +1,10 @@
 import { EnterAnimation } from "~/components/enter-animation";
+import { ExitAnimation } from "~/components/exit-animation";
 import { FirstAnimation } from "~/components/first-animation";
 import { HoverAndTapAnimation } from "~/components/hover-and-tap-animation";
 import { LayoutAnimation } from "~/components/layout-animation";
+import { LayoutUnderlineAnimation } from "~/components/layout-underline-animation";
 import { ScrollAnimation } from "~/components/scroll-animation";
-import { LayoutDemos } from "~/components/layout-demos";
 
 export default function Home() {
   return (
@@ -21,12 +22,13 @@ export default function Home() {
           </a>
           .
         </p>
-        <LayoutDemos />
         <FirstAnimation />
         <EnterAnimation />
         <HoverAndTapAnimation />
         <ScrollAnimation />
         <LayoutAnimation />
+        <LayoutUnderlineAnimation />
+        <ExitAnimation />
       </div>
     </div>
   );

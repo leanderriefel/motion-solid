@@ -11,7 +11,7 @@ export const LayoutAnimation = () => {
       <button
         type="button"
         aria-pressed={isOn()}
-        class={`flex h-12 w-24 cursor-pointer rounded-full bg-primary/20 p-2 ${
+        class={`flex h-12 w-24 rounded-full bg-primary/20 p-2 ${
           isOn() ? "justify-start" : "justify-end"
         }`}
         onClick={() => setIsOn((v) => !v)}
@@ -19,7 +19,7 @@ export const LayoutAnimation = () => {
         <motion.div
           class="size-8 rounded-full bg-primary"
           layout
-          transition={{ type: "spring", bounce: 0.5 }}
+          transition={{ type: "spring", bounce: 0.4, visualDuration: 0.3 }}
         />
       </button>
     </Animation>

@@ -8,7 +8,7 @@ import {
   onMount,
   splitProps,
 } from "solid-js";
-import { createDynamic } from "solid-js/web";
+import { Dynamic } from "solid-js/web";
 import { createStore } from "solid-js/store";
 import { mergeRefs } from "@solid-primitives/refs";
 import type { Transition, Variants } from "motion-dom";
@@ -328,10 +328,11 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     return (
       <MotionStateContext.Provider value={[state, setState]}>
         <OrchestrationContext.Provider value={childOrchestration}>
-          {createDynamic(() => tag, {
-            ...(elementProps as ComponentProps<Tag>),
-            ref,
-          })}
+          <Dynamic
+            component={tag}
+            {...(elementProps as ComponentProps<Tag>)}
+            ref={ref}
+          />
         </OrchestrationContext.Provider>
       </MotionStateContext.Provider>
     );

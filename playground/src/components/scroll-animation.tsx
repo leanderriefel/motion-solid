@@ -14,7 +14,7 @@ export const ScrollAnimation = () => {
       containerRef={(el) => setScrollContainer(el)}
       scrollable
     >
-      <div class="flex flex-col items-center pb-[100px] pt-[100px]">
+      <div class="flex flex-col items-center">
         <For each={food}>
           {([emoji, hueA, hueB], i) => (
             <Card

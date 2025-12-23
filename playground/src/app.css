@@ -116,11 +116,13 @@
 
 html,
 body {
-  height: 100%;
+  @apply h-full;
 }
 
 body {
-  margin: 0;
-  background-color: var(--color-background);
-  color: var(--color-foreground);
+  @apply m-0 bg-background text-foreground;
+}
+
+* {
+  @apply border-border;
 }

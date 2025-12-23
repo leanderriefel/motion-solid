@@ -1,6 +1,7 @@
 import { Show, createSignal, mergeProps } from "solid-js";
 import type { Component, ComponentProps, JSX } from "solid-js";
 import { motion } from "motion-solid";
+import { cn } from "../utils/cn";
 
 export const Animation: Component<{
   children: JSX.Element;
@@ -19,16 +20,17 @@ export const Animation: Component<{
   return (
     <div
       ref={props.containerRef}
-      class={`relative w-full max-w-[500px] overflow-hidden rounded-2xl border border-border bg-card text-card-foreground ${
-        hasHeader()
-          ? "flex flex-col"
-          : props.scrollable
-            ? ""
-            : "flex items-center justify-center"
-      } ${props.class ?? ""}`}
+      class={cn(
+        "relative w-full max-w-[500px] overflow-hidden rounded-2xl border border-border bg-card text-card-foreground",
+        {
+          "flex flex-col": hasHeader(),
+          "flex items-center justify-center": !props.scrollable && !hasHeader(),
+        },
+        props.class,
+      )}
     >
       <Show when={hasHeader()}>
-        <div class="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-card/80 px-3 h-12 backdrop-blur">
+        <div class="sticky top-0 z-20 shrink-0 flex items-center gap-3 border-b border-border bg-card px-3 h-12 backdrop-blur">
           <Show when={props.name}>
             <span class="text-sm font-medium text-muted-foreground">
               {props.name}
@@ -54,13 +56,10 @@ export const Animation: Component<{
       </Show>
       <Show when={mounted()}>
         <div
-          class={
-            props.scrollable
-              ? "px-3 pb-3"
-              : hasHeader()
-                ? "flex flex-1 items-center justify-center p-6"
-                : ""
-          }
+          class={cn({
+            "px-3 pb-3": props.scrollable,
+            "flex flex-1 items-center justify-center p-6": !props.scrollable,
+          })}
         >
           {props.children}
         </div>

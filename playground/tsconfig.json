@@ -16,7 +16,8 @@
 
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": ["./src/*"],
+      "motion-solid": ["../package/src/index.ts"]
     },
 
     "types": ["vinxi/types/client", "vinxi/types/server", "@solidjs/start/env"]

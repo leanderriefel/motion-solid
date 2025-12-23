@@ -8,6 +8,7 @@ import {
   type JSX,
   createSignal,
   createEffect,
+  createMemo,
 } from "solid-js";
 import { createListTransition } from "@solid-primitives/transition-group";
 import { resolveElements } from "@solid-primitives/refs";
@@ -211,6 +212,7 @@ type AnimatePresenceContentProps = {
   exitCount: Accessor<number>;
   mode: Accessor<AnimatePresenceMode>;
   root: Accessor<ShadowRoot | HTMLElement | undefined>;
+  onElementExitComplete?: (el: Element) => void;
   children?: JSX.Element;
 };
 
@@ -230,12 +232,28 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
 ) => {
   const resolved = resolveElements(() => props.children).toArray;
 
+  // Memoize the resolved elements to ensure stable references
+  const memoizedElements = createMemo<Element[]>((prev) => {
+    const current = resolved();
+
+    if (!prev) return current;
+
+    // If the same elements are present, keep the previous references
+    // This prevents createListTransition from seeing "new" elements on every call
+    if (current.length === prev.length) {
+      const allSame = current.every((el, i) => el === prev[i]);
+      if (allSame) return prev;
+    }
+
+    return current;
+  });
+
   let isWaiting = false;
   let queued: Element[] | null = null;
-  let previous = resolved();
+  let previous = memoizedElements();
 
   const getSource = () => {
-    const current = resolved();
+    const current = memoizedElements();
     const mode = props.mode();
 
     if (mode !== "wait") {
@@ -291,6 +309,9 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
     return current;
   };
 
+  // Track active popLayout exit count per root element to know when to clean up
+  const rootExitCounts = new Map<HTMLElement, number>();
+
   const applyPopLayout = (el: Element) => {
     if (typeof getComputedStyle !== "function") return;
 
@@ -308,10 +329,9 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
       rootElement.style.position = "relative";
     }
 
-    const borderTop = parseFloat(rootStyle.borderTopWidth) || 0;
-    const borderLeft = parseFloat(rootStyle.borderLeftWidth) || 0;
-
     const target = el as HTMLElement | SVGElement;
+
+    // Temporarily remove transform to get accurate full-size position
     const prevTransform = target.style.transform;
     target.style.transform = "none";
     const layoutRect = target.getBoundingClientRect();
@@ -319,16 +339,53 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
 
     const rootRect = rootElement.getBoundingClientRect();
 
+    const borderTop = parseFloat(rootStyle.borderTopWidth) || 0;
+    const borderLeft = parseFloat(rootStyle.borderLeftWidth) || 0;
+
+    // Track how many exits are active for this root
+    const currentCount = rootExitCounts.get(rootElement) || 0;
+    if (currentCount === 0) {
+      // First exit for this root - preserve its dimensions
+      rootElement.style.minWidth = `${rootRect.width}px`;
+      rootElement.style.minHeight = `${rootRect.height}px`;
+    }
+    rootExitCounts.set(rootElement, currentCount + 1);
+
+    // Calculate position relative to the positioned parent
     const top =
       layoutRect.top - rootRect.top - borderTop + rootElement.scrollTop;
     const left =
       layoutRect.left - rootRect.left - borderLeft + rootElement.scrollLeft;
 
+    // Apply absolute positioning
     target.style.position = "absolute";
     target.style.top = `${top}px`;
     target.style.left = `${left}px`;
     target.style.width = `${layoutRect.width}px`;
     target.style.height = `${layoutRect.height}px`;
+    target.style.margin = "0";
+    target.style.pointerEvents = "none";
+
+    // Store cleanup function on the element for later
+    (el as any).__popLayoutCleanup = () => {
+      const count = rootExitCounts.get(rootElement) || 0;
+      if (count <= 1) {
+        // Last exit completed - restore parent dimensions
+        rootElement.style.minWidth = "";
+        rootElement.style.minHeight = "";
+        rootExitCounts.delete(rootElement);
+      } else {
+        rootExitCounts.set(rootElement, count - 1);
+      }
+    };
+  };
+
+  const cleanupPopLayout = (el: Element) => {
+    const cleanup = (el as any).__popLayoutCleanup;
+    if (typeof cleanup === "function") {
+      cleanup();
+      delete (el as any).__popLayoutCleanup;
+    }
   };
 
   const rendered = createListTransition(getSource, {
@@ -356,6 +413,9 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
           const marker = el as unknown as MotionExitMarker;
           if (marker.__motionIsAnimatingExit) return;
           if (!props.pendingExits.has(el)) return;
+
+          if (mode === "popLayout") cleanupPopLayout(el);
+
           const finish = props.pendingExits.get(el)!;
           props.pendingExits.delete(el);
           props.updateExitCount();
@@ -387,6 +447,13 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
   const onExitComplete = (id: string, el?: Element) => {
     // If it's an element-based completion (handoff)
     if (el && pendingExits.has(el)) {
+      // Call popLayout cleanup if it exists
+      const cleanup = (el as any).__popLayoutCleanup;
+      if (typeof cleanup === "function") {
+        cleanup();
+        delete (el as any).__popLayoutCleanup;
+      }
+
       const finish = pendingExits.get(el)!;
       pendingExits.delete(el);
       updateExitCount();
