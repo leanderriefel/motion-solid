@@ -7,7 +7,7 @@ import type {
 } from "motion-dom";
 import type { Axis, AxisDelta, Box, Delta } from "motion-utils";
 import { startMotionValueAnimation } from "../animation/motion-value";
-import { isTransitionDefined } from "../animation/transition-utils";
+import { getTransitionForKey } from "../animation/transition-utils";
 
 export type LayoutAnimationType =
   | boolean
@@ -38,6 +38,7 @@ type LayoutNodeOptions = LayoutCallbacks & {
   layoutCrossfade?: boolean;
   layoutScroll?: boolean;
   layoutRoot?: boolean;
+  layoutDependency?: unknown;
   transition?: Transition;
 };
 
@@ -51,9 +52,17 @@ type LayoutNode = {
   prevBox: Box | null;
   latestBox: Box | null;
 
+  // The initial delta calculated when layout changes
   delta: Delta | null;
-  projectionProgress: MotionValue<number>;
-  projectionAnimation: AnimationPlaybackControlsWithThen | null;
+
+  // Separate motion values for each transform property - animated directly
+  // This fixes spring animations which need to overshoot in the correct direction
+  translateX: MotionValue<number>;
+  translateY: MotionValue<number>;
+  scaleX: MotionValue<number>;
+  scaleY: MotionValue<number>;
+
+  projectionAnimations: AnimationPlaybackControlsWithThen[];
   projectionCycleId: number;
 
   opacity: MotionValue<number>;
@@ -73,51 +82,17 @@ type LayoutNode = {
 };
 
 const DEFAULT_LAYOUT_TRANSITION: ValueTransition = {
-  type: "tween",
-  duration: 0.1,
+  type: "spring",
+  stiffness: 500,
+  damping: 25,
+  restSpeed: 10,
 };
 
 const resolveLayoutTransition = (transition?: Transition): ValueTransition => {
-  if (!transition) return DEFAULT_LAYOUT_TRANSITION;
-
-  // Framer Motion semantics (approx):
-  // - If `transition.layout` is provided, use it for layout animations.
-  // - Otherwise, use the root transition.
-  // - If neither defines an animation (e.g. only `delay` is provided), fall back to
-  //   our default layout spring, while still inheriting root `delay`.
-  //
-  // Note: We return a ValueTransition (not the full Transition) to avoid passing
-  // nested per-value keys through to motion-dom animation options.
-
-  if (typeof transition !== "object" || transition === null) {
-    return DEFAULT_LAYOUT_TRANSITION;
-  }
-
-  const root = transition as unknown as ValueTransition;
-  const rootDelay = root.delay;
-
-  const layoutOverride = (transition as { layout?: unknown }).layout;
-
-  let resolved: ValueTransition;
-
-  if (layoutOverride !== undefined) {
-    if (layoutOverride && typeof layoutOverride === "object") {
-      const layoutTransition = layoutOverride as ValueTransition;
-      resolved = isTransitionDefined(layoutTransition)
-        ? layoutTransition
-        : DEFAULT_LAYOUT_TRANSITION;
-    } else {
-      resolved = DEFAULT_LAYOUT_TRANSITION;
-    }
-  } else {
-    resolved = isTransitionDefined(root) ? root : DEFAULT_LAYOUT_TRANSITION;
-  }
-
-  if (rootDelay !== undefined && resolved.delay === undefined) {
-    return { ...resolved, delay: rootDelay };
-  }
-
-  return resolved;
+  return (
+    getTransitionForKey(transition, "layout", DEFAULT_LAYOUT_TRANSITION) ??
+    DEFAULT_LAYOUT_TRANSITION
+  );
 };
 
 const resolveLayoutType = (
@@ -157,39 +132,60 @@ const boxEquals = (a: Box, b: Box, threshold = 0.5): boolean => {
 };
 
 /**
- * Get the current visual box of a node, taking animation progress into account.
- * This interpolates between prevBox and latestBox based on projectionProgress.
+ * Get the current visual box of a node, taking animation into account.
+ * Computes the visual box from the current transform motion values.
  */
 const getVisualBox = (node: LayoutNode): Box | null => {
   const latestBox = node.latestBox;
-  const prevBox = node.prevBox;
 
-  // If no animation is running or we don't have both boxes, return latestBox
-  if (!node.delta || !prevBox || !latestBox) {
-    return latestBox ?? prevBox;
+  if (!latestBox) {
+    return node.prevBox;
   }
 
-  const progress = node.projectionProgress.get();
-
-  // If animation is complete, return the final box
-  if (progress >= 1) {
+  // If no animation is active, return the latest measured box
+  if (!node.delta) {
     return latestBox;
   }
 
-  // If animation hasn't started, return the starting box
-  if (progress <= 0) {
-    return prevBox;
+  // Get current transform values
+  const translateX = node.translateX.get();
+  const translateY = node.translateY.get();
+  const scaleX = node.scaleX.get();
+  const scaleY = node.scaleY.get();
+
+  // If transform is at identity, return latestBox
+  if (
+    Math.abs(translateX) <= 0.5 &&
+    Math.abs(translateY) <= 0.5 &&
+    Math.abs(scaleX - 1) <= 0.0001 &&
+    Math.abs(scaleY - 1) <= 0.0001
+  ) {
+    return latestBox;
   }
 
-  // Interpolate between prevBox and latestBox based on progress
+  // Calculate the current visual box by applying the inverse transform
+  // The transform is applied around the center, so we need to account for that
+  const latestWidth = latestBox.x.max - latestBox.x.min;
+  const latestHeight = latestBox.y.max - latestBox.y.min;
+  const latestCenterX = (latestBox.x.min + latestBox.x.max) / 2;
+  const latestCenterY = (latestBox.y.min + latestBox.y.max) / 2;
+
+  // Visual center = latestCenter + translate
+  const visualCenterX = latestCenterX + translateX;
+  const visualCenterY = latestCenterY + translateY;
+
+  // Visual size = latestSize * scale
+  const visualWidth = latestWidth * scaleX;
+  const visualHeight = latestHeight * scaleY;
+
   return {
     x: {
-      min: mixNumber(prevBox.x.min, latestBox.x.min, progress),
-      max: mixNumber(prevBox.x.max, latestBox.x.max, progress),
+      min: visualCenterX - visualWidth / 2,
+      max: visualCenterX + visualWidth / 2,
     },
     y: {
-      min: mixNumber(prevBox.y.min, latestBox.y.min, progress),
-      max: mixNumber(prevBox.y.max, latestBox.y.max, progress),
+      min: visualCenterY - visualHeight / 2,
+      max: visualCenterY + visualHeight / 2,
     },
   };
 };
@@ -290,12 +286,140 @@ const isDeltaIdentity = (delta: Delta, threshold = 0.0001): boolean => {
   );
 };
 
-const clampProgress = (progress: number): number =>
-  Math.min(1, Math.max(0, progress));
-
 const safeInvert = (value: number): number => {
   if (!Number.isFinite(value) || value === 0) return 1;
   return 1 / value;
+};
+
+/**
+ * Style properties that can affect layout measurements/position.
+ *
+ * We use this to decide whether a `style` attribute mutation should trigger
+ * a layout pass. This avoids re-measuring on transform/opacity animations.
+ */
+const LAYOUT_AFFECTING_STYLE_PROPERTIES = new Set<string>([
+  "width",
+  "height",
+  "min-width",
+  "min-height",
+  "max-width",
+  "max-height",
+  "margin",
+  "margin-top",
+  "margin-right",
+  "margin-bottom",
+  "margin-left",
+  "padding",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "top",
+  "right",
+  "bottom",
+  "left",
+  "inset",
+  "display",
+  "position",
+  "gap",
+  "row-gap",
+  "column-gap",
+  "flex",
+  "flex-grow",
+  "flex-shrink",
+  "flex-basis",
+  "flex-direction",
+  "flex-wrap",
+  "justify-content",
+  "align-items",
+  "align-content",
+  "place-content",
+  "place-items",
+  "grid",
+  "grid-template-columns",
+  "grid-template-rows",
+  "grid-column",
+  "grid-row",
+  "grid-column-start",
+  "grid-column-end",
+  "grid-row-start",
+  "grid-row-end",
+  "font-size",
+  "line-height",
+  "box-sizing",
+  "border",
+  "border-width",
+  "border-top-width",
+  "border-right-width",
+  "border-bottom-width",
+  "border-left-width",
+]);
+
+const extractLayoutAffectingStyles = (
+  styleText: string | null,
+): Map<string, string> => {
+  const styles = parseInlineStyle(styleText);
+  const affectingStyles = new Map<string, string>();
+
+  for (const [key, value] of styles.entries()) {
+    if (LAYOUT_AFFECTING_STYLE_PROPERTIES.has(key)) {
+      affectingStyles.set(key, value);
+    }
+  }
+
+  return affectingStyles;
+};
+
+const parseInlineStyle = (styleText: string | null): Map<string, string> => {
+  const map = new Map<string, string>();
+  if (!styleText) return map;
+
+  for (const declaration of styleText.split(";")) {
+    const trimmed = declaration.trim();
+    if (!trimmed) continue;
+
+    const colonIndex = trimmed.indexOf(":");
+    if (colonIndex === -1) continue;
+
+    const prop = trimmed.slice(0, colonIndex).trim().toLowerCase();
+    const value = trimmed.slice(colonIndex + 1).trim();
+    if (!prop) continue;
+
+    map.set(prop, value);
+  }
+
+  return map;
+};
+
+const layoutStyleCache = new WeakMap<Element, Map<string, string>>();
+
+const hasLayoutAffectingStyleChange = (
+  oldStyle: string | null,
+  element: Element,
+): boolean => {
+  const newStyle = element.getAttribute("style");
+
+  const newLayout = extractLayoutAffectingStyles(newStyle);
+  const oldLayout =
+    oldStyle !== null
+      ? extractLayoutAffectingStyles(oldStyle)
+      : (layoutStyleCache.get(element) ?? new Map<string, string>());
+
+  const keys = new Set<string>();
+  for (const key of oldLayout.keys()) keys.add(key);
+  for (const key of newLayout.keys()) keys.add(key);
+
+  let changed = false;
+  for (const key of keys) {
+    if (oldLayout.get(key) === newLayout.get(key)) continue;
+    changed = true;
+    break;
+  }
+
+  // Cache the latest layout-affecting inline styles.
+  layoutStyleCache.set(element, newLayout);
+
+  return changed;
 };
 
 type AccumulatedTransform = {
@@ -325,17 +449,13 @@ const getNodeCurrentTransform = (
   scaleX: number;
   scaleY: number;
 } => {
-  if (!node.delta) {
-    return { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1 };
-  }
-
-  const p = clampProgress(node.projectionProgress.get());
-
+  // Read directly from motion values - these are animated with actual values
+  // so spring overshoot works correctly
   return {
-    translateX: mixNumber(node.delta.x.translate, 0, p),
-    translateY: mixNumber(node.delta.y.translate, 0, p),
-    scaleX: mixNumber(node.delta.x.scale, 1, p),
-    scaleY: mixNumber(node.delta.y.scale, 1, p),
+    translateX: node.translateX.get(),
+    translateY: node.translateY.get(),
+    scaleX: node.scaleX.get(),
+    scaleY: node.scaleY.get(),
   };
 };
 
@@ -423,15 +543,24 @@ const applyTransformToPoint = (
   return { x, y };
 };
 
-const buildNodeProjectionTransform = (
-  node: LayoutNode,
-  progress: number,
-): string | null => {
-  const p = clampProgress(progress);
+const buildNodeProjectionTransform = (node: LayoutNode): string | null => {
   const parentTransform = getAccumulatedParentTransform(node);
   const nodeCenter = getNodeCenter(node);
 
-  if (!node.delta) {
+  // Read current transform values directly from motion values
+  const desiredTranslateX = node.translateX.get();
+  const desiredTranslateY = node.translateY.get();
+  const desiredScaleX = node.scaleX.get();
+  const desiredScaleY = node.scaleY.get();
+
+  // Check if this is effectively identity (no animation or animation complete)
+  const isEffectivelyIdentity =
+    Math.abs(desiredTranslateX) <= 0.5 &&
+    Math.abs(desiredTranslateY) <= 0.5 &&
+    Math.abs(desiredScaleX - 1) <= 0.0001 &&
+    Math.abs(desiredScaleY - 1) <= 0.0001;
+
+  if (isEffectivelyIdentity && !node.delta) {
     // No animation, just counteract parent scale
     const scaleX = safeInvert(parentTransform.scaleX);
     const scaleY = safeInvert(parentTransform.scaleY);
@@ -443,12 +572,6 @@ const buildNodeProjectionTransform = (
 
     return `translate3d(0px, 0px, 0) scale(${scaleX}, ${scaleY})`;
   }
-
-  // What the node wants in absolute page coordinates
-  const desiredTranslateX = mixNumber(node.delta.x.translate, 0, p);
-  const desiredTranslateY = mixNumber(node.delta.y.translate, 0, p);
-  const desiredScaleX = mixNumber(node.delta.x.scale, 1, p);
-  const desiredScaleY = mixNumber(node.delta.y.scale, 1, p);
 
   // Where the node's center should be in page coords
   const desiredCenterX = nodeCenter.x + desiredTranslateX;
@@ -700,11 +823,11 @@ class LayoutManager {
   private nodeByElement = new WeakMap<Element, LayoutNode>();
   private stacks = new Map<string, LayoutIdStack>();
 
+  private dependencyInvalidatedNodes = new Set<LayoutNode>();
+
   private scheduled = false;
   private isFlushing = false;
-  private flushCooldown = false; // Prevent ResizeObserver from triggering immediate re-flush
 
-  private removeWindowListeners: VoidFunction | null = null;
   private mutationObserver: MutationObserver | null = null;
   private resizeObserver: ResizeObserver | null = null;
 
@@ -717,9 +840,6 @@ class LayoutManager {
     }
 
     this.ensureObservers();
-
-    // Observe this element for size changes
-    this.resizeObserver?.observe(node.element);
 
     this.scheduleUpdate();
   }
@@ -738,6 +858,7 @@ class LayoutManager {
 
     // Stop observing this element
     this.resizeObserver?.unobserve(node.element);
+    this.dependencyInvalidatedNodes.delete(node);
 
     if (node.options.layoutId) {
       const stack = this.stacks.get(node.options.layoutId);
@@ -783,6 +904,11 @@ class LayoutManager {
     this.scheduleUpdate();
   }
 
+  invalidateLayoutDependency(node: LayoutNode): void {
+    this.dependencyInvalidatedNodes.add(node);
+    this.scheduleUpdate();
+  }
+
   scheduleUpdate(): void {
     if (typeof window === "undefined") return;
     if (this.scheduled) return;
@@ -794,12 +920,30 @@ class LayoutManager {
       this.flush();
     };
 
-    // Coalesce multiple layout invalidations into a single frame.
+    /**
+     * Coalesce multiple layout invalidations into a single microtask.
+     *
+     * IMPORTANT: We must measure/apply projection transforms *before paint*.
+     * Using `requestAnimationFrame` here would defer work until the next frame,
+     * which causes a visible 1-frame flash at the final layout position.
+     */
+    if (typeof queueMicrotask === "function") {
+      queueMicrotask(run);
+      return;
+    }
+
+    // Fallbacks (should rarely be hit in modern browsers)
+    if (typeof Promise !== "undefined") {
+      Promise.resolve().then(run);
+      return;
+    }
+
     if (typeof requestAnimationFrame !== "undefined") {
       requestAnimationFrame(run);
-    } else {
-      queueMicrotask(run);
+      return;
     }
+
+    setTimeout(run, 0);
   }
 
   private rebuildTree(nodes: LayoutNode[]): void {
@@ -834,6 +978,9 @@ class LayoutManager {
     if (this.isFlushing) return;
 
     this.isFlushing = true;
+
+    const dependencyInvalidatedNodes = this.dependencyInvalidatedNodes;
+    this.dependencyInvalidatedNodes = new Set();
 
     const nodes = Array.from(this.nodes);
 
@@ -884,6 +1031,17 @@ class LayoutManager {
       if (prevBox) node.options.onBeforeLayoutMeasure?.(prevBox);
     }
 
+    // Capture current visual positions BEFORE removing transforms
+    // This is critical for smooth animation interruption - we need to know
+    // where the element visually IS, not where it was going
+    const visualSnapshots = new Map<LayoutNode, Box | null>();
+    for (const node of layoutNodes) {
+      // Only capture if an animation is in progress
+      if (node.delta) {
+        visualSnapshots.set(node, getVisualBox(node));
+      }
+    }
+
     // Only remove/restore transforms for nodes we're measuring
     const previousTransforms: Array<[HTMLElement | SVGElement, string]> = [];
     for (const node of layoutNodes) {
@@ -914,10 +1072,14 @@ class LayoutManager {
       if (!box) continue;
       if (!isValidBox(box)) continue;
 
-      const prevBox = node.prevBox ?? null;
+      // Use visual snapshot if animation was in progress, otherwise use prevBox
+      // This ensures smooth interruption - we animate from where the element
+      // visually IS, not where it was going
+      const visualSnapshot = visualSnapshots.get(node);
+      const animationStartBox = visualSnapshot ?? node.prevBox ?? null;
       node.latestBox = box;
 
-      node.options.onLayoutMeasure?.(box, prevBox ?? box);
+      node.options.onLayoutMeasure?.(box, animationStartBox ?? box);
 
       const layoutType = resolveLayoutType(
         node.options.layout,
@@ -928,24 +1090,32 @@ class LayoutManager {
         continue;
       }
 
-      if (!prevBox) {
+      if (!animationStartBox) {
         node.prevBox = box;
         continue;
       }
 
-      // Skip animation if prevBox is invalid (zero-sized, etc.)
-      if (!isUsableBox(prevBox)) {
+      // Skip animation if animationStartBox is invalid (zero-sized, etc.)
+      if (!isUsableBox(animationStartBox)) {
         node.prevBox = box;
         continue;
       }
 
-      if (boxEquals(prevBox, box)) {
+      if (boxEquals(animationStartBox, box)) {
         node.prevBox = box;
         continue;
       }
 
-      const delta = calcBoxDelta(box, prevBox);
-      applyLayoutType(delta, layoutType, box, prevBox);
+      if (
+        node.options.layoutDependency !== undefined &&
+        !dependencyInvalidatedNodes.has(node)
+      ) {
+        node.prevBox = box;
+        continue;
+      }
+
+      const delta = calcBoxDelta(box, animationStartBox);
+      applyLayoutType(delta, layoutType, box, animationStartBox);
 
       if (isDeltaIdentity(delta)) {
         node.prevBox = box;
@@ -967,13 +1137,6 @@ class LayoutManager {
     }
 
     this.isFlushing = false;
-
-    // Set a cooldown to prevent ResizeObserver from immediately re-triggering
-    // flush after our transform changes cause browser layout
-    this.flushCooldown = true;
-    requestAnimationFrame(() => {
-      this.flushCooldown = false;
-    });
   }
 
   private startLayoutAnimation(
@@ -983,9 +1146,27 @@ class LayoutManager {
   ): void {
     node.delta = delta;
 
-    node.projectionAnimation?.stop();
-    node.projectionProgress.stop();
-    node.projectionProgress.set(0);
+    // Stop any existing animations
+    for (const anim of node.projectionAnimations) {
+      anim.stop();
+    }
+    node.projectionAnimations = [];
+
+    /**
+     * IMPORTANT: Use `jump` (not `set`) to apply the starting projection values.
+     *
+     * MotionValue tracks velocity based on the delta between updates. When we
+     * "teleport" a value (0 -> delta) and then start a spring, the computed
+     * velocity from that teleport gets fed into the spring, causing:
+     * - a bounce in the wrong direction at the start
+     * - energy gain when interrupting/toggling quickly
+     *
+     * `jump` resets velocity to 0 and stops any active animations.
+     */
+    node.translateX.jump(delta.x.translate);
+    node.translateY.jump(delta.y.translate);
+    node.scaleX.jump(delta.x.scale);
+    node.scaleY.jump(delta.y.scale);
 
     node.syncScaleCorrectionSubscriptions();
     node.updateProjection(true);
@@ -993,21 +1174,81 @@ class LayoutManager {
     node.options.onLayoutAnimationStart?.();
 
     const cycleId = ++node.projectionCycleId;
+    let completedCount = 0;
 
-    node.projectionAnimation =
-      startMotionValueAnimation({
-        name: "layout",
-        motionValue: node.projectionProgress,
-        keyframes: 1,
-        transition,
-      }) ?? null;
-
-    node.projectionAnimation?.finished.then(() => {
+    const onComplete = () => {
+      completedCount++;
+      // Only fire completion when all 4 animations are done
+      if (completedCount < 4) return;
       if (node.projectionCycleId !== cycleId) return;
+
       node.delta = null;
       node.updateProjection(false);
       node.options.onLayoutAnimationComplete?.();
+    };
+
+    // Animate translateX from delta.x.translate to 0
+    const translateXAnim = startMotionValueAnimation({
+      name: "translateX",
+      motionValue: node.translateX,
+      keyframes: 0,
+      transition,
     });
+    if (translateXAnim) {
+      node.projectionAnimations.push(translateXAnim);
+      translateXAnim.finished.then(onComplete);
+    } else {
+      completedCount++;
+    }
+
+    // Animate translateY from delta.y.translate to 0
+    const translateYAnim = startMotionValueAnimation({
+      name: "translateY",
+      motionValue: node.translateY,
+      keyframes: 0,
+      transition,
+    });
+    if (translateYAnim) {
+      node.projectionAnimations.push(translateYAnim);
+      translateYAnim.finished.then(onComplete);
+    } else {
+      completedCount++;
+    }
+
+    // Animate scaleX from delta.x.scale to 1
+    const scaleXAnim = startMotionValueAnimation({
+      name: "scaleX",
+      motionValue: node.scaleX,
+      keyframes: 1,
+      transition,
+    });
+    if (scaleXAnim) {
+      node.projectionAnimations.push(scaleXAnim);
+      scaleXAnim.finished.then(onComplete);
+    } else {
+      completedCount++;
+    }
+
+    // Animate scaleY from delta.y.scale to 1
+    const scaleYAnim = startMotionValueAnimation({
+      name: "scaleY",
+      motionValue: node.scaleY,
+      keyframes: 1,
+      transition,
+    });
+    if (scaleYAnim) {
+      node.projectionAnimations.push(scaleYAnim);
+      scaleYAnim.finished.then(onComplete);
+    } else {
+      completedCount++;
+    }
+
+    // If all animations were skipped, complete immediately
+    if (completedCount >= 4) {
+      node.delta = null;
+      node.updateProjection(false);
+      node.options.onLayoutAnimationComplete?.();
+    }
   }
 
   private getStack(id: string): LayoutIdStack {
@@ -1022,69 +1263,52 @@ class LayoutManager {
   private ensureObservers(): void {
     if (typeof window === "undefined") return;
 
-    if (!this.removeWindowListeners) {
-      const onResize = () => this.scheduleUpdate();
-      window.addEventListener("resize", onResize);
+    // Create MutationObserver to approximate React re-render invalidation.
+    // In Solid, parent updates don't re-run children, so we listen to DOM mutations
+    // and schedule a layout pass.
+    if (!this.mutationObserver && typeof MutationObserver !== "undefined") {
+      if (typeof document === "undefined") return;
+      const root = document.documentElement;
+      if (!root) return;
 
-      this.removeWindowListeners = () => {
-        window.removeEventListener("resize", onResize);
-      };
-    }
+      this.mutationObserver = new MutationObserver((mutations) => {
+        // Ignore mutations triggered while we're actively flushing.
+        if (this.isFlushing) return;
 
-    // Create ResizeObserver for layout elements
-    if (!this.resizeObserver && typeof ResizeObserver !== "undefined") {
-      this.resizeObserver = new ResizeObserver(() => {
-        // Skip if we're in the middle of flushing or in post-flush cooldown
-        // The cooldown prevents the ResizeObserver from re-triggering flush
-        // immediately after our transform changes cause a layout
-        if (this.isFlushing || this.flushCooldown) return;
+        for (const mutation of mutations) {
+          // Special-case style mutations on Motion elements.
+          // Motion updates `transform`/`opacity` every frame, which shouldn't
+          // trigger layout measurement. But we DO need to re-measure when
+          // layout-affecting inline styles change (width/height/etc).
+          if (
+            mutation.type === "attributes" &&
+            mutation.attributeName === "style" &&
+            mutation.target instanceof Element &&
+            (mutation.target as any).__motionSolid
+          ) {
+            const oldStyle = (mutation as MutationRecord).oldValue ?? null;
+            if (!hasLayoutAffectingStyleChange(oldStyle, mutation.target)) {
+              continue;
+            }
+          }
 
-        this.scheduleUpdate();
+          this.scheduleUpdate();
+          return;
+        }
       });
 
-      // Observe all currently registered nodes
-      for (const node of this.nodes) {
-        this.resizeObserver.observe(node.element);
-      }
+      this.mutationObserver.observe(root, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeOldValue: true,
+        characterData: true,
+        characterDataOldValue: true,
+      });
     }
-
-    // Note: We intentionally don't use a global MutationObserver as it's too aggressive
-    // and can cause performance issues. Layout changes should be detected via:
-    // 1. ResizeObserver for size changes on layout elements
-    // 2. Explicit layoutDependency tracking for app state changes
-    // 3. register/unregister calls for element mount/unmount
-
-    if (this.mutationObserver) return;
-    if (typeof MutationObserver === "undefined") return;
-    if (typeof document === "undefined") return;
-
-    const root = document.documentElement;
-    if (!root) return;
-
-    const observer = new MutationObserver((mutations) => {
-      // Ignore mutations triggered by our own flush operations
-      if (this.isFlushing || this.flushCooldown) return;
-
-      for (const mutation of mutations) {
-        if (mutation.type === "childList") {
-          this.scheduleUpdate();
-          break;
-        }
-      }
-    });
-
-    observer.observe(root, {
-      childList: true,
-      subtree: true,
-    });
-
-    this.mutationObserver = observer;
   }
 
   private cleanupObservers(): void {
-    this.removeWindowListeners?.();
-    this.removeWindowListeners = null;
-
     this.mutationObserver?.disconnect();
     this.mutationObserver = null;
 
@@ -1102,7 +1326,12 @@ export const createLayoutNode = (args: {
   render: () => void;
   scheduleRender: () => void;
 }): LayoutNode => {
-  const projectionProgress = motionValue(1);
+  // Create motion values for each transform property
+  // Initialize to identity (no transform)
+  const translateX = motionValue(0);
+  const translateY = motionValue(0);
+  const scaleX = motionValue(1);
+  const scaleY = motionValue(1);
   const opacity = motionValue(1);
 
   let latestProjectionTransform: string | null = null;
@@ -1120,8 +1349,11 @@ export const createLayoutNode = (args: {
     latestBox: null,
 
     delta: null,
-    projectionProgress,
-    projectionAnimation: null,
+    translateX,
+    translateY,
+    scaleX,
+    scaleY,
+    projectionAnimations: [],
     projectionCycleId: 0,
 
     opacity,
@@ -1134,8 +1366,7 @@ export const createLayoutNode = (args: {
     scheduleRender: args.scheduleRender,
 
     updateProjection: (immediate = false) => {
-      const progress = node.delta ? node.projectionProgress.get() : 1;
-      const transform = buildNodeProjectionTransform(node, progress);
+      const transform = buildNodeProjectionTransform(node);
 
       if (transform === latestProjectionTransform) return;
       latestProjectionTransform = transform;
@@ -1161,10 +1392,22 @@ export const createLayoutNode = (args: {
       for (const ancestor of nextAncestors) {
         if (scaleCorrectionSubscriptions.has(ancestor)) continue;
 
-        const unsubscribe = ancestor.projectionProgress.on("change", () => {
-          node.updateProjection(false);
-        });
+        // Subscribe to all transform values of ancestor
+        const unsubs: VoidFunction[] = [];
+        unsubs.push(
+          ancestor.translateX.on("change", () => node.updateProjection(false)),
+        );
+        unsubs.push(
+          ancestor.translateY.on("change", () => node.updateProjection(false)),
+        );
+        unsubs.push(
+          ancestor.scaleX.on("change", () => node.updateProjection(false)),
+        );
+        unsubs.push(
+          ancestor.scaleY.on("change", () => node.updateProjection(false)),
+        );
 
+        const unsubscribe = () => unsubs.forEach((u) => u());
         scaleCorrectionSubscriptions.set(ancestor, unsubscribe);
       }
     },
@@ -1172,9 +1415,15 @@ export const createLayoutNode = (args: {
     stop: () => {
       node.projectionCycleId++;
       node.opacityCycleId++;
-      node.projectionAnimation?.stop();
+      for (const anim of node.projectionAnimations) {
+        anim.stop();
+      }
+      node.projectionAnimations = [];
       node.opacityAnimation?.stop();
-      node.projectionProgress.stop();
+      node.translateX.stop();
+      node.translateY.stop();
+      node.scaleX.stop();
+      node.scaleY.stop();
       node.opacity.stop();
     },
 
@@ -1192,7 +1441,20 @@ export const createLayoutNode = (args: {
     },
   };
 
-  const unsubscribeProjection = projectionProgress.on("change", () => {
+  // Subscribe to transform value changes to update projection
+  const unsubTranslateX = translateX.on("change", () => {
+    if (!node.delta) return;
+    node.updateProjection(false);
+  });
+  const unsubTranslateY = translateY.on("change", () => {
+    if (!node.delta) return;
+    node.updateProjection(false);
+  });
+  const unsubScaleX = scaleX.on("change", () => {
+    if (!node.delta) return;
+    node.updateProjection(false);
+  });
+  const unsubScaleY = scaleY.on("change", () => {
     if (!node.delta) return;
     node.updateProjection(false);
   });
@@ -1204,7 +1466,10 @@ export const createLayoutNode = (args: {
 
   const prevDestroy = node.destroy;
   node.destroy = () => {
-    unsubscribeProjection();
+    unsubTranslateX();
+    unsubTranslateY();
+    unsubScaleX();
+    unsubScaleY();
     unsubscribeOpacity();
     prevDestroy();
   };

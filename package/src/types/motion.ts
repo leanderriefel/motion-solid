@@ -28,16 +28,32 @@ export type MotionVariantsState = Partial<
 >;
 
 /**
+ * SolidJS-friendly viewport options.
+ * Unlike motion-dom's ViewportOptions which expects React-style refs ({ current: Element }),
+ * this accepts direct Element references as used in SolidJS.
+ */
+export interface SolidViewportOptions {
+  root?: Element | Document | null;
+  once?: boolean;
+  margin?: string;
+  amount?: "some" | "all" | number;
+}
+
+/**
  * `motion-dom` currently includes some `any`-typed escape hatches (e.g. `custom`).
  * We keep our public surface `unknown`-typed and let callers refine it.
+ *
+ * We also override `viewport` to use SolidJS-friendly types that accept
+ * direct element references instead of requiring React-style ref objects.
  */
 export type MotionOptions = Omit<
   MotionNodeOptions,
-  "custom" | "dragControls" | "layoutDependency"
+  "custom" | "dragControls" | "layoutDependency" | "viewport"
 > & {
   custom?: unknown;
   dragControls?: unknown;
   layoutDependency?: unknown;
+  viewport?: SolidViewportOptions;
 };
 
 export interface MotionState {

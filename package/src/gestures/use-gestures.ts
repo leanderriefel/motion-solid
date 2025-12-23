@@ -239,14 +239,9 @@ export const useGestures = (args: GestureOptions) => {
     // Viewport gestures
     let wasInView = false;
 
-    // Handle viewport.root which can be a ref object or element
-    const viewportRoot = options.viewport?.root;
+    // viewport.root is a direct Element or Document reference (SolidJS style)
     const resolvedRoot =
-      viewportRoot &&
-      typeof viewportRoot === "object" &&
-      "current" in viewportRoot
-        ? viewportRoot.current
-        : ((viewportRoot as Element | Document | null | undefined) ?? null);
+      (options.viewport?.root as Element | Document | null) ?? null;
 
     // Resolve threshold from amount option
     // Supports "all" (1), "some" (0), or numeric values 0-1
@@ -258,9 +253,15 @@ export const useGestures = (args: GestureOptions) => {
       return 0; // "some" or undefined
     };
 
+    const threshold = resolveThreshold(options.viewport?.amount);
+
     const io = new IntersectionObserver(
       (entries) => {
-        const isInView = entries.some((entry) => entry.isIntersecting);
+        const isInView = entries.some((entry) =>
+          threshold > 0
+            ? entry.intersectionRatio >= threshold
+            : entry.isIntersecting,
+        );
         setState("activeGestures", "inView", isInView);
 
         const entry = entries[0];
@@ -281,7 +282,7 @@ export const useGestures = (args: GestureOptions) => {
       {
         root: resolvedRoot,
         rootMargin: options.viewport?.margin,
-        threshold: resolveThreshold(options.viewport?.amount),
+        threshold,
       },
     );
 

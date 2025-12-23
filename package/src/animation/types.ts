@@ -1,5 +1,5 @@
 import type { MotionValue, TargetAndTransition } from "motion-dom";
-import { motionValue } from "motion-dom";
+import { motionValue, transformProps, defaultTransformValue } from "motion-dom";
 import type { MotionValues } from "../types";
 
 export const animationTypes = [
@@ -54,6 +54,38 @@ const createMotionValueForKey = (
   typeof init === "number" ? motionValue(init) : motionValue(init);
 
 /**
+ * Default CSS property values for properties that have well-known defaults.
+ * These are used when no `initial` prop is provided and we need to determine
+ * the starting value for an animation.
+ */
+const cssDefaultValues: Record<string, string | number> = {
+  opacity: 1,
+  fillOpacity: 1,
+  strokeOpacity: 1,
+  // Filter functions default to their identity values
+  blur: 0,
+  brightness: 1,
+  contrast: 1,
+  grayscale: 0,
+  saturate: 1,
+  sepia: 0,
+  invert: 0,
+  hueRotate: 0,
+  // SVG properties
+  pathLength: 0,
+  pathOffset: 0,
+  strokeDashoffset: 0,
+};
+
+/**
+ * Get the default initial value for a CSS property.
+ * Returns undefined if no known default exists.
+ */
+const getDefaultCSSValue = (key: string): string | number | undefined => {
+  return cssDefaultValues[key];
+};
+
+/**
  * Given already-resolved per-animation-type targets, ensure `MotionValue`s exist
  * for all referenced keys and return a map for each animation type that points
  * at the shared `values` map.
@@ -74,6 +106,24 @@ export const buildAnimationTypeMotionValues = (args: {
     const keys = targetKeysFromTarget(target);
     for (const key of keys) {
       if (!values[key]) {
+        // For transform properties, use the default transform value (0 for most, 1 for scale)
+        // rather than the target value. This ensures animations start from the correct
+        // initial state when no explicit `initial` prop is provided.
+        if (transformProps.has(key)) {
+          const defaultValue = defaultTransformValue(key);
+          values[key] = createMotionValueForKey(defaultValue);
+          continue;
+        }
+
+        // For CSS properties with known defaults (like opacity: 1), use those defaults
+        const cssDefault = getDefaultCSSValue(key);
+        if (cssDefault !== undefined) {
+          values[key] = createMotionValueForKey(cssDefault);
+          continue;
+        }
+
+        // For other properties, use the first keyframe value as before
+        // (this is a fallback and may not always be correct, but matches legacy behavior)
         const init = pickInitialFromKeyframes(
           (target as Record<string, unknown>)[key],
         );

@@ -4,6 +4,7 @@ import {
   createRenderEffect,
   createUniqueId,
   onCleanup,
+  onMount,
   untrack,
 } from "solid-js";
 import type { SetStoreFunction } from "solid-js/store";
@@ -117,7 +118,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   const prevStyle = new Map<string, string>();
   const prevVars = new Map<string, string>();
   let frameId: number | null = null;
-  let renderMicrotaskScheduled = false;
   let isUnmounted = false;
 
   const presenceId = presence ? createUniqueId() : null;
@@ -136,6 +136,28 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   let projectionBaseTransform: string | null = null;
 
   let layoutNode: ReturnType<typeof createLayoutNode> | null = null;
+
+  const findVariantAncestor = (
+    type: AnimationType | "initial",
+  ): { labels: VariantLabels; source: MotionState } | null => {
+    if (options.inherit === false) return null;
+
+    let current = state.parent;
+    while (current) {
+      const candidate =
+        type === "initial"
+          ? current.options.initial
+          : (current.options as Record<string, unknown>)[type];
+
+      if (isVariantLabels(candidate)) {
+        return { labels: candidate as VariantLabels, source: current };
+      }
+
+      current = current.parent;
+    }
+
+    return null;
+  };
 
   const renderToDom = () => {
     const element = state.element;
@@ -243,22 +265,12 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   };
 
   const scheduleRender = () => {
-    if (renderMicrotaskScheduled) return;
-
-    if (typeof queueMicrotask === "function") {
-      renderMicrotaskScheduled = true;
-      queueMicrotask(() => {
-        renderMicrotaskScheduled = false;
-        if (isUnmounted) return;
-        renderToDom();
-      });
-      return;
-    }
-
-    if (typeof requestAnimationFrame === "undefined") return;
     if (frameId !== null) return;
+    if (typeof requestAnimationFrame === "undefined") return;
+
     frameId = requestAnimationFrame(() => {
       frameId = null;
+      if (isUnmounted) return;
       renderToDom();
     });
   };
@@ -396,15 +408,19 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     }
 
     isUnmounted = true;
-    renderMicrotaskScheduled = false;
     if (frameId !== null && typeof cancelAnimationFrame !== "undefined") {
       cancelAnimationFrame(frameId);
+      frameId = null;
     }
     stopAll();
   });
 
-  createEffect(() => {
-    if (state.element) scheduleRender();
+  // Hydration safety: only start scheduling DOM writes after mount.
+  // `onMount` runs on the client after hydration, so this avoids Solid hydration mismatches.
+  onMount(() => {
+    createEffect(() => {
+      if (state.element) scheduleRender();
+    });
   });
 
   const applyProjection = (
@@ -431,6 +447,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     layoutCrossfade: options.layoutCrossfade,
     layoutScroll: options.layoutScroll,
     layoutRoot: options.layoutRoot,
+    layoutDependency: options.layoutDependency,
     transition: options.transition as Transition | undefined,
     onBeforeLayoutMeasure: options.onBeforeLayoutMeasure,
     onLayoutMeasure: options.onLayoutMeasure,
@@ -467,16 +484,38 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     if (!enabled || !node) return;
 
     layoutManager.updateNodeOptions(node, nextOptions);
-    layoutManager.scheduleUpdate();
+    // We DON'T schedule a layout pass here for option changes.
+    // Let MutationObserver handle the actual style/class mutations on the DOM.
+    // This avoids double-flushing when both the effect and MutationObserver fire.
   });
+
+  let prevLayoutDependency: unknown = undefined;
+  let hadLayoutDependency = false;
 
   createRenderEffect(() => {
     const enabled = layoutEnabled();
-    void options.layoutDependency;
+    const layoutDependency = options.layoutDependency;
 
-    if (!enabled) return;
+    if (!enabled || layoutDependency === undefined) {
+      hadLayoutDependency = false;
+      prevLayoutDependency = layoutDependency;
+      return;
+    }
 
-    layoutManager.scheduleUpdate();
+    const node = layoutNode;
+    if (!node) return;
+
+    // Don't animate on first run. This is the baseline measurement.
+    if (!hadLayoutDependency) {
+      hadLayoutDependency = true;
+      prevLayoutDependency = layoutDependency;
+      return;
+    }
+
+    if (layoutDependency === prevLayoutDependency) return;
+    prevLayoutDependency = layoutDependency;
+
+    layoutManager.invalidateLayoutDependency(node);
   });
 
   const running = new Map<
@@ -512,8 +551,13 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   createEffect(() => {
     if (didApplyInitial) return;
 
+    const inherited =
+      options.initial === undefined ? findVariantAncestor("initial") : null;
+    const initialDefinition =
+      options.initial !== undefined ? options.initial : inherited?.labels;
+
     const target = resolveDefinitionToTarget({
-      definition: options.initial,
+      definition: initialDefinition,
       options,
       state,
     });
@@ -599,15 +643,31 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     }
     wasExiting = isExiting;
 
-    const definitions: Record<AnimationType, unknown> = {
-      exit: options.exit,
-      whileDrag: options.whileDrag,
-      whileTap: options.whileTap,
-      whileHover: options.whileHover,
-      whileFocus: options.whileFocus,
-      whileInView: options.whileInView,
-      animate: options.animate,
-    };
+    const inheritedSources: Partial<Record<AnimationType, MotionState>> = {};
+    const definitions = {} as Record<AnimationType, unknown>;
+
+    for (const type of animationTypes) {
+      const own = (options as Record<string, unknown>)[type];
+
+      if (own !== undefined) {
+        definitions[type] = own;
+        continue;
+      }
+
+      const inherited = findVariantAncestor(type);
+      if (inherited) {
+        definitions[type] = inherited.labels;
+        inheritedSources[type] = inherited.source;
+        continue;
+      }
+
+      definitions[type] = undefined;
+    }
+
+    const initialDefinition =
+      options.initial !== undefined
+        ? options.initial
+        : findVariantAncestor("initial")?.labels;
 
     // Update activeVariants state to track which variant labels are active
     for (const type of animationTypes) {
@@ -622,8 +682,12 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     }
     // Also track initial variant
     untrack(() => {
-      if (isVariantLabels(options.initial)) {
-        setState("activeVariants", "initial", options.initial as VariantLabels);
+      if (isVariantLabels(initialDefinition)) {
+        setState(
+          "activeVariants",
+          "initial",
+          initialDefinition as VariantLabels,
+        );
       } else {
         setState("activeVariants", "initial", undefined);
       }
@@ -640,7 +704,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     }
 
     const initialTarget = resolveDefinitionToTarget({
-      definition: options.initial,
+      definition: initialDefinition,
       options,
       state,
     });
@@ -771,19 +835,29 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           isActive = isExiting;
           break;
         case "whileDrag":
-          isActive = activeGestures.drag;
+          isActive = inheritedSources.whileDrag
+            ? inheritedSources.whileDrag.activeGestures.drag
+            : activeGestures.drag;
           break;
         case "whileTap":
-          isActive = activeGestures.tap;
+          isActive = inheritedSources.whileTap
+            ? inheritedSources.whileTap.activeGestures.tap
+            : activeGestures.tap;
           break;
         case "whileHover":
-          isActive = activeGestures.hover;
+          isActive = inheritedSources.whileHover
+            ? inheritedSources.whileHover.activeGestures.hover
+            : activeGestures.hover;
           break;
         case "whileFocus":
-          isActive = activeGestures.focus;
+          isActive = inheritedSources.whileFocus
+            ? inheritedSources.whileFocus.activeGestures.focus
+            : activeGestures.focus;
           break;
         case "whileInView":
-          isActive = activeGestures.inView;
+          isActive = inheritedSources.whileInView
+            ? inheritedSources.whileInView.activeGestures.inView
+            : activeGestures.inView;
           break;
         case "animate":
           isActive = true;

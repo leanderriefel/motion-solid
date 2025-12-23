@@ -1,9 +1,11 @@
 import type { Component, ComponentProps } from "solid-js";
 import {
+  createEffect,
   createMemo,
   createRenderEffect,
   createSignal,
   mergeProps,
+  onMount,
   splitProps,
 } from "solid-js";
 import { createDynamic } from "solid-js/web";
@@ -134,25 +136,25 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         Boolean(resolvedMotionOptions.layoutId),
     );
 
-    // Track prop changes that may affect layout (class, style, children)
-    // Skip initial mount since register() already calls scheduleUpdate()
-    let isFirstRun = true;
-    createRenderEffect(() => {
-      if (!layoutEnabled()) return;
-
-      // Access props to create tracking dependencies
-      void elementProps.class;
-      void elementProps.classList;
-      void elementProps.style;
-      void elementProps.children;
-
-      // Skip the first run - register() handles initial measurement
-      if (isFirstRun) {
-        isFirstRun = false;
-        return;
-      }
-
+    // Track element prop changes that can affect layout without touching `children`.
+    // Accessing `props.children` during hydration can create DOM nodes and break SSR.
+    // We only start tracking after mount to keep hydration stable.
+    onMount(() => {
+      // Skip the first run - register() already schedules initial measurement.
+      // We DO need this initial schedule, but NOT for reactivity changes.
       layoutManager.scheduleUpdate();
+
+      createEffect(() => {
+        if (!layoutEnabled()) return;
+
+        void elementProps.class;
+        void elementProps.classList;
+        void elementProps.style;
+
+        // We DON'T schedule a layout pass here. Let MutationObserver handle
+        // style/size changes instead, to avoid double-flushing when both this
+        // effect and the MutationObserver trigger.
+      });
     });
 
     // Register this component as a child with parent's orchestration
@@ -315,7 +317,10 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     const ref = mergeRefs<ElementInstance<Tag> & MotionElement>(
       local.ref as ElementInstance<Tag> & MotionElement,
       (el) => {
-        if (el) cachedElement = el;
+        if (el) {
+          cachedElement = el;
+          (el as any).__motionSolid = true;
+        }
         setState("element", el);
       },
     );
