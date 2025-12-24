@@ -5,6 +5,10 @@ node_modules
 out
 dist
 *.tgz
+.vinxi
+.output
+dist-ssr
+*.local
 
 # code coverage
 coverage
@@ -12,8 +16,13 @@ coverage
 
 # logs
 logs
-_.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # dotenv environment variable files
 .env
@@ -27,8 +36,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *.tsbuildinfo
 
-# IntelliJ based IDEs
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
 .idea
-
-# Finder (MacOS) folder config
 .DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

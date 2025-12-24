@@ -10,7 +10,16 @@ export default function Home() {
   return (
     <div class="min-h-screen bg-background text-foreground">
       <div class="mx-auto flex max-w-3xl flex-col items-center gap-12 px-6 py-12">
-        <h1 class="text-2xl font-semibold">motion-solid demos</h1>
+        <h1 class="text-2xl font-semibold">
+          <a
+            class="text-primary underline"
+            href="https://github.com/leanderriefel/motion-solid"
+            target="_blank"
+          >
+            motion-solid
+          </a>{" "}
+          demos
+        </h1>
         <p class="-mt-10 text-sm text-muted-foreground">
           these are taken directly from the{" "}
           <a
