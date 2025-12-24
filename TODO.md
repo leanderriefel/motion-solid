@@ -31,4 +31,3 @@
 - [ ] **Reorder components** - `<Reorder.Group>` / `<Reorder.Item>` for drag-to-reorder
 - [ ] **LayoutGroup** - coordinate layout animations across siblings
 - [ ] **Path animations** - `pathLength`, `pathSpacing`, `pathOffset` for SVG
-

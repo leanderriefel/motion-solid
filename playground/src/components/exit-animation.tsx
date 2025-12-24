@@ -1,12 +1,13 @@
 import { AnimatePresence, motion } from "motion-solid";
 import { createSignal, Show } from "solid-js";
 import { Animation } from "~/components/animation";
+import source from "./exit-animation.tsx?raw";
 
 export const ExitAnimation = () => {
   const [isVisible, setIsVisible] = createSignal(true);
 
   return (
-    <Animation name="Exit Animation" class="h-[300px]">
+    <Animation name="Exit Animation" class="h-[300px]" source={source}>
       <div class="flex flex-col items-center gap-8">
         <div class="h-24 flex items-center justify-center">
           <AnimatePresence mode="popLayout">
@@ -35,7 +36,9 @@ export const ExitAnimation = () => {
           class="px-6 py-2.5 bg-primary text-primary-foreground font-medium rounded-xl shadow-sm transition-colors hover:bg-primary/90"
           onClick={() => setIsVisible((v) => !v)}
         >
-          {isVisible() ? "Hide" : "Show"}
+          <Show when={isVisible()} fallback="Show">
+            Hide
+          </Show>
         </motion.button>
       </div>
     </Animation>

@@ -1,9 +1,15 @@
 import { motion } from "motion-solid";
 import { Animation } from "./animation";
+import source from "./enter-animation.tsx?raw";
 
 export const EnterAnimation = () => {
   return (
-    <Animation name="Enter Animation" class="h-[200px]" showReloadButton>
+    <Animation
+      name="Enter Animation"
+      class="h-[200px]"
+      showReloadButton
+      source={source}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0 }}
         animate={{ opacity: 1, scale: 1 }}

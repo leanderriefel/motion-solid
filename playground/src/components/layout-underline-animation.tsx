@@ -2,12 +2,17 @@ import { motion } from "motion-solid";
 import { createSignal, For, Show } from "solid-js";
 import { Animation } from "~/components/animation";
 import { cn } from "~/utils/cn";
+import source from "./layout-underline-animation.tsx?raw";
 
 export const LayoutUnderlineAnimation = () => {
   const [selected, setSelected] = createSignal(0);
 
   return (
-    <Animation name="Layout Underline Animation" class="h-[400px]">
+    <Animation
+      name="Layout Underline Animation"
+      class="h-[400px]"
+      source={source}
+    >
       <div class="grid grid-rows-[auto_auto] w-full bg-background p-4 rounded-xl">
         <div class="h-12 grid grid-cols-3 place-items-center w-full border-b">
           <For each={Foods}>

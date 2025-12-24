@@ -2,6 +2,7 @@ import type { Variants } from "motion-dom";
 import { For, createSignal } from "solid-js";
 import { motion } from "motion-solid";
 import { Animation } from "./animation";
+import source from "./scroll-animation.tsx?raw";
 
 export const ScrollAnimation = () => {
   const [scrollContainer, setScrollContainer] =
@@ -13,6 +14,7 @@ export const ScrollAnimation = () => {
       class="h-[500px] overflow-y-auto overflow-x-hidden"
       containerRef={(el) => setScrollContainer(el)}
       scrollable
+      source={source}
     >
       <div class="flex flex-col items-center">
         <For each={food}>
