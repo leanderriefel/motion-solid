@@ -2,6 +2,15 @@
   "name": "motion-solid",
   "version": "0.0.2",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leanderriefel/motion-solid",
+    "directory": "package"
+  },
+  "bugs": {
+    "url": "https://github.com/leanderriefel/motion-solid/issues"
+  },
+  "homepage": "https://motion-solid.leanderriefel.com",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
