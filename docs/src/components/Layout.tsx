@@ -103,7 +103,7 @@ export default function Layout(props: ParentProps) {
             Docs
           </A>
           <a
-            href="https://github.com/leander/motion-solid"
+            href="https://github.com/leanderriefel/motion-solid"
             target="_blank"
             class="hover:text-foreground"
             aria-label="GitHub"
