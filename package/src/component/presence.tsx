@@ -79,6 +79,13 @@ export interface PresenceContextValue {
    * Mark a registered descendant as safe to remove.
    */
   onExitComplete: (id: string, element?: Element) => void;
+
+  /**
+   * Whether entrance animations should be delayed (e.g., mode="wait" waiting for exits).
+   * When true, newly entering Motion components should not start their initial→animate
+   * animations until this becomes false.
+   */
+  isEntranceBlocked?: Accessor<boolean>;
 }
 
 export const PresenceContext = createContext<PresenceContextValue | null>(null);
@@ -213,6 +220,7 @@ type AnimatePresenceContentProps = {
   mode: Accessor<AnimatePresenceMode>;
   root: Accessor<ShadowRoot | HTMLElement | undefined>;
   onElementExitComplete?: (el: Element) => void;
+  setIsEntranceBlocked: (blocked: boolean) => void;
   children?: JSX.Element;
 };
 
@@ -257,7 +265,10 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
     const mode = props.mode();
 
     if (mode !== "wait") {
-      isWaiting = false;
+      if (isWaiting) {
+        isWaiting = false;
+        props.setIsEntranceBlocked(false);
+      }
       queued = null;
       previous = current;
       return current;
@@ -269,6 +280,7 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
       if (!exiting) {
         const next = queued ?? current;
         isWaiting = false;
+        props.setIsEntranceBlocked(false);
         queued = null;
         previous = next;
         return next;
@@ -285,6 +297,7 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
 
       if (hasAdded) {
         isWaiting = true;
+        props.setIsEntranceBlocked(true);
         queued = current;
         return previous;
       }
@@ -299,6 +312,7 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
 
     if (hasRemoved && hasAdded) {
       isWaiting = true;
+      props.setIsEntranceBlocked(true);
       queued = current;
       const unchanged = current.filter((el) => prevSet.has(el));
       previous = unchanged;
@@ -444,6 +458,9 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
   const [exitCount, setExitCount] = createSignal(0);
   const updateExitCount = () => setExitCount(pendingExits.size);
 
+  // Track whether entrance animations should be blocked (mode="wait" with pending exits)
+  const [isEntranceBlocked, setIsEntranceBlocked] = createSignal(false);
+
   const onExitComplete = (id: string, el?: Element) => {
     // If it's an element-based completion (handoff)
     if (el && pendingExits.has(el)) {
@@ -480,6 +497,7 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
     custom,
     register,
     onExitComplete,
+    isEntranceBlocked,
   };
 
   return (
@@ -490,6 +508,7 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
         exitCount={exitCount}
         mode={mode}
         root={root}
+        setIsEntranceBlocked={setIsEntranceBlocked}
       >
         {props.children}
       </AnimatePresenceContent>

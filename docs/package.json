@@ -1,28 +1,29 @@
 {
-  "name": "@motion-solid/playground",
+  "name": "@motion-solid/docs",
   "type": "module",
-  "private": true,
   "scripts": {
     "dev": "vinxi dev",
     "build": "vinxi build",
     "start": "vinxi start"
   },
   "dependencies": {
+    "@mdx-js/mdx": "^3.1.1",
     "@solidjs/router": "^0.15.4",
     "@solidjs/start": "^1.2.1",
+    "@vinxi/plugin-mdx": "^3.7.2",
     "clsx": "^2.1.1",
-    "motion-dom": "^12.23.23",
     "motion-solid": "workspace:*",
-    "shiki": "^3.20.0",
+    "solid-icons": "^1.1.0",
     "solid-js": "^1.9.10",
+    "solid-mdx": "^0.0.7",
     "tailwind-merge": "^3.4.0",
     "vinxi": "^0.5.10"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
     "tailwindcss": "^4.1.18"
-  },
-  "engines": {
-    "node": ">=22"
   }
 }

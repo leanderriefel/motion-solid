@@ -17,6 +17,7 @@ import type {
 } from "motion-dom";
 import {
   motionValue,
+  supportsBrowserAnimation,
   transformProps,
   defaultTransformValue,
   readTransformValue,
@@ -49,6 +50,8 @@ type TransformTemplate = (
   transform: Record<string, string | number>,
   generatedTransform: string,
 ) => string;
+
+type MotionValueOwner = NonNullable<MotionValue<unknown>["owner"]>;
 
 export interface AnimationStateOptions {
   state: MotionState;
@@ -113,12 +116,23 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     childOrchestration,
   } = args;
 
+  const motionValueOwner: MotionValueOwner = {
+    current: state.element,
+    getProps: () => options,
+  };
+
+  createEffect(() => {
+    motionValueOwner.current = state.element;
+  });
+
   const latestValues = new Map<string, AnyResolvedKeyframe>();
+  const waapiActiveKeys = new Set<string>();
   const renderState = createRenderState();
   const prevStyle = new Map<string, string>();
   const prevVars = new Map<string, string>();
   let frameId: number | null = null;
   let isUnmounted = false;
+  let effectRunId = 0;
 
   const presenceId = presence ? createUniqueId() : null;
 
@@ -172,6 +186,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     // Convert Map to plain object for buildHTMLStyles
     const values: Record<string, string | number> = {};
     for (const [key, v] of latestValues.entries()) {
+      if (waapiActiveKeys.has(key)) continue;
+      // If WAAPI is controlling `transform`, don't generate a transform string from transform props.
+      if (waapiActiveKeys.has("transform") && transformProps.has(key)) continue;
       if (isStringOrNumber(v)) values[key] = v;
     }
 
@@ -183,7 +200,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
     const hasMotionTransform = renderState.style.transform !== undefined;
 
-    if (projectionTransform !== null) {
+    if (projectionTransform !== null && !waapiActiveKeys.has("transform")) {
       if (!wasProjectionTransformActive) {
         restoreInlineTransform = element.style.transform;
         // Snapshot the element's base transform before applying projection.
@@ -211,7 +228,10 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           : `${projectionTransform} ${baseTransform}`;
 
       renderState.style.transform = combinedTransform;
-    } else if (wasProjectionTransformActive) {
+    } else if (
+      wasProjectionTransformActive &&
+      !waapiActiveKeys.has("transform")
+    ) {
       if (!hasMotionTransform) {
         renderState.style.transform = restoreInlineTransform ?? "";
       }
@@ -221,7 +241,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       wasProjectionTransformActive = false;
     }
 
-    if (projectionOpacity !== null) {
+    if (projectionOpacity !== null && !waapiActiveKeys.has("opacity")) {
       const baseOpacity = renderState.style.opacity;
       if (baseOpacity === undefined) {
         renderState.style.opacity = String(projectionOpacity);
@@ -233,6 +253,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       }
     } else if (
       prevProjectionOpacity !== null &&
+      !waapiActiveKeys.has("opacity") &&
       renderState.style.opacity === undefined
     ) {
       renderState.style.opacity = "";
@@ -585,8 +606,8 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       } else {
         const mv =
           typeof initial === "number"
-            ? motionValue(initial)
-            : motionValue(initial);
+            ? motionValue(initial, { owner: motionValueOwner })
+            : motionValue(initial, { owner: motionValueOwner });
         setState("values", key, mv);
       }
     }
@@ -605,10 +626,38 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       const unsubscribe = mv.on("change", (next) => {
         latestValues.set(key, next as AnyResolvedKeyframe);
         setState("resolvedValues", key, next as AnyResolvedKeyframe);
+
+        /**
+         * When `motion-dom` animates via WAAPI it doesn't emit per-frame MotionValue
+         * updates. It only updates the MotionValue on finish/stop.
+         *
+         * We must immediately commit the final value back to inline styles
+         * *before* WAAPI cancels its effect, otherwise the element can snap back
+         * to the stale underlying inline value for a frame.
+         */
+        if (waapiActiveKeys.has(key)) {
+          waapiActiveKeys.delete(key);
+          renderToDom();
+          return;
+        }
+
         scheduleRender();
       });
 
       unsubscribes.push(unsubscribe);
+
+      // Ensure we always clear WAAPI flags even if the final value equals the start value
+      // (in which case a "change" event might not fire).
+      unsubscribes.push(
+        mv.on("animationComplete", () => {
+          waapiActiveKeys.delete(key);
+        }),
+      );
+      unsubscribes.push(
+        mv.on("animationCancel", () => {
+          waapiActiveKeys.delete(key);
+        }),
+      );
     }
 
     scheduleRender();
@@ -619,6 +668,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   });
 
   createEffect(() => {
+    effectRunId++;
+    const currentRunId = effectRunId;
+
     // Explicitly read all reactive dependencies to ensure tracking
     const activeGestures = {
       hover: state.activeGestures.hover,
@@ -629,6 +681,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     };
     const isPresent = presence?.isPresent() ?? true;
     const isExiting = presence ? !isPresent : false;
+
+    // Check if entrance animations are blocked (mode="wait" with pending exits)
+    const entranceBlocked = presence?.isEntranceBlocked?.() ?? false;
 
     if (!wasExiting && isExiting) {
       const node = layoutNode;
@@ -819,6 +874,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     const nextValues = buildAnimationTypeMotionValues({
       targetsByType: { animate: baseAnimate as any },
       existingValues: state.values,
+      owner: motionValueOwner,
     });
 
     // Keep the store in sync with any newly created MotionValues without
@@ -890,6 +946,13 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       if (!nextActiveKeyToType.has(key)) stopKey(key);
     }
 
+    // If entrance animations are blocked (mode="wait" waiting for exits),
+    // skip all non-exit animations. Exit animations for exiting elements still run.
+    // The effect will re-run when isEntranceBlocked becomes false.
+    if (entranceBlocked && !isExiting) {
+      return;
+    }
+
     // Determine if we need to wait before starting animations
     const parentWhen = parentOrchestration?.getWhen();
     const childWhen = childOrchestration?.getWhen();
@@ -949,6 +1012,22 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           };
         }
 
+        const canUseWaapi =
+          // Avoid fighting with projection writes which also target `transform`/`opacity`.
+          (key === "transform" ? projectionTransform === null : true) &&
+          (key === "opacity" ? projectionOpacity === null : true) &&
+          Boolean(
+            supportsBrowserAnimation<string | number>({
+              keyframes: [mv.get()],
+              name: key,
+              motionValue: mv as MotionValue<string | number>,
+              repeatDelay: finalTransition?.repeatDelay,
+              repeatType: finalTransition?.repeatType,
+              damping: finalTransition?.damping,
+              type: finalTransition?.type,
+            }),
+          );
+
         const controls = startMotionValueAnimation({
           name: key,
           motionValue: mv as MotionValue<string | number>,
@@ -959,6 +1038,12 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
         if (controls) {
           running.set(key, { type, controls });
           startedKeys.push(key);
+        }
+
+        if (controls && canUseWaapi) {
+          waapiActiveKeys.add(key);
+        } else {
+          waapiActiveKeys.delete(key);
         }
 
         const final = pickFinalFromKeyframes(keyframes);
@@ -991,6 +1076,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
         // Check if we were unmounted while waiting
         if (isUnmounted) return;
+        if (currentRunId !== effectRunId) return;
 
         startAnimations();
       })();

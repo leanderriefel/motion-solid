@@ -2,6 +2,8 @@ import type { MotionValue, TargetAndTransition } from "motion-dom";
 import { motionValue, transformProps, defaultTransformValue } from "motion-dom";
 import type { MotionValues } from "../types";
 
+type MotionValueOwner = NonNullable<MotionValue<unknown>["owner"]>;
+
 export const animationTypes = [
   "exit",
   "whileDrag",
@@ -50,8 +52,13 @@ const targetKeysFromTarget = (target: TargetAndTransition): string[] => {
 
 const createMotionValueForKey = (
   init: string | number,
+  owner?: MotionValueOwner,
 ): MotionValue<string> | MotionValue<number> =>
-  typeof init === "number" ? motionValue(init) : motionValue(init);
+  (() => {
+    const mv = typeof init === "number" ? motionValue(init) : motionValue(init);
+    if (owner) mv.owner = owner;
+    return mv;
+  })();
 
 /**
  * Default CSS property values for properties that have well-known defaults.
@@ -96,6 +103,7 @@ const getDefaultCSSValue = (key: string): string | number | undefined => {
 export const buildAnimationTypeMotionValues = (args: {
   targetsByType: AnimationTypeTargets;
   existingValues?: MotionValues;
+  owner?: MotionValueOwner;
 }): MotionValues => {
   const values: MotionValues = { ...(args.existingValues ?? {}) };
 
@@ -111,14 +119,14 @@ export const buildAnimationTypeMotionValues = (args: {
         // initial state when no explicit `initial` prop is provided.
         if (transformProps.has(key)) {
           const defaultValue = defaultTransformValue(key);
-          values[key] = createMotionValueForKey(defaultValue);
+          values[key] = createMotionValueForKey(defaultValue, args.owner);
           continue;
         }
 
         // For CSS properties with known defaults (like opacity: 1), use those defaults
         const cssDefault = getDefaultCSSValue(key);
         if (cssDefault !== undefined) {
-          values[key] = createMotionValueForKey(cssDefault);
+          values[key] = createMotionValueForKey(cssDefault, args.owner);
           continue;
         }
 
@@ -128,7 +136,7 @@ export const buildAnimationTypeMotionValues = (args: {
           (target as Record<string, unknown>)[key],
         );
         if (init === null) continue;
-        values[key] = createMotionValueForKey(init);
+        values[key] = createMotionValueForKey(init, args.owner);
       }
     }
   }

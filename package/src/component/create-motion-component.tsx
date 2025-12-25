@@ -136,25 +136,10 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         Boolean(resolvedMotionOptions.layoutId),
     );
 
-    // Track element prop changes that can affect layout without touching `children`.
-    // Accessing `props.children` during hydration can create DOM nodes and break SSR.
-    // We only start tracking after mount to keep hydration stable.
     onMount(() => {
       // Skip the first run - register() already schedules initial measurement.
       // We DO need this initial schedule, but NOT for reactivity changes.
       layoutManager.scheduleUpdate();
-
-      createEffect(() => {
-        if (!layoutEnabled()) return;
-
-        void elementProps.class;
-        void elementProps.classList;
-        void elementProps.style;
-
-        // We DON'T schedule a layout pass here. Let MutationObserver handle
-        // style/size changes instead, to avoid double-flushing when both this
-        // effect and the MutationObserver trigger.
-      });
     });
 
     // Register this component as a child with parent's orchestration

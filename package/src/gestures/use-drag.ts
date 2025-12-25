@@ -160,6 +160,12 @@ export const useDragGesture = (args: DragGestureOptions) => {
     const dragEnabled = options.drag;
     if (!dragEnabled || !element) return;
 
+    type MotionValueOwner = NonNullable<MotionValue<unknown>["owner"]>;
+    const owner: MotionValueOwner = {
+      current: element,
+      getProps: () => options,
+    };
+
     const dragX = options.drag === true || options.drag === "x";
     const dragY = options.drag === true || options.drag === "y";
 
@@ -179,7 +185,7 @@ export const useDragGesture = (args: DragGestureOptions) => {
       } else {
         mvX = state.values.x as MotionValue<number> | undefined;
         if (!mvX) {
-          mvX = motionValue(0);
+          mvX = motionValue(0, { owner });
           setState("values", "x", mvX);
         }
       }
@@ -192,7 +198,7 @@ export const useDragGesture = (args: DragGestureOptions) => {
       } else {
         mvY = state.values.y as MotionValue<number> | undefined;
         if (!mvY) {
-          mvY = motionValue(0);
+          mvY = motionValue(0, { owner });
           setState("values", "y", mvY);
         }
       }
