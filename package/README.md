@@ -1,6 +1,6 @@
 # motion-solid
 
-SolidJS bindings for [Motion One](https://motion.dev).
+SolidJS bindings for [Motion](https://motion.dev).
 
 ## Installation
 
