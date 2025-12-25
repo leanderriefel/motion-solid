@@ -5,7 +5,7 @@
 - Build: `bun --filter motion-solid build`
 - Typecheck: `bun --filter motion-solid typecheck`
 - Test: `bun --filter motion-solid test` (runs build + test.ts)
-- Dev playground: `bun dev`
+- Dev docs: `bun dev`
 - Format: `bun run format` (prettier)
 
 ## Code Style

@@ -4,17 +4,13 @@
   "type": "module",
   "workspaces": [
     "package",
-    "playground",
     "docs"
   ],
   "scripts": {
     "dev": "bun --filter @motion-solid/docs dev",
-    "dev:playground": "bun --filter @motion-solid/playground dev",
     "build": "bun --filter motion-solid build",
-    "build:playground": "bun --filter @motion-solid/playground build",
     "build:docs": "bun --filter @motion-solid/docs build",
     "start": "bun --filter @motion-solid/docs start",
-    "start:playground": "bun --filter @motion-solid/playground start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"
