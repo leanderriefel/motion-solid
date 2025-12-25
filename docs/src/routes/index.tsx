@@ -289,8 +289,8 @@ export default function Home() {
           </div>
           <div class="p-6 flex items-center justify-center grow">
             <p class="text-foreground font-medium text-sm text-center">
-              Silky smooth layout animations without ViewTransitions to keep
-              interactivity.
+              Silky-smooth layout animations without ViewTransitions, keeping
+              interactivity intact.
             </p>
           </div>
         </motion.div>
