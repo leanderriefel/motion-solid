@@ -510,17 +510,19 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     // This avoids double-flushing when both the effect and MutationObserver fire.
   });
 
-  let prevLayoutDependency: unknown = undefined;
   let hadLayoutDependency = false;
 
-  createRenderEffect(() => {
+  createEffect(() => {
     const enabled = layoutEnabled();
     const layoutDependency = options.layoutDependency;
 
-    if (!enabled || layoutDependency === undefined) {
+    if (!enabled || !layoutDependency || layoutDependency.length === 0) {
       hadLayoutDependency = false;
-      prevLayoutDependency = layoutDependency;
       return;
+    }
+
+    for (const dependency of layoutDependency) {
+      dependency();
     }
 
     const node = layoutNode;
@@ -529,12 +531,8 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     // Don't animate on first run. This is the baseline measurement.
     if (!hadLayoutDependency) {
       hadLayoutDependency = true;
-      prevLayoutDependency = layoutDependency;
       return;
     }
-
-    if (layoutDependency === prevLayoutDependency) return;
-    prevLayoutDependency = layoutDependency;
 
     layoutManager.invalidateLayoutDependency(node);
   });
@@ -1018,13 +1016,10 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           (key === "opacity" ? projectionOpacity === null : true) &&
           Boolean(
             supportsBrowserAnimation<string | number>({
-              keyframes: [mv.get()],
+              keyframes: keyframes as any,
               name: key,
               motionValue: mv as MotionValue<string | number>,
-              repeatDelay: finalTransition?.repeatDelay,
-              repeatType: finalTransition?.repeatType,
-              damping: finalTransition?.damping,
-              type: finalTransition?.type,
+              ...(finalTransition as any),
             }),
           );
 

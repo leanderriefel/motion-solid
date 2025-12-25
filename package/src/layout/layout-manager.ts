@@ -6,6 +6,7 @@ import type {
   ValueTransition,
 } from "motion-dom";
 import type { Axis, AxisDelta, Box, Delta } from "motion-utils";
+import type { Accessor } from "solid-js";
 import { startMotionValueAnimation } from "../animation/motion-value";
 import { getTransitionForKey } from "../animation/transition-utils";
 
@@ -38,8 +39,17 @@ type LayoutNodeOptions = LayoutCallbacks & {
   layoutCrossfade?: boolean;
   layoutScroll?: boolean;
   layoutRoot?: boolean;
-  layoutDependency?: unknown;
+  layoutDependency?: Accessor<any>[];
   transition?: Transition;
+};
+
+const hasLayoutDependency = (
+  dependency: LayoutNodeOptions["layoutDependency"],
+): boolean => Array.isArray(dependency) && dependency.length > 0;
+
+const scrollListenerOptions: AddEventListenerOptions = {
+  capture: true,
+  passive: true,
 };
 
 type LayoutNode = {
@@ -826,7 +836,16 @@ class LayoutManager {
   private dependencyInvalidatedNodes = new Set<LayoutNode>();
 
   private scheduled = false;
+  private pendingUpdate = false;
+  private updateFrameId: number | null = null;
   private isFlushing = false;
+  private suppressAnimations = false;
+  private resizeListener: (() => void) | null = null;
+  private resizeFrameId: number | null = null;
+  private resizeFrameCountdown = 0;
+  private scrollListener: (() => void) | null = null;
+  private scrollFrameId: number | null = null;
+  private scrollTargets = new Set<Element>();
 
   private mutationObserver: MutationObserver | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -839,7 +858,9 @@ class LayoutManager {
       this.getStack(node.options.layoutId).add(node);
     }
 
-    this.ensureObservers();
+    this.updateObservers();
+
+    this.resizeObserver?.observe(node.element);
 
     this.scheduleUpdate();
   }
@@ -868,7 +889,7 @@ class LayoutManager {
       }
     }
 
-    if (this.nodes.size === 0) this.cleanupObservers();
+    this.updateObservers();
 
     node.destroy();
     this.scheduleUpdate();
@@ -893,6 +914,8 @@ class LayoutManager {
 
       this.scheduleUpdate();
     }
+
+    this.updateObservers();
   }
 
   relegate(node: LayoutNode): void {
@@ -911,22 +934,35 @@ class LayoutManager {
 
   scheduleUpdate(): void {
     if (typeof window === "undefined") return;
+    if (this.isFlushing) {
+      this.pendingUpdate = true;
+      return;
+    }
     if (this.scheduled) return;
 
     this.scheduled = true;
 
     const run = () => {
       this.scheduled = false;
+      this.updateFrameId = null;
+
+      if (this.isFlushing) {
+        this.pendingUpdate = true;
+        return;
+      }
+
       this.flush();
     };
 
     /**
-     * Coalesce multiple layout invalidations into a single microtask.
-     *
-     * IMPORTANT: We must measure/apply projection transforms *before paint*.
-     * Using `requestAnimationFrame` here would defer work until the next frame,
-     * which causes a visible 1-frame flash at the final layout position.
+     * Throttle layout work to one flush per frame.
+     * This keeps rapid updates from creating long task backlogs.
      */
+    if (typeof requestAnimationFrame === "function") {
+      this.updateFrameId = requestAnimationFrame(run);
+      return;
+    }
+
     if (typeof queueMicrotask === "function") {
       queueMicrotask(run);
       return;
@@ -935,11 +971,6 @@ class LayoutManager {
     // Fallbacks (should rarely be hit in modern browsers)
     if (typeof Promise !== "undefined") {
       Promise.resolve().then(run);
-      return;
-    }
-
-    if (typeof requestAnimationFrame !== "undefined") {
-      requestAnimationFrame(run);
       return;
     }
 
@@ -982,11 +1013,23 @@ class LayoutManager {
     const dependencyInvalidatedNodes = this.dependencyInvalidatedNodes;
     this.dependencyInvalidatedNodes = new Set();
 
+    const suppressAnimations = this.suppressAnimations;
+    this.suppressAnimations = false;
+
+    const finishFlush = () => {
+      this.isFlushing = false;
+
+      if (this.pendingUpdate) {
+        this.pendingUpdate = false;
+        this.scheduleUpdate();
+      }
+    };
+
     const nodes = Array.from(this.nodes);
 
     // Early exit if no nodes
     if (nodes.length === 0) {
-      this.isFlushing = false;
+      finishFlush();
       return;
     }
 
@@ -997,7 +1040,7 @@ class LayoutManager {
 
     // Early exit if no nodes need measuring
     if (layoutNodes.length === 0) {
-      this.isFlushing = false;
+      finishFlush();
       return;
     }
 
@@ -1081,6 +1124,11 @@ class LayoutManager {
 
       node.options.onLayoutMeasure?.(box, animationStartBox ?? box);
 
+      if (suppressAnimations) {
+        node.prevBox = box;
+        continue;
+      }
+
       const layoutType = resolveLayoutType(
         node.options.layout,
         node.options.layoutId,
@@ -1107,7 +1155,7 @@ class LayoutManager {
       }
 
       if (
-        node.options.layoutDependency !== undefined &&
+        hasLayoutDependency(node.options.layoutDependency) &&
         !dependencyInvalidatedNodes.has(node)
       ) {
         node.prevBox = box;
@@ -1136,7 +1184,14 @@ class LayoutManager {
       node.updateProjection(false);
     }
 
-    this.isFlushing = false;
+    if (suppressAnimations && dependencyInvalidatedNodes.size > 0) {
+      for (const node of dependencyInvalidatedNodes) {
+        this.dependencyInvalidatedNodes.add(node);
+      }
+      this.pendingUpdate = true;
+    }
+
+    finishFlush();
   }
 
   private startLayoutAnimation(
@@ -1260,6 +1315,189 @@ class LayoutManager {
     return stack;
   }
 
+  private shouldObserveLayoutChanges(): boolean {
+    return this.nodes.size > 0;
+  }
+
+  private hasAnyLayoutDependency(): boolean {
+    if (this.nodes.size === 0) return false;
+
+    for (const node of this.nodes) {
+      if (hasLayoutDependency(node.options.layoutDependency)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private collectScrollTargets(): Set<Element> {
+    const targets = new Set<Element>();
+
+    for (const node of this.nodes) {
+      if (node.options.layoutScroll) {
+        targets.add(node.element);
+      }
+    }
+
+    return targets;
+  }
+
+  private updateObservers(): void {
+    if (this.shouldObserveLayoutChanges()) {
+      this.ensureObservers();
+    } else {
+      this.cleanupObservers();
+    }
+
+    if (this.hasAnyLayoutDependency()) {
+      this.ensureResizeListener();
+      this.ensureScrollListener();
+      this.updateScrollTargets();
+    } else {
+      this.cleanupResizeListener();
+      this.cleanupScrollListener();
+      this.updateScrollTargets(new Set());
+    }
+  }
+
+  private ensureResizeListener(): void {
+    if (typeof window === "undefined") return;
+    if (this.resizeListener) return;
+
+    this.resizeListener = () => {
+      if (typeof requestAnimationFrame !== "function") {
+        this.suppressAnimations = true;
+        this.scheduleUpdate();
+        return;
+      }
+
+      this.resizeFrameCountdown = 3;
+
+      if (this.resizeFrameId !== null) return;
+
+      const tick = () => {
+        this.resizeFrameCountdown -= 1;
+
+        if (this.resizeFrameCountdown <= 0) {
+          this.resizeFrameId = null;
+          this.suppressAnimations = true;
+          this.scheduleUpdate();
+          return;
+        }
+
+        this.resizeFrameId = requestAnimationFrame(tick);
+      };
+
+      this.resizeFrameId = requestAnimationFrame(tick);
+    };
+
+    window.addEventListener("resize", this.resizeListener);
+  }
+
+  private cleanupResizeListener(): void {
+    if (typeof window === "undefined") return;
+    if (this.resizeListener) {
+      window.removeEventListener("resize", this.resizeListener);
+      this.resizeListener = null;
+    }
+    if (
+      this.resizeFrameId !== null &&
+      typeof cancelAnimationFrame === "function"
+    ) {
+      cancelAnimationFrame(this.resizeFrameId);
+    }
+    this.resizeFrameId = null;
+    this.resizeFrameCountdown = 0;
+  }
+
+  private ensureScrollListener(): void {
+    if (typeof window === "undefined") return;
+    if (this.scrollListener) return;
+
+    this.scrollListener = () => {
+      if (typeof requestAnimationFrame !== "function") {
+        this.suppressAnimations = true;
+        this.scheduleUpdate();
+        return;
+      }
+
+      if (this.scrollFrameId !== null) return;
+
+      this.scrollFrameId = requestAnimationFrame(() => {
+        this.scrollFrameId = null;
+        this.suppressAnimations = true;
+        this.scheduleUpdate();
+      });
+    };
+
+    window.addEventListener(
+      "scroll",
+      this.scrollListener,
+      scrollListenerOptions,
+    );
+  }
+
+  private updateScrollTargets(targets = this.collectScrollTargets()): void {
+    if (typeof window === "undefined") return;
+
+    if (!this.scrollListener) {
+      this.scrollTargets = new Set();
+      return;
+    }
+
+    const nextTargets = new Set(targets);
+
+    for (const target of this.scrollTargets) {
+      if (!nextTargets.has(target)) {
+        target.removeEventListener(
+          "scroll",
+          this.scrollListener,
+          scrollListenerOptions,
+        );
+      }
+    }
+
+    for (const target of nextTargets) {
+      if (!this.scrollTargets.has(target)) {
+        target.addEventListener(
+          "scroll",
+          this.scrollListener,
+          scrollListenerOptions,
+        );
+      }
+    }
+
+    this.scrollTargets = nextTargets;
+  }
+
+  private cleanupScrollListener(): void {
+    if (typeof window === "undefined") return;
+    if (this.scrollListener) {
+      window.removeEventListener(
+        "scroll",
+        this.scrollListener,
+        scrollListenerOptions,
+      );
+      for (const target of this.scrollTargets) {
+        target.removeEventListener(
+          "scroll",
+          this.scrollListener,
+          scrollListenerOptions,
+        );
+      }
+      this.scrollTargets.clear();
+      this.scrollListener = null;
+    }
+    if (
+      this.scrollFrameId !== null &&
+      typeof cancelAnimationFrame === "function"
+    ) {
+      cancelAnimationFrame(this.scrollFrameId);
+    }
+    this.scrollFrameId = null;
+  }
+
   private ensureObservers(): void {
     if (typeof window === "undefined") return;
 
@@ -1305,6 +1543,25 @@ class LayoutManager {
         characterData: true,
         characterDataOldValue: true,
       });
+    }
+
+    this.ensureResizeObserver();
+  }
+
+  private ensureResizeObserver(): void {
+    if (typeof ResizeObserver === "undefined") return;
+    if (this.resizeObserver) return;
+
+    this.resizeObserver = new ResizeObserver(() => {
+      if (this.isFlushing) return;
+      if (this.hasAnyLayoutDependency()) {
+        this.suppressAnimations = true;
+      }
+      this.scheduleUpdate();
+    });
+
+    for (const node of this.nodes) {
+      this.resizeObserver.observe(node.element);
     }
   }
 

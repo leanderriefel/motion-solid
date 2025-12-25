@@ -38,7 +38,7 @@ export const Animation: Component<{
     <div
       ref={props.containerRef}
       class={cn(
-        "relative w-full max-w-[500px] overflow-hidden rounded-2xl border border-border bg-card text-card-foreground",
+        "not-prose relative w-full max-w-[500px] overflow-hidden rounded-2xl border border-border bg-card text-card-foreground",
         {
           "flex flex-col": hasHeader(),
           "flex items-center justify-center": !props.scrollable && !hasHeader(),
@@ -49,9 +49,9 @@ export const Animation: Component<{
       <Show when={hasHeader()}>
         <div class="sticky top-0 z-20 shrink-0 flex items-center gap-3 border-b border-border bg-card px-3 h-12 backdrop-blur">
           <Show when={props.name}>
-            <span class="text-sm font-medium text-muted-foreground">
+            <h3 class="text-sm font-medium text-muted-foreground">
               {props.name}
-            </span>
+            </h3>
           </Show>
           <div class="ml-auto flex items-center gap-2">
             <Show when={props.source}>

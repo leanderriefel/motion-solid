@@ -1,7 +1,9 @@
 import { A } from "@solidjs/router";
 import { createSignal, For, onCleanup, onMount } from "solid-js";
-import { AnimatePresence, motion } from "motion-solid";
-import { AnimatedLogo } from "~/components/Logo";
+import { AnimatePresence, motion, type StaggerFunction } from "motion-solid";
+import { AnimatedLogo } from "~/components/logo";
+import { BackgroundDots } from "~/components/background-dots";
+import { cn } from "~/utils/cn";
 
 type Token = { text: string; type: string };
 
@@ -125,39 +127,71 @@ function CodeCard() {
   );
 }
 
+/**
+ * Creates a 2D grid stagger function that radiates from the center.
+ * Works with delayChildren in variants, just like the built-in stagger().
+ */
+function gridStagger(
+  interval: number,
+  cols: number,
+  rows: number,
+): StaggerFunction {
+  const centerRow = (rows - 1) / 2;
+  const centerCol = (cols - 1) / 2;
+
+  const fn = (index: number): number => {
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+    const distance = Math.sqrt(
+      Math.pow(row - centerRow, 2) + Math.pow(col - centerCol, 2),
+    );
+    return distance * interval;
+  };
+
+  (fn as unknown as StaggerFunction).__isStagger = true;
+  return fn as unknown as StaggerFunction;
+}
+
 function PerformanceDemo() {
-  const rows = 5;
+  const rows = 7;
   const cols = 7;
-  const cells = Array.from({ length: rows * cols }, (_, i) => ({
-    id: i,
-    row: Math.floor(i / cols),
-    col: i % cols,
-  }));
+  const cells = Array.from({ length: rows * cols }, (_, i) => i);
 
   return (
-    <div
+    <motion.div
       class="grid gap-1.5"
       style={{ "grid-template-columns": `repeat(${cols}, 1fr)` }}
+      initial="hidden"
+      animate="visible"
+      variants={{
+        visible: {
+          transition: {
+            delayChildren: gridStagger(0.5, cols, rows),
+          },
+        },
+      }}
     >
       <For each={cells}>
-        {(cell) => (
+        {() => (
           <motion.div
-            animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.3, 1, 0.3],
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              delay: (cell.row + cell.col) * 0.1,
-              ease: "easeInOut",
+            variants={{
+              hidden: { scale: 1, opacity: 0.1 },
+              visible: {
+                scale: [1, 1.25, 1],
+                opacity: [0.05, 1, 0.05],
+                transition: {
+                  duration: 2.5,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                },
+              },
             }}
             class="size-4 rounded-sm bg-primary"
             style={{ "box-shadow": "0 0 12px var(--primary)" }}
           />
         )}
       </For>
-    </div>
+    </motion.div>
   );
 }
 
@@ -228,6 +262,7 @@ export default function Home() {
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            tabIndex={-1}
             transition={{
               type: "spring",
               stiffness: 300,
@@ -236,8 +271,8 @@ export default function Home() {
             }}
           >
             <A
-              href="/docs/introduction"
-              class="px-5 py-2.5 font-medium rounded-lg text-sm border border-primary bg-primary/10 text-foreground [box-shadow:0px_0px_40px_5px_var(--tw-shadow-color)] transition-all shadow-primary/20 hover:shadow-primary/35"
+              href="/docs/getting-started"
+              class="px-5 relative overflow-hidden py-2.5 font-medium rounded-xl text-sm border border-primary text-foreground bg-primary/10 [box-shadow:0px_0px_40px_5px_var(--tw-shadow-color)] transition-all shadow-primary/20 hover:shadow-primary/35 before:absolute before:inset-0 before:bg-background before:-z-1"
             >
               Get Started
             </A>
@@ -247,12 +282,14 @@ export default function Home() {
 
       <div class="mt-24 grid grid-cols-1 lg:grid-cols-3 gap-6 px-4 max-w-6xl w-full text-left">
         <motion.div
-          class="flex flex-col bg-card border border-border rounded-xl overflow-hidden"
+          class={cn(
+            "flex flex-col bg-card border border-border rounded-xl overflow-hidden",
+            "[box-shadow:inset_05px_5px_20px_#0000001a,inset_-5px_-5px_20px_#ffffff] dark:[box-shadow:inset_5px_5px_20px_#000000,inset_-5px_-5px_20px_#ffffff08]",
+          )}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.4 } }}
         >
           <div class="h-48 relative overflow-hidden rounded-t-xl bg-muted/30">
-            <div class="absolute inset-0 opacity-[0.03] bg-[radial-gradient(#000_1px,transparent_1px)] dark:bg-[radial-gradient(#fff_1px,transparent_1px)] bg-size-[20px_20px]" />
             <CodeCard />
           </div>
           <div class="p-6 flex items-center justify-center grow">
@@ -264,7 +301,10 @@ export default function Home() {
         </motion.div>
 
         <motion.div
-          class="flex flex-col bg-card border border-border rounded-xl overflow-hidden"
+          class={cn(
+            "flex flex-col bg-card border border-border rounded-xl overflow-hidden",
+            "[box-shadow:inset_05px_5px_20px_#0000001a,inset_-5px_-5px_20px_#ffffff] dark:[box-shadow:inset_5px_5px_20px_#000000,inset_-5px_-5px_20px_#ffffff08]",
+          )}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.5 } }}
         >
@@ -296,7 +336,10 @@ export default function Home() {
         </motion.div>
 
         <motion.div
-          class="flex flex-col bg-card border border-border rounded-xl overflow-hidden"
+          class={cn(
+            "flex flex-col bg-card border border-border rounded-xl overflow-hidden",
+            "[box-shadow:inset_05px_5px_20px_#0000001a,inset_-5px_-5px_20px_#ffffff] dark:[box-shadow:inset_5px_5px_20px_#000000,inset_-5px_-5px_20px_#ffffff08]",
+          )}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.6 } }}
         >
@@ -312,6 +355,7 @@ export default function Home() {
           </div>
         </motion.div>
       </div>
+      <BackgroundDots opacity={0.5} />
     </div>
   );
 }

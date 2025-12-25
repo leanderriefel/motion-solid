@@ -18,7 +18,7 @@ const createEventInfo = (event: MouseEvent | PointerEvent) => ({
 /**
  * Create TapInfo from a pointer event
  */
-const createTapInfo = (event: PointerEvent) => ({
+const createTapInfo = (event: { clientX: number; clientY: number }) => ({
   point: { x: event.clientX, y: event.clientY },
 });
 
@@ -59,22 +59,71 @@ export const useGestures = (args: GestureOptions) => {
 
     if (!element) return;
 
+    // Create AbortController for event listener cleanup
+    const abortController = new AbortController();
+    const { signal } = abortController;
+
     // Add event listeners - cast element to HTMLElement for proper event types
     const htmlElement = element as HTMLElement;
 
+    // If tap handlers are present, ensure element is focusable so Enter can trigger tap.
+    const prevTabIndexAttr = htmlElement.getAttribute("tabindex");
+    const shouldMakeFocusable =
+      prevTabIndexAttr === null &&
+      (options.onTap ||
+        options.onTapStart ||
+        options.onTapCancel ||
+        options.whileTap) &&
+      htmlElement.tabIndex < 0;
+
+    if (shouldMakeFocusable) {
+      htmlElement.tabIndex = 0;
+    }
+
     // Hover gestures
-    const onMouseEnter = (event: MouseEvent) => {
+    const onPointerEnter = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
+
       setState("activeGestures", "hover", true);
       options.onHoverStart?.(event, createEventInfo(event));
     };
 
-    const onMouseLeave = (event: MouseEvent) => {
+    const onPointerLeave = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
+
       setState("activeGestures", "hover", false);
       options.onHoverEnd?.(event, createEventInfo(event));
     };
 
     // Tap gestures - use pointerdown/pointerup for better touch support
     let isTapping = false;
+    let tapSource: "pointer" | "keyboard" | null = null;
+
+    const hasTapHandlers =
+      options.onTap ||
+      options.onTapStart ||
+      options.onTapCancel ||
+      options.whileTap;
+
+    const getElementCenterPoint = () => {
+      const rect = element.getBoundingClientRect();
+      return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      };
+    };
+
+    const createSyntheticMouseEvent = (
+      type: "mousedown" | "mouseup",
+      point: { x: number; y: number },
+    ) =>
+      new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: point.x,
+        clientY: point.y,
+      });
 
     // Pan gesture state
     let isPanning = false;
@@ -94,6 +143,7 @@ export const useGestures = (args: GestureOptions) => {
 
     const onPointerDown = (event: PointerEvent) => {
       isTapping = true;
+      tapSource = "pointer";
       setState("activeGestures", "tap", true);
       options.onTapStart?.(event, createTapInfo(event));
 
@@ -184,6 +234,7 @@ export const useGestures = (args: GestureOptions) => {
 
       if (!isTapping) return;
       isTapping = false;
+      tapSource = null;
       setState("activeGestures", "tap", false);
 
       // Check if pointer is still over the element for onTap vs onTapCancel
@@ -223,6 +274,7 @@ export const useGestures = (args: GestureOptions) => {
 
       if (!isTapping) return;
       isTapping = false;
+      tapSource = null;
       setState("activeGestures", "tap", false);
       options.onTapCancel?.(event, createTapInfo(event));
     };
@@ -234,6 +286,46 @@ export const useGestures = (args: GestureOptions) => {
 
     const onBlur = () => {
       setState("activeGestures", "focus", false);
+
+      if (!hasTapHandlers) return;
+      if (!isTapping || tapSource !== "keyboard") return;
+
+      isTapping = false;
+      tapSource = null;
+      setState("activeGestures", "tap", false);
+
+      const point = getElementCenterPoint();
+      const cancelEvent = createSyntheticMouseEvent("mouseup", point);
+      options.onTapCancel?.(cancelEvent, createTapInfo(cancelEvent));
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!hasTapHandlers) return;
+      if (event.key !== "Enter") return;
+      if (event.repeat) return;
+      if (isTapping) return;
+
+      isTapping = true;
+      tapSource = "keyboard";
+      setState("activeGestures", "tap", true);
+
+      const point = getElementCenterPoint();
+      const startEvent = createSyntheticMouseEvent("mousedown", point);
+      options.onTapStart?.(startEvent, createTapInfo(startEvent));
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!hasTapHandlers) return;
+      if (event.key !== "Enter") return;
+      if (!isTapping || tapSource !== "keyboard") return;
+
+      isTapping = false;
+      tapSource = null;
+      setState("activeGestures", "tap", false);
+
+      const point = getElementCenterPoint();
+      const endEvent = createSyntheticMouseEvent("mouseup", point);
+      options.onTap?.(endEvent, createTapInfo(endEvent));
     };
 
     // Viewport gestures
@@ -286,44 +378,43 @@ export const useGestures = (args: GestureOptions) => {
       },
     );
 
-    // Add event listeners
-    htmlElement.addEventListener("mouseenter", onMouseEnter);
-    htmlElement.addEventListener("mouseleave", onMouseLeave);
+    htmlElement.addEventListener("pointerenter", onPointerEnter, { signal });
+    htmlElement.addEventListener("pointerleave", onPointerLeave, { signal });
 
     // Use tapTarget for pointerdown (element or document based on globalTapTarget)
-    tapTarget.addEventListener("pointerdown", onPointerDown as EventListener);
+    tapTarget.addEventListener("pointerdown", onPointerDown as EventListener, {
+      signal,
+    });
 
     // Listen on document for pointer move/up/cancel to handle gestures outside element
-    document.addEventListener("pointermove", onPointerMove as EventListener);
-    document.addEventListener("pointerup", onPointerUp as EventListener);
+    document.addEventListener("pointermove", onPointerMove as EventListener, {
+      signal,
+    });
+    document.addEventListener("pointerup", onPointerUp as EventListener, {
+      signal,
+    });
     document.addEventListener(
       "pointercancel",
       onPointerCancel as EventListener,
+      { signal },
     );
-    htmlElement.addEventListener("focus", onFocus);
-    htmlElement.addEventListener("blur", onBlur);
+    htmlElement.addEventListener("focus", onFocus, { signal });
+    htmlElement.addEventListener("blur", onBlur, { signal });
+    htmlElement.addEventListener("keydown", onKeyDown, { signal });
+    htmlElement.addEventListener("keyup", onKeyUp, { signal });
 
     io.observe(element);
 
     onCleanup(() => {
-      htmlElement.removeEventListener("mouseenter", onMouseEnter);
-      htmlElement.removeEventListener("mouseleave", onMouseLeave);
-      tapTarget.removeEventListener(
-        "pointerdown",
-        onPointerDown as EventListener,
-      );
-      document.removeEventListener(
-        "pointermove",
-        onPointerMove as EventListener,
-      );
-      document.removeEventListener("pointerup", onPointerUp as EventListener);
-      document.removeEventListener(
-        "pointercancel",
-        onPointerCancel as EventListener,
-      );
-      htmlElement.removeEventListener("focus", onFocus);
-      htmlElement.removeEventListener("blur", onBlur);
+      abortController.abort();
       io.disconnect();
+
+      if (shouldMakeFocusable) {
+        // Restore original focusability (avoid leaving a `tabindex` attribute behind)
+        if (prevTabIndexAttr === null) {
+          htmlElement.removeAttribute("tabindex");
+        }
+      }
     });
   });
 };

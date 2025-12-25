@@ -1,7 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
-/* SolidJS-inspired color palette */
+@custom-variant dark (&:where([data-kb-theme="dark"], [data-kb-theme="dark"] *));
+
 /* Light mode */
 :root {
   --background: 0.985 0 0;
@@ -13,7 +15,7 @@
   --popover: 1 0 0;
   --popover-foreground: 0.205 0.02 265;
 
-  --primary: 0.45 0.12 250;
+  --primary: 0.68 0.15 250;
   --primary-foreground: 0.985 0 0;
 
   --secondary: 0.55 0.1 220;
@@ -27,7 +29,7 @@
 
   --border: 0.88 0.01 265;
   --input: 0.88 0.01 265;
-  --ring: 0.45 0.12 250;
+  --ring: 0.68 0.15 250;
 
   --destructive: 0.55 0.2 25;
   --destructive-foreground: 0.985 0 0;
@@ -40,42 +42,40 @@
 }
 
 /* Dark mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 0.13 0 0;
-    --foreground: 0.95 0.01 265;
+[data-kb-theme="dark"] {
+  --background: 0.13 0 0;
+  --foreground: 0.95 0.01 265;
 
-    --card: 0.115 0 0;
-    --card-foreground: 0.95 0.01 265;
+  --card: 0.115 0 0;
+  --card-foreground: 0.95 0.01 265;
 
-    --popover: 0.12 0.01 265;
-    --popover-foreground: 0.95 0.01 265;
+  --popover: 0.12 0.01 265;
+  --popover-foreground: 0.95 0.01 265;
 
-    --primary: 0.65 0.15 250;
-    --primary-foreground: 0.08 0 0;
+  --primary: 0.65 0.15 250;
+  --primary-foreground: 0.08 0 0;
 
-    --secondary: 0.6 0.12 220;
-    --secondary-foreground: 0.08 0 0;
+  --secondary: 0.6 0.12 220;
+  --secondary-foreground: 0.08 0 0;
 
-    --accent: 0.18 0.02 250;
-    --accent-foreground: 0.85 0.05 250;
+  --accent: 0.18 0.02 250;
+  --accent-foreground: 0.85 0.05 250;
 
-    --muted: 0.16 0.02 265;
-    --muted-foreground: 0.65 0.02 265;
+  --muted: 0.16 0.02 265;
+  --muted-foreground: 0.65 0.02 265;
 
-    --border: 0.22 0.02 265;
-    --input: 0.22 0.02 265;
-    --ring: 0.65 0.15 250;
+  --border: 0.22 0.02 265;
+  --input: 0.22 0.02 265;
+  --ring: 0.65 0.15 250;
 
-    --destructive: 0.55 0.2 25;
-    --destructive-foreground: 0.985 0 0;
+  --destructive: 0.55 0.2 25;
+  --destructive-foreground: 0.985 0 0;
 
-    --success: 0.65 0.18 145;
-    --success-foreground: 0.08 0 0;
+  --success: 0.65 0.18 145;
+  --success-foreground: 0.08 0 0;
 
-    --warning: 0.75 0.15 85;
-    --warning-foreground: 0.2 0.05 85;
-  }
+  --warning: 0.75 0.15 85;
+  --warning-foreground: 0.2 0.05 85;
 }
 
 /* Tailwind theme mapping */
@@ -147,44 +147,6 @@ pre code {
 }
 
 /* Docs content prose */
-.docs-content h1 {
-  @apply text-2xl font-bold text-foreground tracking-tight mb-2 pb-3 border-b;
-}
-
-.docs-content h2 {
-  @apply text-lg font-semibold text-foreground tracking-tight mt-6 mb-2;
-  scroll-margin-top: 64px;
-}
-
-.docs-content h3 {
-  @apply text-base font-semibold text-foreground mt-5 mb-1;
-  scroll-margin-top: 64px;
-}
-
-.docs-content p {
-  @apply text-muted-foreground leading-relaxed mb-3 text-sm;
-}
-
-.docs-content a {
-  @apply text-primary hover:underline;
-}
-
-.docs-content strong {
-  @apply text-foreground font-medium;
-}
-
-.docs-content ul {
-  @apply list-disc pl-5 space-y-1 mb-3 text-muted-foreground text-sm;
-}
-
-.docs-content ol {
-  @apply list-decimal pl-5 space-y-1 mb-3 text-muted-foreground text-sm;
-}
-
-.docs-content pre {
-  @apply my-3;
-}
-
-.docs-content blockquote {
-  @apply border-l-2 border-primary pl-3 my-3 text-muted-foreground italic;
+.docs-content:not(.animation, .animation *) {
+  @apply prose-sm lg:prose prose-neutral dark:prose-invert;
 }

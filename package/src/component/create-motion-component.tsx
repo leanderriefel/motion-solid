@@ -33,6 +33,67 @@ import {
   type WhenOrchestration,
 } from "./orchestration-context";
 import { isStaggerFunction, type StaggerFunction } from "../animation/stagger";
+import { resolveDefinitionToTarget } from "../animation/variants";
+import { pickInitialFromKeyframes } from "../animation/keyframes";
+import { buildHTMLStyles, createRenderState } from "../animation/render";
+
+type TransformTemplate = (
+  transform: Record<string, string | number>,
+  generatedTransform: string,
+) => string;
+
+const getInitialStyles = (
+  options: MotionOptions,
+  parent: any,
+): Record<string, string> => {
+  const initialDefinition = options.initial;
+  const definition = initialDefinition ? initialDefinition : options.animate;
+  if (!definition) return {};
+
+  const minimalState = {
+    element: null,
+    values: {},
+    goals: {},
+    resolvedValues: {},
+    activeGestures: {
+      hover: false,
+      tap: false,
+      focus: false,
+      drag: false,
+      inView: false,
+    },
+    activeVariants: {},
+    options,
+    parent,
+  };
+
+  const target = resolveDefinitionToTarget({
+    definition,
+    options,
+    state: minimalState,
+  });
+
+  if (!target) return {};
+
+  const values: Record<string, string | number> = {};
+  for (const [key, keyframes] of Object.entries(target)) {
+    if (key === "transition" || key === "transitionEnd") continue;
+
+    const initial = pickInitialFromKeyframes(keyframes);
+    if (initial !== null) {
+      values[key] = initial;
+    }
+  }
+
+  const renderState = createRenderState();
+  buildHTMLStyles(
+    renderState,
+    values,
+    options.transformTemplate as TransformTemplate | undefined,
+  );
+
+  return renderState.style as Record<string, string>;
+};
 
 export type MotionProps<Tag extends ElementTag> = ComponentProps<Tag> &
   MotionOptions & {
@@ -110,11 +171,9 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     const presence = usePresenceContext();
     const motionConfig = useMotionConfig();
     const parentOrchestration = useOrchestration();
-    const [local, motionOptions, elementProps] = splitProps(
-      props,
-      ["ref"],
-      motionKeys,
-    );
+    const [local, motionOptions, rest] = splitProps(props, ["ref"], motionKeys);
+
+    const [styleProps, elementProps] = splitProps(rest, ["style"]);
 
     const resolvedMotionOptions = mergeProps(motionOptions, {
       get transition() {
@@ -135,6 +194,10 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         Boolean(resolvedMotionOptions.layout) ||
         Boolean(resolvedMotionOptions.layoutId),
     );
+
+    const initialStyles = createMemo(() => {
+      return getInitialStyles(resolvedMotionOptions, parent);
+    });
 
     onMount(() => {
       // Skip the first run - register() already schedules initial measurement.
@@ -310,12 +373,19 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       },
     );
 
+    const mergedStyles = createMemo(() => {
+      const initial = initialStyles();
+      const existing = styleProps.style as Record<string, string> | undefined;
+      return { ...(existing ?? {}), ...initial };
+    });
+
     return (
       <MotionStateContext.Provider value={[state, setState]}>
         <OrchestrationContext.Provider value={childOrchestration}>
           <Dynamic
             component={tag}
             {...(elementProps as ComponentProps<Tag>)}
+            style={mergedStyles() as any}
             ref={ref}
           />
         </OrchestrationContext.Provider>
