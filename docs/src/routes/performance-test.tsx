@@ -5,7 +5,7 @@ import {
   For,
   onCleanup,
 } from "solid-js";
-import { motion } from "motion-solid";
+import { motion, useLayoutTransition } from "motion-solid";
 
 const clampNumber = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -22,21 +22,19 @@ export default function PerformanceTest() {
   const [intervalMs, setIntervalMs] = createSignal(200);
   const [tick, setTick] = createSignal(0);
   const [jitter, setJitter] = createSignal(true);
-  const [useLayoutDependency, setUseLayoutDependency] = createSignal(true);
+  let gridRef: HTMLDivElement | undefined;
+  const transition = useLayoutTransition(() => gridRef);
+  const runLayoutUpdate = (update: () => void) => transition(update);
 
   const items = createMemo(() =>
     Array.from({ length: count() }, (_, index) => index),
-  );
-
-  const layoutDependencies = createMemo(() =>
-    useLayoutDependency() ? [tick] : [],
   );
 
   createEffect(() => {
     if (!autoStep()) return;
 
     const id = setInterval(() => {
-      setTick((value) => value + 1);
+      runLayoutUpdate(() => setTick((value) => value + 1));
     }, intervalMs());
 
     onCleanup(() => clearInterval(id));
@@ -56,9 +54,8 @@ export default function PerformanceTest() {
             Layout Performance Test
           </h1>
           <p class="text-sm text-muted-foreground max-w-2xl">
-            Use this page to stress layout animations and dependency
-            invalidation. Increase counts or enable auto-step to simulate
-            frequent layout changes.
+            Use this page to stress batched layout animations. Updates are
+            wrapped in layoutTransition to simulate frequent layout changes.
           </p>
         </div>
 
@@ -80,7 +77,7 @@ export default function PerformanceTest() {
                       0,
                       2000,
                     );
-                    setCount(next);
+                    runLayoutUpdate(() => setCount(next));
                   }}
                   class="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 />
@@ -101,7 +98,7 @@ export default function PerformanceTest() {
                       1,
                       24,
                     );
-                    setColumns(next);
+                    runLayoutUpdate(() => setColumns(next));
                   }}
                   class="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 />
@@ -143,19 +140,13 @@ export default function PerformanceTest() {
                   <input
                     type="checkbox"
                     checked={jitter()}
-                    onChange={(event) => setJitter(event.currentTarget.checked)}
-                  />
-                  Jitter item heights
-                </label>
-                <label class="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={useLayoutDependency()}
                     onChange={(event) =>
-                      setUseLayoutDependency(event.currentTarget.checked)
+                      runLayoutUpdate(() =>
+                        setJitter(event.currentTarget.checked),
+                      )
                     }
                   />
-                  Use layoutDependency
+                  Jitter item heights
                 </label>
               </div>
 
@@ -163,14 +154,16 @@ export default function PerformanceTest() {
                 <button
                   type="button"
                   class="rounded-md border border-border px-3 py-2 text-sm hover:border-primary"
-                  onClick={() => setTick((value) => value + 1)}
+                  onClick={() =>
+                    runLayoutUpdate(() => setTick((value) => value + 1))
+                  }
                 >
                   Step
                 </button>
                 <button
                   type="button"
                   class="rounded-md border border-border px-3 py-2 text-sm hover:border-primary"
-                  onClick={() => setTick(0)}
+                  onClick={() => runLayoutUpdate(() => setTick(0))}
                 >
                   Reset tick
                 </button>
@@ -186,6 +179,9 @@ export default function PerformanceTest() {
 
           <div class="rounded-xl border border-border bg-card/40 p-4">
             <motion.div
+              ref={(el) => {
+                gridRef = el;
+              }}
               layout
               class="grid gap-2"
               style={{
@@ -196,7 +192,6 @@ export default function PerformanceTest() {
                 {(index) => (
                   <motion.div
                     layout
-                    layoutDependency={layoutDependencies()}
                     transition={{ type: "spring", stiffness: 450, damping: 40 }}
                     class="rounded-md border border-primary/30 bg-primary/15"
                     style={{ height: `${heightForIndex(index)}px` }}

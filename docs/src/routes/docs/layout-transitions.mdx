@@ -1,0 +1,95 @@
+import { Accordion } from "~/components/layout-transitions/accordion";
+import { TabIndicator } from "~/components/layout-transitions/tab-indicator";
+import { ListItems } from "~/components/layout-transitions/list-items";
+import { SharedElement } from "~/components/layout-transitions/shared-element";
+
+# Layout Transitions
+
+Layout animations smoothly animate size and position changes. Wrap your state updates in a batch and elements with `layout` or `layoutId` will animate.
+
+## Quick Start
+
+In Motion for React and Vue, the `layout` prop can detect and animate changes automatically. In Solid, because signals update the DOM synchronously, we use a transition batch to measure and animate layout changes. By wrapping your state updates, you ensure high-performance animations that avoid the overhead and potential glitches of `MutationObserver` or `ResizeObserver`.
+
+## API
+
+### `layoutTransition(targets?, update, options?)`
+
+Imperative API for batching layout changes. Omit `targets` to capture all layout-enabled elements.
+
+```tsx
+layoutTransition(() => setSignal(newValue));
+layoutTransition(target, () => setSignal(newValue));
+```
+
+**Parameters:**
+
+- **`targets`**: Optional element ref, `layoutId` string, or array of both
+- **`update`**: Function that updates state
+- **`options`**: Optional config (currently supports `scope`)
+
+### `useLayoutTransition(targets?, options?) => (update) => void`
+
+Hook-based API that returns a batch function. Omit `targets` to batch globally.
+
+```tsx
+const transition = useLayoutTransition();
+transition(() => setSignal(newValue));
+```
+
+**Parameters:**
+
+- **`targets`**: Optional element ref, `layoutId` string, or array of both (can be reactive)
+- **`options`**: Optional config with `scope?: "descendants"`
+
+## Options
+
+### `scope: "descendants"`
+
+When set, the target and all its layout descendants are animated together. This is useful for animating a container and its children as a unit.
+
+```tsx
+useLayoutTransition(() => container, { scope: "descendants" });
+```
+
+## Layout Props
+
+### `layout`
+
+Enable layout animation for this element. Animates both position and size when its box changes.
+
+```tsx
+<motion.div layout>...</motion.div>
+```
+
+### `layout="position"`
+
+Only animate position (translation). Size changes happen instantly without scale. Use this to keep content crisp while parent resizes.
+
+```tsx
+<motion.div layout="position">Text stays the same size</motion.div>
+```
+
+### `layout="size"`
+
+Only animate size (scale). Position changes happen instantly. Use this when you want smooth resizing without movement.
+
+```tsx
+<motion.div layout="size">...</motion.div>
+```
+
+### `layoutId="unique-id"`
+
+Create a shared element that can move between different DOM positions. Elements with the same `layoutId` transition smoothly between each other.
+
+```tsx
+<motion.div layoutId="shared">...</motion.div>
+```
+
+## Notes
+
+- Elements must opt into layout with `layout` or `layoutId`
+- Omit `targets` to batch all layout-enabled elements; pass targets to limit scope
+- Explicit targets must reference elements with `layout` or `layoutId`
+- Layout animations only run inside a batch (`layoutTransition` or `useLayoutTransition`)
+- External changes (scroll, resize, fonts) don't animate unless you trigger a batch

@@ -10,6 +10,9 @@ import {
   cookieStorageManagerSSR,
 } from "@kobalte/core";
 import { isServer } from "solid-js/web";
+/* @ts-ignore */
+import { MDXProvider } from "solid-mdx";
+import { CodeBlock } from "./components/code-block";
 
 const getServerCookies = () => {
   "use server";
@@ -36,7 +39,9 @@ export default function App() {
             initialColorMode="system"
           >
             <Layout>
-              <Suspense>{props.children}</Suspense>
+              <MDXProvider components={{ pre: CodeBlock }}>
+                <Suspense>{props.children}</Suspense>
+              </MDXProvider>
             </Layout>
           </ColorModeProvider>
         </>

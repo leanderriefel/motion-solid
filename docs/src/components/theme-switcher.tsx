@@ -1,10 +1,11 @@
 import { useColorMode } from "@kobalte/core";
-import { getCookie } from "vinxi/server";
-import { motion } from "../../../package/src/component/index";
+import { motion, useLayoutTransition } from "motion-solid";
 import { cn } from "~/utils/cn";
 
 export const ThemeSwitcher = () => {
   const { colorMode, setColorMode } = useColorMode();
+  let thumb: HTMLDivElement | undefined;
+  const transition = useLayoutTransition(() => thumb);
 
   return (
     <button
@@ -17,11 +18,17 @@ export const ThemeSwitcher = () => {
           "justify-end": colorMode() === "dark",
         },
       )}
-      onClick={() => setColorMode(colorMode() === "light" ? "dark" : "light")}
+      onClick={() =>
+        transition(() =>
+          setColorMode(colorMode() === "light" ? "dark" : "light"),
+        )
+      }
     >
       <motion.div
+        ref={(el) => {
+          thumb = el;
+        }}
         layout
-        layoutDependency={[colorMode]}
         transition={{
           type: "spring",
           stiffness: 300,

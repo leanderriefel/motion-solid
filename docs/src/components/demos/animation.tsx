@@ -1,6 +1,6 @@
 import { Show, createSignal, mergeProps, createResource } from "solid-js";
 import type { Component, ComponentProps, JSX } from "solid-js";
-import { Portal } from "solid-js/web";
+import { Portal, isServer } from "solid-js/web";
 import { AnimatePresence, motion } from "motion-solid";
 import { codeToHtml } from "shiki";
 import { cn } from "../../utils/cn";
@@ -19,13 +19,17 @@ export const Animation: Component<{
   const [showSource, setShowSource] = createSignal(false);
 
   const [highlightedCode] = createResource(
-    () => props.source,
+    () => (isServer ? null : props.source),
     async (source) => {
       if (!source) return null;
-      return await codeToHtml(source, {
-        lang: "tsx",
-        theme: "github-dark",
-      });
+      try {
+        return await codeToHtml(source, {
+          lang: "tsx",
+          theme: "github-dark",
+        });
+      } catch {
+        return null;
+      }
     },
   );
 

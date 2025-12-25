@@ -2,7 +2,7 @@
 
 import { createNoise3D } from "simplex-noise";
 import { onCleanup, onMount } from "solid-js";
-import { motion } from "../../../package/src/component/index";
+import { motion } from "motion-solid";
 import { cn } from "~/utils/cn";
 
 const TWO_PI = Math.PI * 2;

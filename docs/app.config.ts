@@ -1,8 +1,8 @@
 import { defineConfig } from "@solidjs/start/config";
-/* @ts-ignore */
-import pkg from "@vinxi/plugin-mdx";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
+/* @ts-ignore */
+import pkg from "@vinxi/plugin-mdx";
 
 const { default: mdx } = pkg;
 export default defineConfig({

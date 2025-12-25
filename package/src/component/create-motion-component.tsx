@@ -5,7 +5,6 @@ import {
   createRenderEffect,
   createSignal,
   mergeProps,
-  onMount,
   splitProps,
 } from "solid-js";
 import { Dynamic } from "solid-js/web";
@@ -21,11 +20,10 @@ import type {
 import { createMotionState } from "../state";
 import { useAnimationState } from "../animation";
 import { useGestures, useDragGesture } from "../gestures";
-import { layoutManager } from "../layout/layout-manager";
 import { MotionStateContext, useMotionState } from "./context";
-import { useMotionConfig } from "./motion-config.tsx";
+import { useMotionConfig } from "./motion-config";
 import { motionKeys } from "./motion-keys";
-import { usePresenceContext } from "./presence.tsx";
+import { usePresenceContext } from "./presence";
 import {
   OrchestrationContext,
   useOrchestration,
@@ -197,12 +195,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     const initialStyles = createMemo(() => {
       return getInitialStyles(resolvedMotionOptions, parent);
-    });
-
-    onMount(() => {
-      // Skip the first run - register() already schedules initial measurement.
-      // We DO need this initial schedule, but NOT for reactivity changes.
-      layoutManager.scheduleUpdate();
     });
 
     // Register this component as a child with parent's orchestration

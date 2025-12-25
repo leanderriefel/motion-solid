@@ -14,3 +14,25 @@ bun add motion-solid
 ```
 
 Check out the [Demos](/docs/demos) to see what's possible.
+
+## Layout transitions
+
+Layout animations are batch-driven. Wrap updates in `layoutTransition` or
+`useLayoutTransition` to animate layout changes. Omit `targets` to batch all
+layout-enabled elements. For more, see [Layout Transitions](/docs/layout-transitions).
+
+```tsx
+import { layoutTransition, useLayoutTransition } from "motion-solid";
+
+layoutTransition(() => setOpen((open) => !open));
+layoutTransition([panelRef, listRef], () => setTick((t) => t + 1));
+
+const transition = useLayoutTransition();
+const multi = useLayoutTransition(() => [panelRef, listRef]);
+
+<button onClick={() => transition(() => setOpen((open) => !open))} />;
+<button onClick={() => multi(() => setTick((t) => t + 1))} />;
+```
+
+External layout changes (scroll, resize, fonts, images) do not animate unless
+wrapped in a batch.

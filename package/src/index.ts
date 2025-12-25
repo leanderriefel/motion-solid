@@ -20,7 +20,7 @@ export {
   type PresenceContextValue,
   motion,
   type MotionProxy,
-} from "./component/index.tsx";
+} from "./component/index";
 
 export { useAnimationState } from "./animation";
 
@@ -61,4 +61,15 @@ export { createMotionState } from "./state";
 
 export { useGestures, createDragControls, type DragControls } from "./gestures";
 
-export { useReducedMotion } from "./hooks";
+export { useReducedMotion, useLayoutTransition } from "./hooks";
+
+export {
+  layoutTransition,
+  type LayoutTransitionOptions,
+  type LayoutTransitionScope,
+  type LayoutTransitionTarget,
+  type LayoutTransitionTargets,
+} from "./layout/layout-manager";
+
+// Re-export useful types from motion-dom
+export type { Variant, Variants, Transition } from "motion-dom";

@@ -70,7 +70,6 @@ export const motionKeys: readonly (keyof MotionOptions)[] = [
   // layout
   "layout",
   "layoutId",
-  "layoutDependency",
   "layoutScroll",
   "layoutRoot",
   "layoutCrossfade",

@@ -1,6 +1,5 @@
-import type { Variants } from "motion-dom";
 import { For, createSignal } from "solid-js";
-import { motion } from "motion-solid";
+import { motion, type Variants } from "motion-solid";
 import { Animation } from "./animation";
 import source from "./scroll-animation.tsx?raw";
 

@@ -1,4 +1,4 @@
-import { motion } from "motion-solid";
+import { layoutTransition, motion } from "motion-solid";
 import { createSignal, For, Show } from "solid-js";
 import { Animation } from "./animation";
 import { cn } from "../../utils/cn";
@@ -25,7 +25,9 @@ export const LayoutUnderlineAnimation = () => {
                     "bg-primary/5": selected() === index(),
                   },
                 )}
-                onClick={() => setSelected(index())}
+                onClick={() =>
+                  layoutTransition("underline", () => setSelected(index()))
+                }
               >
                 {emoji} {name}
                 <Show when={selected() === index()}>

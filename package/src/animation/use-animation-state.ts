@@ -468,7 +468,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     layoutCrossfade: options.layoutCrossfade,
     layoutScroll: options.layoutScroll,
     layoutRoot: options.layoutRoot,
-    layoutDependency: options.layoutDependency,
     transition: options.transition as Transition | undefined,
     onBeforeLayoutMeasure: options.onBeforeLayoutMeasure,
     onLayoutMeasure: options.onLayoutMeasure,
@@ -505,36 +504,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     if (!enabled || !node) return;
 
     layoutManager.updateNodeOptions(node, nextOptions);
-    // We DON'T schedule a layout pass here for option changes.
-    // Let MutationObserver handle the actual style/class mutations on the DOM.
-    // This avoids double-flushing when both the effect and MutationObserver fire.
-  });
-
-  let hadLayoutDependency = false;
-
-  createEffect(() => {
-    const enabled = layoutEnabled();
-    const layoutDependency = options.layoutDependency;
-
-    if (!enabled || !layoutDependency || layoutDependency.length === 0) {
-      hadLayoutDependency = false;
-      return;
-    }
-
-    for (const dependency of layoutDependency) {
-      dependency();
-    }
-
-    const node = layoutNode;
-    if (!node) return;
-
-    // Don't animate on first run. This is the baseline measurement.
-    if (!hadLayoutDependency) {
-      hadLayoutDependency = true;
-      return;
-    }
-
-    layoutManager.invalidateLayoutDependency(node);
+    // Layout measurements are driven by layoutTransition batches.
   });
 
   const running = new Map<

@@ -6,7 +6,7 @@ import type {
   ValueTransition,
 } from "motion-dom";
 import type { Axis, AxisDelta, Box, Delta } from "motion-utils";
-import type { Accessor } from "solid-js";
+import type { MotionElement } from "../types";
 import { startMotionValueAnimation } from "../animation/motion-value";
 import { getTransitionForKey } from "../animation/transition-utils";
 
@@ -15,6 +15,20 @@ export type LayoutAnimationType =
   | "position"
   | "size"
   | "preserve-aspect";
+
+export type LayoutTransitionScope = "descendants";
+
+export type LayoutTransitionTarget = MotionElement | string;
+
+export type LayoutTransitionTargets =
+  | LayoutTransitionTarget
+  | LayoutTransitionTarget[];
+
+export type LayoutTransitionOptions = {
+  scope?: LayoutTransitionScope;
+};
+
+type LayoutTransitionUpdate = () => void;
 
 type ProjectionUpdate = {
   transform?: string | null;
@@ -39,17 +53,7 @@ type LayoutNodeOptions = LayoutCallbacks & {
   layoutCrossfade?: boolean;
   layoutScroll?: boolean;
   layoutRoot?: boolean;
-  layoutDependency?: Accessor<any>[];
   transition?: Transition;
-};
-
-const hasLayoutDependency = (
-  dependency: LayoutNodeOptions["layoutDependency"],
-): boolean => Array.isArray(dependency) && dependency.length > 0;
-
-const scrollListenerOptions: AddEventListenerOptions = {
-  capture: true,
-  passive: true,
 };
 
 type LayoutNode = {
@@ -89,6 +93,19 @@ type LayoutNode = {
 
   stop: () => void;
   destroy: () => void;
+};
+
+type LayoutTransitionTargetDescriptor =
+  | { type: "element"; element: MotionElement }
+  | { type: "layoutId"; layoutId: string };
+
+type LayoutTransitionSnapshot = {
+  targets: LayoutTransitionTargetDescriptor[];
+  scope: LayoutTransitionScope;
+  includeAll: boolean;
+  nodes: LayoutNode[];
+  beforeBoxes: Map<LayoutNode, Box>;
+  visualSnapshots: Map<LayoutNode, Box | null>;
 };
 
 const DEFAULT_LAYOUT_TRANSITION: ValueTransition = {
@@ -138,6 +155,29 @@ const boxEquals = (a: Box, b: Box, threshold = 0.5): boolean => {
     Math.abs(a.x.max - b.x.max) <= threshold &&
     Math.abs(a.y.min - b.y.min) <= threshold &&
     Math.abs(a.y.max - b.y.max) <= threshold
+  );
+};
+
+const formatLayoutTarget = (
+  target: LayoutTransitionTargetDescriptor,
+): string => {
+  if (target.type === "layoutId") {
+    return `layoutId "${target.layoutId}"`;
+  }
+
+  return "element ref";
+};
+
+const assertLayoutTarget = (
+  target: LayoutTransitionTargetDescriptor,
+  node: LayoutNode | null,
+): LayoutNode => {
+  if (node) return node;
+
+  throw new Error(
+    `[motion-solid] layoutTransition target must reference an element with layout or layoutId. Could not resolve ${formatLayoutTarget(
+      target,
+    )}.`,
   );
 };
 
@@ -301,137 +341,6 @@ const safeInvert = (value: number): number => {
   return 1 / value;
 };
 
-/**
- * Style properties that can affect layout measurements/position.
- *
- * We use this to decide whether a `style` attribute mutation should trigger
- * a layout pass. This avoids re-measuring on transform/opacity animations.
- */
-const LAYOUT_AFFECTING_STYLE_PROPERTIES = new Set<string>([
-  "width",
-  "height",
-  "min-width",
-  "min-height",
-  "max-width",
-  "max-height",
-  "margin",
-  "margin-top",
-  "margin-right",
-  "margin-bottom",
-  "margin-left",
-  "padding",
-  "padding-top",
-  "padding-right",
-  "padding-bottom",
-  "padding-left",
-  "top",
-  "right",
-  "bottom",
-  "left",
-  "inset",
-  "display",
-  "position",
-  "gap",
-  "row-gap",
-  "column-gap",
-  "flex",
-  "flex-grow",
-  "flex-shrink",
-  "flex-basis",
-  "flex-direction",
-  "flex-wrap",
-  "justify-content",
-  "align-items",
-  "align-content",
-  "place-content",
-  "place-items",
-  "grid",
-  "grid-template-columns",
-  "grid-template-rows",
-  "grid-column",
-  "grid-row",
-  "grid-column-start",
-  "grid-column-end",
-  "grid-row-start",
-  "grid-row-end",
-  "font-size",
-  "line-height",
-  "box-sizing",
-  "border",
-  "border-width",
-  "border-top-width",
-  "border-right-width",
-  "border-bottom-width",
-  "border-left-width",
-]);
-
-const extractLayoutAffectingStyles = (
-  styleText: string | null,
-): Map<string, string> => {
-  const styles = parseInlineStyle(styleText);
-  const affectingStyles = new Map<string, string>();
-
-  for (const [key, value] of styles.entries()) {
-    if (LAYOUT_AFFECTING_STYLE_PROPERTIES.has(key)) {
-      affectingStyles.set(key, value);
-    }
-  }
-
-  return affectingStyles;
-};
-
-const parseInlineStyle = (styleText: string | null): Map<string, string> => {
-  const map = new Map<string, string>();
-  if (!styleText) return map;
-
-  for (const declaration of styleText.split(";")) {
-    const trimmed = declaration.trim();
-    if (!trimmed) continue;
-
-    const colonIndex = trimmed.indexOf(":");
-    if (colonIndex === -1) continue;
-
-    const prop = trimmed.slice(0, colonIndex).trim().toLowerCase();
-    const value = trimmed.slice(colonIndex + 1).trim();
-    if (!prop) continue;
-
-    map.set(prop, value);
-  }
-
-  return map;
-};
-
-const layoutStyleCache = new WeakMap<Element, Map<string, string>>();
-
-const hasLayoutAffectingStyleChange = (
-  oldStyle: string | null,
-  element: Element,
-): boolean => {
-  const newStyle = element.getAttribute("style");
-
-  const newLayout = extractLayoutAffectingStyles(newStyle);
-  const oldLayout =
-    oldStyle !== null
-      ? extractLayoutAffectingStyles(oldStyle)
-      : (layoutStyleCache.get(element) ?? new Map<string, string>());
-
-  const keys = new Set<string>();
-  for (const key of oldLayout.keys()) keys.add(key);
-  for (const key of newLayout.keys()) keys.add(key);
-
-  let changed = false;
-  for (const key of keys) {
-    if (oldLayout.get(key) === newLayout.get(key)) continue;
-    changed = true;
-    break;
-  }
-
-  // Cache the latest layout-affecting inline styles.
-  layoutStyleCache.set(element, newLayout);
-
-  return changed;
-};
-
 type AccumulatedTransform = {
   translateX: number;
   translateY: number;
@@ -472,21 +381,19 @@ const getNodeCurrentTransform = (
 const getAccumulatedParentTransform = (
   node: LayoutNode,
 ): AccumulatedTransform => {
-  const result: AccumulatedTransform = {
-    translateX: 0,
-    translateY: 0,
-    scaleX: 1,
-    scaleY: 1,
-    originX: 0,
-    originY: 0,
-  };
-
   const ancestors: LayoutNode[] = [];
   let current = node.parent;
   while (current) {
     ancestors.push(current);
     current = current.parent;
   }
+
+  let offsetX = 0;
+  let offsetY = 0;
+  let scaleX = 1;
+  let scaleY = 1;
+  let originX = 0;
+  let originY = 0;
 
   // Process from root to immediate parent
   for (let i = ancestors.length - 1; i >= 0; i--) {
@@ -503,35 +410,28 @@ const getAccumulatedParentTransform = (
     //         = (B.scale * A.scale) * P + (B.scale * A.offset + B.offset)
     //
     // where offset = (1-scale)*origin + translate
-
     const ancestorOffsetX =
       (1 - transform.scaleX) * origin.x + transform.translateX;
     const ancestorOffsetY =
       (1 - transform.scaleY) * origin.y + transform.translateY;
 
-    // New accumulated offset = newScale * oldOffset + newOffset
-    const newOffsetX =
-      transform.scaleX *
-        (result.scaleX * 0 +
-          (result.scaleX - 1) * result.originX +
-          result.translateX) +
-      ancestorOffsetX;
-    const newOffsetY =
-      transform.scaleY *
-        (result.scaleY * 0 +
-          (result.scaleY - 1) * result.originY +
-          result.translateY) +
-      ancestorOffsetY;
+    offsetX = transform.scaleX * offsetX + ancestorOffsetX;
+    offsetY = transform.scaleY * offsetY + ancestorOffsetY;
 
-    result.scaleX *= transform.scaleX;
-    result.scaleY *= transform.scaleY;
-    result.translateX = newOffsetX - (result.scaleX - 1) * origin.x;
-    result.translateY = newOffsetY - (result.scaleY - 1) * origin.y;
-    result.originX = origin.x;
-    result.originY = origin.y;
+    scaleX *= transform.scaleX;
+    scaleY *= transform.scaleY;
+    originX = origin.x;
+    originY = origin.y;
   }
 
-  return result;
+  return {
+    translateX: offsetX - (1 - scaleX) * originX,
+    translateY: offsetY - (1 - scaleY) * originY,
+    scaleX,
+    scaleY,
+    originX,
+    originY,
+  };
 };
 
 const applyTransformToPoint = (
@@ -631,19 +531,34 @@ const buildNodeProjectionTransform = (node: LayoutNode): string | null => {
  * Measure the page box of an element, accounting for scroll offsets.
  * If scrollContainers is provided, their scroll positions are factored in.
  */
+const isFixedPosition = (element: Element): boolean => {
+  if (typeof window === "undefined") return false;
+
+  let current: Element | null = element;
+  while (current) {
+    if (window.getComputedStyle(current).position === "fixed") {
+      return true;
+    }
+    current = current.parentElement;
+  }
+
+  return false;
+};
+
 const measurePageBox = (
   element: Element,
   scrollContainers?: Set<Element>,
 ): Box => {
   const rect = element.getBoundingClientRect();
-  const scrollX = typeof window === "undefined" ? 0 : window.scrollX;
-  const scrollY = typeof window === "undefined" ? 0 : window.scrollY;
+  const isFixed = isFixedPosition(element);
+  const scrollX = typeof window === "undefined" || isFixed ? 0 : window.scrollX;
+  const scrollY = typeof window === "undefined" || isFixed ? 0 : window.scrollY;
 
   let extraScrollX = 0;
   let extraScrollY = 0;
 
   // Account for scroll offsets in ancestor scroll containers marked with layoutScroll
-  if (scrollContainers) {
+  if (!isFixed && scrollContainers) {
     for (const container of scrollContainers) {
       // Check if the element is a descendant of this container
       if (container.contains(element)) {
@@ -819,6 +734,10 @@ class LayoutIdStack {
     }
   }
 
+  getLead(): LayoutNode | null {
+    return this.lead;
+  }
+
   isEmpty(): boolean {
     return this.members.size === 0;
   }
@@ -833,23 +752,6 @@ class LayoutManager {
   private nodeByElement = new WeakMap<Element, LayoutNode>();
   private stacks = new Map<string, LayoutIdStack>();
 
-  private dependencyInvalidatedNodes = new Set<LayoutNode>();
-
-  private scheduled = false;
-  private pendingUpdate = false;
-  private updateFrameId: number | null = null;
-  private isFlushing = false;
-  private suppressAnimations = false;
-  private resizeListener: (() => void) | null = null;
-  private resizeFrameId: number | null = null;
-  private resizeFrameCountdown = 0;
-  private scrollListener: (() => void) | null = null;
-  private scrollFrameId: number | null = null;
-  private scrollTargets = new Set<Element>();
-
-  private mutationObserver: MutationObserver | null = null;
-  private resizeObserver: ResizeObserver | null = null;
-
   register(node: LayoutNode): void {
     this.nodes.add(node);
     this.nodeByElement.set(node.element, node);
@@ -857,12 +759,6 @@ class LayoutManager {
     if (node.options.layoutId) {
       this.getStack(node.options.layoutId).add(node);
     }
-
-    this.updateObservers();
-
-    this.resizeObserver?.observe(node.element);
-
-    this.scheduleUpdate();
   }
 
   unregister(node: LayoutNode): void {
@@ -877,10 +773,6 @@ class LayoutManager {
     }
     node.children.clear();
 
-    // Stop observing this element
-    this.resizeObserver?.unobserve(node.element);
-    this.dependencyInvalidatedNodes.delete(node);
-
     if (node.options.layoutId) {
       const stack = this.stacks.get(node.options.layoutId);
       stack?.remove(node);
@@ -889,10 +781,7 @@ class LayoutManager {
       }
     }
 
-    this.updateObservers();
-
     node.destroy();
-    this.scheduleUpdate();
   }
 
   updateNodeOptions(node: LayoutNode, options: LayoutNodeOptions): void {
@@ -911,11 +800,7 @@ class LayoutManager {
       if (options.layoutId) {
         this.getStack(options.layoutId).add(node);
       }
-
-      this.scheduleUpdate();
     }
-
-    this.updateObservers();
   }
 
   relegate(node: LayoutNode): void {
@@ -924,57 +809,6 @@ class LayoutManager {
 
     const stack = this.stacks.get(layoutId);
     stack?.relegate(node);
-    this.scheduleUpdate();
-  }
-
-  invalidateLayoutDependency(node: LayoutNode): void {
-    this.dependencyInvalidatedNodes.add(node);
-    this.scheduleUpdate();
-  }
-
-  scheduleUpdate(): void {
-    if (typeof window === "undefined") return;
-    if (this.isFlushing) {
-      this.pendingUpdate = true;
-      return;
-    }
-    if (this.scheduled) return;
-
-    this.scheduled = true;
-
-    const run = () => {
-      this.scheduled = false;
-      this.updateFrameId = null;
-
-      if (this.isFlushing) {
-        this.pendingUpdate = true;
-        return;
-      }
-
-      this.flush();
-    };
-
-    /**
-     * Throttle layout work to one flush per frame.
-     * This keeps rapid updates from creating long task backlogs.
-     */
-    if (typeof requestAnimationFrame === "function") {
-      this.updateFrameId = requestAnimationFrame(run);
-      return;
-    }
-
-    if (typeof queueMicrotask === "function") {
-      queueMicrotask(run);
-      return;
-    }
-
-    // Fallbacks (should rarely be hit in modern browsers)
-    if (typeof Promise !== "undefined") {
-      Promise.resolve().then(run);
-      return;
-    }
-
-    setTimeout(run, 0);
   }
 
   private rebuildTree(nodes: LayoutNode[]): void {
@@ -1004,130 +838,145 @@ class LayoutManager {
     }
   }
 
-  flush(): void {
-    if (typeof window === "undefined") return;
-    if (this.isFlushing) return;
+  snapshotBefore(
+    targets: LayoutTransitionTarget[] | null,
+    scope: LayoutTransitionScope,
+    includeAll = false,
+  ): LayoutTransitionSnapshot | null {
+    if (typeof window === "undefined") return null;
 
-    this.isFlushing = true;
+    const allNodes = Array.from(this.nodes);
+    const descriptors = includeAll
+      ? []
+      : this.normalizeTargetDescriptors(targets ?? []);
 
-    const dependencyInvalidatedNodes = this.dependencyInvalidatedNodes;
-    this.dependencyInvalidatedNodes = new Set();
+    if (!includeAll && descriptors.length === 0) return null;
 
-    const suppressAnimations = this.suppressAnimations;
-    this.suppressAnimations = false;
-
-    const finishFlush = () => {
-      this.isFlushing = false;
-
-      if (this.pendingUpdate) {
-        this.pendingUpdate = false;
-        this.scheduleUpdate();
-      }
-    };
-
-    const nodes = Array.from(this.nodes);
-
-    // Early exit if no nodes
-    if (nodes.length === 0) {
-      finishFlush();
-      return;
+    if (allNodes.length > 0) {
+      this.rebuildTree(allNodes);
+    } else if (includeAll) {
+      return null;
     }
 
-    // Only measure nodes that have layout enabled
-    const layoutNodes = nodes.filter(
-      (n) => n.options.layout || n.options.layoutId,
+    let nodes: LayoutNode[] = [];
+
+    if (includeAll) {
+      nodes = allNodes;
+    } else {
+      const nodesSet = new Set<LayoutNode>();
+      for (const descriptor of descriptors) {
+        const targetNode = assertLayoutTarget(
+          descriptor,
+          this.resolveTargetNode(descriptor),
+        );
+
+        const scoped = this.collectScopeNodes(targetNode, scope);
+        for (const node of scoped) {
+          nodesSet.add(node);
+        }
+      }
+
+      nodes = Array.from(nodesSet);
+    }
+
+    if (nodes.length === 0) return null;
+
+    this.sortByDepth(nodes);
+
+    const scrollContainers = this.collectScrollContainers();
+    const beforeBoxes = this.measureNodes(
+      nodes,
+      scrollContainers.size > 0 ? scrollContainers : undefined,
     );
 
-    // Early exit if no nodes need measuring
-    if (layoutNodes.length === 0) {
-      finishFlush();
-      return;
+    for (const node of nodes) {
+      const box = beforeBoxes.get(node);
+      if (!box || !isValidBox(box)) continue;
+      node.latestBox = box;
     }
 
-    // Only rebuild tree if we have work to do
-    this.rebuildTree(nodes);
-
-    const depthCache = new Map<LayoutNode, number>();
-    const getDepth = (node: LayoutNode): number => {
-      const cached = depthCache.get(node);
-      if (cached !== undefined) return cached;
-
-      const depth = node.parent ? getDepth(node.parent) + 1 : 0;
-      depthCache.set(node, depth);
-      return depth;
-    };
-
-    // Sort layout nodes by depth
-    layoutNodes.sort((a, b) => getDepth(a) - getDepth(b));
-
-    // Collect scroll containers (nodes marked with layoutScroll)
-    const scrollContainers = new Set<Element>();
-    for (const node of layoutNodes) {
-      if (node.options.layoutScroll) {
-        scrollContainers.add(node.element);
-      }
-    }
-
-    // Notify before measure using last snapshot.
-    for (const node of layoutNodes) {
-      const prevBox = node.prevBox;
-      if (prevBox) node.options.onBeforeLayoutMeasure?.(prevBox);
-    }
-
-    // Capture current visual positions BEFORE removing transforms
-    // This is critical for smooth animation interruption - we need to know
-    // where the element visually IS, not where it was going
     const visualSnapshots = new Map<LayoutNode, Box | null>();
-    for (const node of layoutNodes) {
-      // Only capture if an animation is in progress
+    for (const node of nodes) {
       if (node.delta) {
         visualSnapshots.set(node, getVisualBox(node));
       }
     }
 
-    // Only remove/restore transforms for nodes we're measuring
-    const previousTransforms: Array<[HTMLElement | SVGElement, string]> = [];
-    for (const node of layoutNodes) {
-      const el = node.element;
-      previousTransforms.push([el, el.style.transform]);
-      el.style.transform = "none";
+    return {
+      targets: descriptors,
+      scope,
+      includeAll,
+      nodes,
+      beforeBoxes,
+      visualSnapshots,
+    };
+  }
+
+  measureAfter(snapshot: LayoutTransitionSnapshot): void {
+    if (typeof window === "undefined") return;
+
+    const allNodes = Array.from(this.nodes);
+    if (allNodes.length === 0) return;
+
+    this.rebuildTree(allNodes);
+
+    let nodes: LayoutNode[] = [];
+
+    if (snapshot.includeAll) {
+      nodes = allNodes;
+    } else {
+      const merged = new Set<LayoutNode>();
+
+      for (const node of snapshot.nodes) {
+        if (this.nodes.has(node)) {
+          merged.add(node);
+        }
+      }
+
+      for (const target of snapshot.targets) {
+        const targetNode = this.resolveTargetNode(target);
+        if (!targetNode) continue;
+
+        const scoped = this.collectScopeNodes(targetNode, snapshot.scope);
+        for (const node of scoped) {
+          if (this.nodes.has(node)) {
+            merged.add(node);
+          }
+        }
+      }
+
+      nodes = Array.from(merged);
     }
 
-    // Force a single synchronous layout
-    const measurements = new Map<LayoutNode, Box>();
-    for (const node of layoutNodes) {
-      measurements.set(
-        node,
-        measurePageBox(
-          node.element,
-          scrollContainers.size > 0 ? scrollContainers : undefined,
-        ),
-      );
+    if (nodes.length === 0) return;
+
+    this.sortByDepth(nodes);
+
+    const scrollContainers = this.collectScrollContainers();
+
+    for (const node of nodes) {
+      const beforeBox = snapshot.beforeBoxes.get(node) ?? node.prevBox;
+      if (beforeBox) node.options.onBeforeLayoutMeasure?.(beforeBox);
     }
 
-    // Restore transforms in a single batch
-    for (const [el, transform] of previousTransforms) {
-      el.style.transform = transform;
-    }
+    const measurements = this.measureNodes(
+      nodes,
+      scrollContainers.size > 0 ? scrollContainers : undefined,
+    );
 
-    for (const node of layoutNodes) {
+    for (const node of nodes) {
       const box = measurements.get(node);
       if (!box) continue;
       if (!isValidBox(box)) continue;
 
-      // Use visual snapshot if animation was in progress, otherwise use prevBox
-      // This ensures smooth interruption - we animate from where the element
-      // visually IS, not where it was going
-      const visualSnapshot = visualSnapshots.get(node);
-      const animationStartBox = visualSnapshot ?? node.prevBox ?? null;
+      const visualSnapshot = snapshot.visualSnapshots.get(node);
+      const beforeBox = snapshot.beforeBoxes.get(node);
+      const animationStartBox =
+        visualSnapshot ?? beforeBox ?? node.prevBox ?? null;
+
       node.latestBox = box;
 
       node.options.onLayoutMeasure?.(box, animationStartBox ?? box);
-
-      if (suppressAnimations) {
-        node.prevBox = box;
-        continue;
-      }
 
       const layoutType = resolveLayoutType(
         node.options.layout,
@@ -1154,14 +1003,6 @@ class LayoutManager {
         continue;
       }
 
-      if (
-        hasLayoutDependency(node.options.layoutDependency) &&
-        !dependencyInvalidatedNodes.has(node)
-      ) {
-        node.prevBox = box;
-        continue;
-      }
-
       const delta = calcBoxDelta(box, animationStartBox);
       applyLayoutType(delta, layoutType, box, animationStartBox);
 
@@ -1178,20 +1019,117 @@ class LayoutManager {
       node.prevBox = box;
     }
 
-    // Sync subscriptions and apply scale-correction transforms only for layout nodes
-    for (const node of layoutNodes) {
+    for (const node of nodes) {
       node.syncScaleCorrectionSubscriptions();
       node.updateProjection(false);
     }
+  }
 
-    if (suppressAnimations && dependencyInvalidatedNodes.size > 0) {
-      for (const node of dependencyInvalidatedNodes) {
-        this.dependencyInvalidatedNodes.add(node);
+  private normalizeTargetDescriptors(
+    targets: LayoutTransitionTarget[],
+  ): LayoutTransitionTargetDescriptor[] {
+    const descriptors: LayoutTransitionTargetDescriptor[] = [];
+    const seenLayoutIds = new Set<string>();
+    const seenElements = new Set<MotionElement>();
+
+    for (const target of targets) {
+      if (typeof target === "string") {
+        if (!target) continue;
+        if (seenLayoutIds.has(target)) continue;
+        seenLayoutIds.add(target);
+        descriptors.push({ type: "layoutId", layoutId: target });
+        continue;
       }
-      this.pendingUpdate = true;
+
+      if (!target) continue;
+      if (seenElements.has(target)) continue;
+      seenElements.add(target);
+      descriptors.push({ type: "element", element: target });
     }
 
-    finishFlush();
+    return descriptors;
+  }
+
+  private resolveTargetNode(
+    target: LayoutTransitionTargetDescriptor,
+  ): LayoutNode | null {
+    if (target.type === "layoutId") {
+      return this.stacks.get(target.layoutId)?.getLead() ?? null;
+    }
+
+    return this.nodeByElement.get(target.element) ?? null;
+  }
+
+  private collectScopeNodes(
+    target: LayoutNode,
+    scope: LayoutTransitionScope,
+  ): LayoutNode[] {
+    const nodes: LayoutNode[] = [];
+    const stack: LayoutNode[] = [target];
+
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node) continue;
+      nodes.push(node);
+
+      if (scope === "descendants") {
+        for (const child of node.children) {
+          stack.push(child);
+        }
+      }
+    }
+
+    return nodes;
+  }
+
+  private sortByDepth(nodes: LayoutNode[]): void {
+    const depthCache = new Map<LayoutNode, number>();
+    const getDepth = (node: LayoutNode): number => {
+      const cached = depthCache.get(node);
+      if (cached !== undefined) return cached;
+
+      const depth = node.parent ? getDepth(node.parent) + 1 : 0;
+      depthCache.set(node, depth);
+      return depth;
+    };
+
+    nodes.sort((a, b) => getDepth(a) - getDepth(b));
+  }
+
+  private collectScrollContainers(): Set<Element> {
+    const scrollContainers = new Set<Element>();
+
+    for (const node of this.nodes) {
+      if (node.options.layoutScroll) {
+        scrollContainers.add(node.element);
+      }
+    }
+
+    return scrollContainers;
+  }
+
+  private measureNodes(
+    nodes: LayoutNode[],
+    scrollContainers?: Set<Element>,
+  ): Map<LayoutNode, Box> {
+    const previousTransforms: Array<[HTMLElement | SVGElement, string]> = [];
+
+    for (const node of nodes) {
+      const el = node.element;
+      previousTransforms.push([el, el.style.transform]);
+      el.style.transform = "none";
+    }
+
+    const measurements = new Map<LayoutNode, Box>();
+    for (const node of nodes) {
+      measurements.set(node, measurePageBox(node.element, scrollContainers));
+    }
+
+    for (const [el, transform] of previousTransforms) {
+      el.style.transform = transform;
+    }
+
+    return measurements;
   }
 
   private startLayoutAnimation(
@@ -1314,267 +1252,121 @@ class LayoutManager {
     this.stacks.set(id, stack);
     return stack;
   }
-
-  private shouldObserveLayoutChanges(): boolean {
-    return this.nodes.size > 0;
-  }
-
-  private hasAnyLayoutDependency(): boolean {
-    if (this.nodes.size === 0) return false;
-
-    for (const node of this.nodes) {
-      if (hasLayoutDependency(node.options.layoutDependency)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private collectScrollTargets(): Set<Element> {
-    const targets = new Set<Element>();
-
-    for (const node of this.nodes) {
-      if (node.options.layoutScroll) {
-        targets.add(node.element);
-      }
-    }
-
-    return targets;
-  }
-
-  private updateObservers(): void {
-    if (this.shouldObserveLayoutChanges()) {
-      this.ensureObservers();
-    } else {
-      this.cleanupObservers();
-    }
-
-    if (this.hasAnyLayoutDependency()) {
-      this.ensureResizeListener();
-      this.ensureScrollListener();
-      this.updateScrollTargets();
-    } else {
-      this.cleanupResizeListener();
-      this.cleanupScrollListener();
-      this.updateScrollTargets(new Set());
-    }
-  }
-
-  private ensureResizeListener(): void {
-    if (typeof window === "undefined") return;
-    if (this.resizeListener) return;
-
-    this.resizeListener = () => {
-      if (typeof requestAnimationFrame !== "function") {
-        this.suppressAnimations = true;
-        this.scheduleUpdate();
-        return;
-      }
-
-      this.resizeFrameCountdown = 3;
-
-      if (this.resizeFrameId !== null) return;
-
-      const tick = () => {
-        this.resizeFrameCountdown -= 1;
-
-        if (this.resizeFrameCountdown <= 0) {
-          this.resizeFrameId = null;
-          this.suppressAnimations = true;
-          this.scheduleUpdate();
-          return;
-        }
-
-        this.resizeFrameId = requestAnimationFrame(tick);
-      };
-
-      this.resizeFrameId = requestAnimationFrame(tick);
-    };
-
-    window.addEventListener("resize", this.resizeListener);
-  }
-
-  private cleanupResizeListener(): void {
-    if (typeof window === "undefined") return;
-    if (this.resizeListener) {
-      window.removeEventListener("resize", this.resizeListener);
-      this.resizeListener = null;
-    }
-    if (
-      this.resizeFrameId !== null &&
-      typeof cancelAnimationFrame === "function"
-    ) {
-      cancelAnimationFrame(this.resizeFrameId);
-    }
-    this.resizeFrameId = null;
-    this.resizeFrameCountdown = 0;
-  }
-
-  private ensureScrollListener(): void {
-    if (typeof window === "undefined") return;
-    if (this.scrollListener) return;
-
-    this.scrollListener = () => {
-      if (typeof requestAnimationFrame !== "function") {
-        this.suppressAnimations = true;
-        this.scheduleUpdate();
-        return;
-      }
-
-      if (this.scrollFrameId !== null) return;
-
-      this.scrollFrameId = requestAnimationFrame(() => {
-        this.scrollFrameId = null;
-        this.suppressAnimations = true;
-        this.scheduleUpdate();
-      });
-    };
-
-    window.addEventListener(
-      "scroll",
-      this.scrollListener,
-      scrollListenerOptions,
-    );
-  }
-
-  private updateScrollTargets(targets = this.collectScrollTargets()): void {
-    if (typeof window === "undefined") return;
-
-    if (!this.scrollListener) {
-      this.scrollTargets = new Set();
-      return;
-    }
-
-    const nextTargets = new Set(targets);
-
-    for (const target of this.scrollTargets) {
-      if (!nextTargets.has(target)) {
-        target.removeEventListener(
-          "scroll",
-          this.scrollListener,
-          scrollListenerOptions,
-        );
-      }
-    }
-
-    for (const target of nextTargets) {
-      if (!this.scrollTargets.has(target)) {
-        target.addEventListener(
-          "scroll",
-          this.scrollListener,
-          scrollListenerOptions,
-        );
-      }
-    }
-
-    this.scrollTargets = nextTargets;
-  }
-
-  private cleanupScrollListener(): void {
-    if (typeof window === "undefined") return;
-    if (this.scrollListener) {
-      window.removeEventListener(
-        "scroll",
-        this.scrollListener,
-        scrollListenerOptions,
-      );
-      for (const target of this.scrollTargets) {
-        target.removeEventListener(
-          "scroll",
-          this.scrollListener,
-          scrollListenerOptions,
-        );
-      }
-      this.scrollTargets.clear();
-      this.scrollListener = null;
-    }
-    if (
-      this.scrollFrameId !== null &&
-      typeof cancelAnimationFrame === "function"
-    ) {
-      cancelAnimationFrame(this.scrollFrameId);
-    }
-    this.scrollFrameId = null;
-  }
-
-  private ensureObservers(): void {
-    if (typeof window === "undefined") return;
-
-    // Create MutationObserver to approximate React re-render invalidation.
-    // In Solid, parent updates don't re-run children, so we listen to DOM mutations
-    // and schedule a layout pass.
-    if (!this.mutationObserver && typeof MutationObserver !== "undefined") {
-      if (typeof document === "undefined") return;
-      const root = document.documentElement;
-      if (!root) return;
-
-      this.mutationObserver = new MutationObserver((mutations) => {
-        // Ignore mutations triggered while we're actively flushing.
-        if (this.isFlushing) return;
-
-        for (const mutation of mutations) {
-          // Special-case style mutations on Motion elements.
-          // Motion updates `transform`/`opacity` every frame, which shouldn't
-          // trigger layout measurement. But we DO need to re-measure when
-          // layout-affecting inline styles change (width/height/etc).
-          if (
-            mutation.type === "attributes" &&
-            mutation.attributeName === "style" &&
-            mutation.target instanceof Element &&
-            (mutation.target as any).__motionSolid
-          ) {
-            const oldStyle = (mutation as MutationRecord).oldValue ?? null;
-            if (!hasLayoutAffectingStyleChange(oldStyle, mutation.target)) {
-              continue;
-            }
-          }
-
-          this.scheduleUpdate();
-          return;
-        }
-      });
-
-      this.mutationObserver.observe(root, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        attributeOldValue: true,
-        characterData: true,
-        characterDataOldValue: true,
-      });
-    }
-
-    this.ensureResizeObserver();
-  }
-
-  private ensureResizeObserver(): void {
-    if (typeof ResizeObserver === "undefined") return;
-    if (this.resizeObserver) return;
-
-    this.resizeObserver = new ResizeObserver(() => {
-      if (this.isFlushing) return;
-      if (this.hasAnyLayoutDependency()) {
-        this.suppressAnimations = true;
-      }
-      this.scheduleUpdate();
-    });
-
-    for (const node of this.nodes) {
-      this.resizeObserver.observe(node.element);
-    }
-  }
-
-  private cleanupObservers(): void {
-    this.mutationObserver?.disconnect();
-    this.mutationObserver = null;
-
-    this.resizeObserver?.disconnect();
-    this.resizeObserver = null;
-  }
 }
 
 export const layoutManager = new LayoutManager();
+
+const resolveLayoutTransitionScope = (
+  options?: LayoutTransitionOptions,
+): LayoutTransitionScope => options?.scope ?? "descendants";
+
+const normalizeLayoutTransitionTargets = (
+  targets: LayoutTransitionTargets | null | undefined,
+): LayoutTransitionTarget[] => {
+  if (!targets) return [];
+
+  const list = Array.isArray(targets) ? targets : [targets];
+  const normalized: LayoutTransitionTarget[] = [];
+  const seenLayoutIds = new Set<string>();
+  const seenElements = new Set<MotionElement>();
+
+  for (const target of list) {
+    if (target == null) continue;
+
+    if (typeof target === "string") {
+      if (!target) continue;
+      if (seenLayoutIds.has(target)) continue;
+      seenLayoutIds.add(target);
+      normalized.push(target);
+      continue;
+    }
+
+    if (seenElements.has(target)) continue;
+    seenElements.add(target);
+    normalized.push(target);
+  }
+
+  return normalized;
+};
+
+const schedulePostLayoutMeasure = (work: () => void): void => {
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(work);
+    return;
+  }
+
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => work());
+    return;
+  }
+
+  if (typeof Promise !== "undefined") {
+    Promise.resolve().then(work);
+    return;
+  }
+
+  setTimeout(work, 0);
+};
+
+export function layoutTransition(
+  update: LayoutTransitionUpdate,
+  options?: LayoutTransitionOptions,
+): void;
+export function layoutTransition(
+  targets: LayoutTransitionTargets | null | undefined,
+  update: LayoutTransitionUpdate,
+  options?: LayoutTransitionOptions,
+): void;
+export function layoutTransition(
+  targetsOrUpdate:
+    | LayoutTransitionTargets
+    | LayoutTransitionUpdate
+    | null
+    | undefined,
+  updateOrOptions?: LayoutTransitionUpdate | LayoutTransitionOptions,
+  options?: LayoutTransitionOptions,
+): void {
+  let targets: LayoutTransitionTargets | null | undefined;
+  let update: LayoutTransitionUpdate;
+  let resolvedOptions: LayoutTransitionOptions | undefined;
+  const hasTargetsArgument = typeof targetsOrUpdate !== "function";
+
+  if (typeof targetsOrUpdate === "function") {
+    update = targetsOrUpdate;
+    resolvedOptions = updateOrOptions as LayoutTransitionOptions | undefined;
+    targets = undefined;
+  } else {
+    targets = targetsOrUpdate;
+    update = updateOrOptions as LayoutTransitionUpdate;
+    resolvedOptions = options;
+  }
+
+  if (typeof update !== "function") {
+    throw new Error(
+      "[motion-solid] layoutTransition requires an update function.",
+    );
+  }
+
+  const normalizedTargets = normalizeLayoutTransitionTargets(targets);
+  if (hasTargetsArgument && normalizedTargets.length === 0) {
+    throw new Error(
+      "[motion-solid] layoutTransition targets must reference elements with layout or layoutId. Omit targets to batch all layout-enabled elements.",
+    );
+  }
+  const hasExplicitTargets = normalizedTargets.length > 0;
+
+  const snapshot = layoutManager.snapshotBefore(
+    hasExplicitTargets ? normalizedTargets : null,
+    resolveLayoutTransitionScope(resolvedOptions),
+    !hasExplicitTargets,
+  );
+
+  update();
+
+  if (!snapshot) return;
+
+  schedulePostLayoutMeasure(() => layoutManager.measureAfter(snapshot));
+}
 
 export const createLayoutNode = (args: {
   element: HTMLElement | SVGElement;

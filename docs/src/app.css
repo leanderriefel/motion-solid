@@ -133,20 +133,28 @@
   }
 }
 
-/* Code */
-code {
-  @apply font-mono text-[13px] bg-muted text-primary rounded px-1.5 py-0.5;
-}
-
-pre {
-  @apply bg-card p-4 rounded-lg overflow-x-auto border;
-}
-
-pre code {
-  @apply bg-transparent p-0 text-foreground;
-}
-
 /* Docs content prose */
 .docs-content:not(.animation, .animation *) {
   @apply prose-sm lg:prose prose-neutral dark:prose-invert;
+
+  code {
+    @apply font-mono rounded;
+  }
+
+  code::before,
+  code::after {
+    content: none !important;
+  }
+
+  a {
+    @apply underline text-primary underline-offset-2;
+  }
+
+  ul {
+    @apply list-disc list-inside;
+  }
+
+  ol {
+    @apply list-decimal list-inside;
+  }
 }

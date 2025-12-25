@@ -37,6 +37,7 @@ const docsNav = [
   {
     title: "Animation",
     items: [
+      { href: "/docs/layout-transitions", label: "Layout Transitions" },
       { href: "/docs/transitions", label: "Transitions" },
       { href: "/docs/gestures", label: "Gestures" },
       { href: "/docs/variants", label: "Variants" },
@@ -57,7 +58,7 @@ export default function Layout(props: ParentProps) {
     }
     if (typeof document === "undefined") return;
 
-    const raf = requestAnimationFrame(() => {
+    const updateToc = () => {
       const root = document.querySelector(".docs-content");
       if (!root) {
         setTocItems([]);
@@ -70,7 +71,7 @@ export default function Layout(props: ParentProps) {
           const text = heading.textContent?.trim() ?? "";
           if (!text) return null;
           const id = heading.id || slugify(text);
-          heading.id = id;
+          if (!heading.id) heading.id = id;
           return {
             id,
             text,
@@ -80,9 +81,23 @@ export default function Layout(props: ParentProps) {
         .filter((item): item is TocItem => item !== null);
 
       setTocItems(items);
-    });
+    };
 
-    onCleanup(() => cancelAnimationFrame(raf));
+    // Initial check
+    const raf = requestAnimationFrame(updateToc);
+
+    // Watch for content changes (MDX loading, etc.)
+    const root = document.querySelector(".docs-content");
+    let observer: MutationObserver | undefined;
+    if (root) {
+      observer = new MutationObserver(updateToc);
+      observer.observe(root, { childList: true, subtree: true });
+    }
+
+    onCleanup(() => {
+      cancelAnimationFrame(raf);
+      observer?.disconnect();
+    });
   });
 
   return (
