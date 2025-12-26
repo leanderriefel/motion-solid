@@ -1,34 +1,26 @@
 import { createSignal, For } from "solid-js";
-import { motion, useLayoutTransition } from "motion-solid";
+import { motion } from "motion-solid";
 import source from "./list-items.tsx?raw";
 import { Animation } from "../demos/animation";
 
 export const ListItems = () => {
   const [items, setItems] = createSignal(["Task 1", "Task 2", "Task 3"]);
-  let container: HTMLDivElement | undefined;
-  const transition = useLayoutTransition(() => container, {
-    scope: "descendants",
-  });
 
-  const add = () =>
-    transition(() => {
-      const nextId = items().length + 1;
-      setItems((v) => [...v, `Task ${nextId}`]);
-    });
+  const add = () => {
+    const nextId = items().length + 1;
+    setItems((v) => [...v, `Task ${nextId}`]);
+  };
 
-  const remove = (idx: number) =>
-    transition(() => {
-      setItems((v) => v.filter((_, i) => i !== idx));
-    });
+  const remove = (idx: number) => {
+    setItems((v) => v.filter((_, i) => i !== idx));
+  };
 
   return (
     <Animation name="List Items" source={source}>
       <div class="flex flex-col gap-3">
         <motion.div
-          ref={(el) => {
-            container = el;
-          }}
           layout
+          layoutDependencies={[items]}
           class="flex flex-col gap-2"
         >
           <For each={items()}>

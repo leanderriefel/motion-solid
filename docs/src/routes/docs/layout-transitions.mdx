@@ -5,51 +5,22 @@ import { SharedElement } from "~/components/layout-transitions/shared-element";
 
 # Layout Transitions
 
-Layout animations smoothly animate size and position changes. Wrap your state updates in a batch and elements with `layout` or `layoutId` will animate.
+Layout animations smoothly animate size and position changes. Elements with `layout` or `layoutId` automatically snapshot before DOM updates and animate after.
 
 ## Quick Start
 
-In Motion for React and Vue, the `layout` prop can detect and animate changes automatically. In Solid, because signals update the DOM synchronously, we use a transition batch to measure and animate layout changes. By wrapping your state updates, you ensure high-performance animations that avoid the overhead and potential glitches of `MutationObserver` or `ResizeObserver`.
+In Solid, signals update the DOM synchronously. Motion runs a pre-render snapshot when layout-affecting props or `layoutDependencies` change, then measures after the DOM update to drive layout animations.
 
-## API
+## Layout Dependencies
 
-### `layoutTransition(targets?, update, options?)`
-
-Imperative API for batching layout changes. Omit `targets` to capture all layout-enabled elements.
+Use `layoutDependencies` to opt into layout snapshots for reactive values that don't flow through props (resources, stores, external state). Pass an array of accessors.
 
 ```tsx
-layoutTransition(() => setSignal(newValue));
-layoutTransition(target, () => setSignal(newValue));
-```
+const [data] = createResource(fetcher);
 
-**Parameters:**
-
-- **`targets`**: Optional element ref, `layoutId` string, or array of both
-- **`update`**: Function that updates state
-- **`options`**: Optional config (currently supports `scope`)
-
-### `useLayoutTransition(targets?, options?) => (update) => void`
-
-Hook-based API that returns a batch function. Omit `targets` to batch globally.
-
-```tsx
-const transition = useLayoutTransition();
-transition(() => setSignal(newValue));
-```
-
-**Parameters:**
-
-- **`targets`**: Optional element ref, `layoutId` string, or array of both (can be reactive)
-- **`options`**: Optional config with `scope?: "descendants"`
-
-## Options
-
-### `scope: "descendants"`
-
-When set, the target and all its layout descendants are animated together. This is useful for animating a container and its children as a unit.
-
-```tsx
-useLayoutTransition(() => container, { scope: "descendants" });
+<motion.div layout layoutDependencies={[data]}>
+  {data()}
+</motion.div>;
 ```
 
 ## Layout Props
@@ -89,7 +60,5 @@ Create a shared element that can move between different DOM positions. Elements 
 ## Notes
 
 - Elements must opt into layout with `layout` or `layoutId`
-- Omit `targets` to batch all layout-enabled elements; pass targets to limit scope
-- Explicit targets must reference elements with `layout` or `layoutId`
-- Layout animations only run inside a batch (`layoutTransition` or `useLayoutTransition`)
-- External changes (scroll, resize, fonts) don't animate unless you trigger a batch
+- Layout measurements are scoped to the element and its layout-enabled descendants
+- External changes (scroll, resize, fonts) won't animate unless a dependency triggers a snapshot

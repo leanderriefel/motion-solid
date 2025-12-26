@@ -16,19 +16,9 @@ export type LayoutAnimationType =
   | "size"
   | "preserve-aspect";
 
-export type LayoutTransitionScope = "descendants";
+type LayoutTransitionScope = "descendants";
 
-export type LayoutTransitionTarget = MotionElement | string;
-
-export type LayoutTransitionTargets =
-  | LayoutTransitionTarget
-  | LayoutTransitionTarget[];
-
-export type LayoutTransitionOptions = {
-  scope?: LayoutTransitionScope;
-};
-
-type LayoutTransitionUpdate = () => void;
+type LayoutTransitionTarget = MotionElement | string;
 
 type ProjectionUpdate = {
   transform?: string | null;
@@ -175,7 +165,7 @@ const assertLayoutTarget = (
   if (node) return node;
 
   throw new Error(
-    `[motion-solid] layoutTransition target must reference an element with layout or layoutId. Could not resolve ${formatLayoutTarget(
+    `[motion-solid] layout target must reference an element with layout or layoutId property set. Could not resolve ${formatLayoutTarget(
       target,
     )}.`,
   );
@@ -758,6 +748,7 @@ class LayoutManager {
 
     if (node.options.layoutId) {
       this.getStack(node.options.layoutId).add(node);
+      this.scheduleLayoutIdRemeasure(node.options.layoutId);
     }
   }
 
@@ -910,6 +901,121 @@ class LayoutManager {
       beforeBoxes,
       visualSnapshots,
     };
+  }
+
+  snapshotSubtree(element: MotionElement): LayoutTransitionSnapshot | null {
+    if (typeof window === "undefined") return null;
+
+    const node = this.nodeByElement.get(element);
+    if (!node) return null;
+
+    const allNodes = Array.from(this.nodes);
+    if (allNodes.length === 0) return null;
+
+    this.rebuildTree(allNodes);
+
+    const nodes = this.collectScopeNodes(node, "descendants");
+    if (nodes.length === 0) return null;
+
+    this.sortByDepth(nodes);
+
+    const scrollContainers = this.collectScrollContainers();
+    const beforeBoxes = this.measureNodes(
+      nodes,
+      scrollContainers.size > 0 ? scrollContainers : undefined,
+    );
+
+    for (const subtreeNode of nodes) {
+      const box = beforeBoxes.get(subtreeNode);
+      if (!box || !isValidBox(box)) continue;
+      subtreeNode.latestBox = box;
+    }
+
+    const visualSnapshots = new Map<LayoutNode, Box | null>();
+    for (const subtreeNode of nodes) {
+      if (subtreeNode.delta) {
+        visualSnapshots.set(subtreeNode, getVisualBox(subtreeNode));
+      }
+    }
+
+    return {
+      targets: [{ type: "element", element }],
+      scope: "descendants",
+      includeAll: false,
+      nodes,
+      beforeBoxes,
+      visualSnapshots,
+    };
+  }
+
+  scheduleSubtreeMeasure(element: MotionElement): void {
+    const snapshot = this.snapshotSubtree(element);
+    if (!snapshot) return;
+    schedulePostLayoutMeasure(() => this.measureAfter(snapshot));
+  }
+
+  snapshotLayoutId(layoutId: string): LayoutTransitionSnapshot | null {
+    if (typeof window === "undefined") return null;
+
+    const targetNode = this.stacks.get(layoutId)?.getLead() ?? null;
+    if (!targetNode) return null;
+
+    const allNodes = Array.from(this.nodes);
+    if (allNodes.length === 0) return null;
+
+    this.rebuildTree(allNodes);
+
+    const nodes = this.collectScopeNodes(targetNode, "descendants");
+    if (nodes.length === 0) return null;
+
+    this.sortByDepth(nodes);
+
+    const scrollContainers = this.collectScrollContainers();
+    const beforeBoxes = this.measureNodes(
+      nodes,
+      scrollContainers.size > 0 ? scrollContainers : undefined,
+    );
+
+    for (const subtreeNode of nodes) {
+      const box = beforeBoxes.get(subtreeNode);
+      if (!box || !isValidBox(box)) continue;
+      subtreeNode.latestBox = box;
+    }
+
+    const visualSnapshots = new Map<LayoutNode, Box | null>();
+    for (const subtreeNode of nodes) {
+      if (subtreeNode.delta) {
+        visualSnapshots.set(subtreeNode, getVisualBox(subtreeNode));
+      }
+    }
+
+    return {
+      targets: [{ type: "layoutId", layoutId }],
+      scope: "descendants",
+      includeAll: false,
+      nodes,
+      beforeBoxes,
+      visualSnapshots,
+    };
+  }
+
+  scheduleLayoutIdMeasure(layoutId: string): void {
+    const snapshot = this.snapshotLayoutId(layoutId);
+    if (!snapshot) return;
+    schedulePostLayoutMeasure(() => this.measureAfter(snapshot));
+  }
+
+  scheduleLayoutIdRemeasure(layoutId: string): void {
+    const snapshot: LayoutTransitionSnapshot = {
+      targets: [{ type: "layoutId", layoutId }],
+      scope: "descendants",
+      includeAll: false,
+      nodes: [],
+      beforeBoxes: new Map(),
+      visualSnapshots: new Map(),
+    };
+
+    schedulePostLayoutMeasure(() => this.measureAfter(snapshot));
   }
 
   measureAfter(snapshot: LayoutTransitionSnapshot): void {
@@ -1256,39 +1362,6 @@ class LayoutManager {
 
 export const layoutManager = new LayoutManager();
 
-const resolveLayoutTransitionScope = (
-  options?: LayoutTransitionOptions,
-): LayoutTransitionScope => options?.scope ?? "descendants";
-
-const normalizeLayoutTransitionTargets = (
-  targets: LayoutTransitionTargets | null | undefined,
-): LayoutTransitionTarget[] => {
-  if (!targets) return [];
-
-  const list = Array.isArray(targets) ? targets : [targets];
-  const normalized: LayoutTransitionTarget[] = [];
-  const seenLayoutIds = new Set<string>();
-  const seenElements = new Set<MotionElement>();
-
-  for (const target of list) {
-    if (target == null) continue;
-
-    if (typeof target === "string") {
-      if (!target) continue;
-      if (seenLayoutIds.has(target)) continue;
-      seenLayoutIds.add(target);
-      normalized.push(target);
-      continue;
-    }
-
-    if (seenElements.has(target)) continue;
-    seenElements.add(target);
-    normalized.push(target);
-  }
-
-  return normalized;
-};
-
 const schedulePostLayoutMeasure = (work: () => void): void => {
   if (typeof queueMicrotask === "function") {
     queueMicrotask(work);
@@ -1307,66 +1380,6 @@ const schedulePostLayoutMeasure = (work: () => void): void => {
 
   setTimeout(work, 0);
 };
-
-export function layoutTransition(
-  update: LayoutTransitionUpdate,
-  options?: LayoutTransitionOptions,
-): void;
-export function layoutTransition(
-  targets: LayoutTransitionTargets | null | undefined,
-  update: LayoutTransitionUpdate,
-  options?: LayoutTransitionOptions,
-): void;
-export function layoutTransition(
-  targetsOrUpdate:
-    | LayoutTransitionTargets
-    | LayoutTransitionUpdate
-    | null
-    | undefined,
-  updateOrOptions?: LayoutTransitionUpdate | LayoutTransitionOptions,
-  options?: LayoutTransitionOptions,
-): void {
-  let targets: LayoutTransitionTargets | null | undefined;
-  let update: LayoutTransitionUpdate;
-  let resolvedOptions: LayoutTransitionOptions | undefined;
-  const hasTargetsArgument = typeof targetsOrUpdate !== "function";
-
-  if (typeof targetsOrUpdate === "function") {
-    update = targetsOrUpdate;
-    resolvedOptions = updateOrOptions as LayoutTransitionOptions | undefined;
-    targets = undefined;
-  } else {
-    targets = targetsOrUpdate;
-    update = updateOrOptions as LayoutTransitionUpdate;
-    resolvedOptions = options;
-  }
-
-  if (typeof update !== "function") {
-    throw new Error(
-      "[motion-solid] layoutTransition requires an update function.",
-    );
-  }
-
-  const normalizedTargets = normalizeLayoutTransitionTargets(targets);
-  if (hasTargetsArgument && normalizedTargets.length === 0) {
-    throw new Error(
-      "[motion-solid] layoutTransition targets must reference elements with layout or layoutId. Omit targets to batch all layout-enabled elements.",
-    );
-  }
-  const hasExplicitTargets = normalizedTargets.length > 0;
-
-  const snapshot = layoutManager.snapshotBefore(
-    hasExplicitTargets ? normalizedTargets : null,
-    resolveLayoutTransitionScope(resolvedOptions),
-    !hasExplicitTargets,
-  );
-
-  update();
-
-  if (!snapshot) return;
-
-  schedulePostLayoutMeasure(() => layoutManager.measureAfter(snapshot));
-}
 
 export const createLayoutNode = (args: {
   element: HTMLElement | SVGElement;

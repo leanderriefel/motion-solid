@@ -61,15 +61,7 @@ export { createMotionState } from "./state";
 
 export { useGestures, createDragControls, type DragControls } from "./gestures";
 
-export { useReducedMotion, useLayoutTransition } from "./hooks";
-
-export {
-  layoutTransition,
-  type LayoutTransitionOptions,
-  type LayoutTransitionScope,
-  type LayoutTransitionTarget,
-  type LayoutTransitionTargets,
-} from "./layout/layout-manager";
+export { useReducedMotion } from "./hooks";
 
 // Re-export useful types from motion-dom
 export type { Variant, Variants, Transition } from "motion-dom";

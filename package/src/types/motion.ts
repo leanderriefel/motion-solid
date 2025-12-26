@@ -1,3 +1,4 @@
+import type { Accessor } from "solid-js";
 import type {
   AnyResolvedKeyframe,
   MotionValue,
@@ -53,6 +54,7 @@ export type MotionOptions = Omit<
   custom?: unknown;
   dragControls?: unknown;
   viewport?: SolidViewportOptions;
+  layoutDependencies?: Accessor<unknown>[];
 };
 
 export interface MotionState {

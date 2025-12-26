@@ -504,7 +504,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     if (!enabled || !node) return;
 
     layoutManager.updateNodeOptions(node, nextOptions);
-    // Layout measurements are driven by layoutTransition batches.
+    // Layout measurements are scheduled by auto layout tracking.
   });
 
   const running = new Map<

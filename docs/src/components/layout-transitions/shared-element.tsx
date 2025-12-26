@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import { layoutTransition, motion } from "motion-solid";
+import { motion } from "motion-solid";
 import source from "./shared-element.tsx?raw";
 import { Animation } from "../demos/animation";
 
@@ -19,7 +19,11 @@ export const SharedElement = () => {
             <div class="text-xs uppercase tracking-wide text-muted-foreground">
               Source
             </div>
-            <motion.div layout class="flex flex-col gap-2">
+            <motion.div
+              layout
+              layoutDependencies={[selected]}
+              class="flex flex-col gap-2"
+            >
               <For each={items}>
                 {(item, index) => (
                   <Show when={selected() !== index()}>
@@ -28,11 +32,7 @@ export const SharedElement = () => {
                       layoutId={`item-${index()}`}
                       type="button"
                       class="w-full rounded-lg border border-border bg-card px-3 py-2 text-left text-sm"
-                      onClick={() =>
-                        layoutTransition(`item-${index()}`, () =>
-                          setSelected(index()),
-                        )
-                      }
+                      onClick={() => setSelected(index())}
                     >
                       {item}
                     </motion.button>
@@ -45,18 +45,18 @@ export const SharedElement = () => {
             <div class="text-xs uppercase tracking-wide text-muted-foreground">
               Selected
             </div>
-            <motion.div layout class="min-h-8 flex flex-col gap-2">
+            <motion.div
+              layout
+              layoutDependencies={[selected]}
+              class="min-h-8 flex flex-col gap-2"
+            >
               <Show when={selected() !== null}>
                 <motion.button
                   layout
                   layoutId={`item-${selected()}`}
                   type="button"
                   class="w-full rounded-lg border border-primary bg-primary/10 px-3 py-2 text-left text-sm text-primary"
-                  onClick={() =>
-                    layoutTransition(`item-${selected()}`, () =>
-                      setSelected(null),
-                    )
-                  }
+                  onClick={() => setSelected(null)}
                 >
                   {items[selected()!]}
                 </motion.button>

@@ -1,11 +1,9 @@
 import { useColorMode } from "@kobalte/core";
-import { motion, useLayoutTransition } from "motion-solid";
+import { motion } from "motion-solid";
 import { cn } from "~/utils/cn";
 
 export const ThemeSwitcher = () => {
   const { colorMode, setColorMode } = useColorMode();
-  let thumb: HTMLDivElement | undefined;
-  const transition = useLayoutTransition(() => thumb);
 
   return (
     <button
@@ -18,17 +16,11 @@ export const ThemeSwitcher = () => {
           "justify-end": colorMode() === "dark",
         },
       )}
-      onClick={() =>
-        transition(() =>
-          setColorMode(colorMode() === "light" ? "dark" : "light"),
-        )
-      }
+      onClick={() => setColorMode(colorMode() === "light" ? "dark" : "light")}
     >
       <motion.div
-        ref={(el) => {
-          thumb = el;
-        }}
         layout
+        layoutDependencies={[colorMode]}
         transition={{
           type: "spring",
           stiffness: 300,

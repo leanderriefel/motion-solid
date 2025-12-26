@@ -73,6 +73,7 @@ export const motionKeys: readonly (keyof MotionOptions)[] = [
   "layoutScroll",
   "layoutRoot",
   "layoutCrossfade",
+  "layoutDependencies",
   "data-framer-portal-id",
 
   // advanced

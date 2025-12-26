@@ -1,11 +1,6 @@
 import { A } from "@solidjs/router";
 import { createSignal, For, onCleanup, onMount } from "solid-js";
-import {
-  AnimatePresence,
-  motion,
-  type StaggerFunction,
-  useLayoutTransition,
-} from "motion-solid";
+import { AnimatePresence, motion, type StaggerFunction } from "motion-solid";
 import { AnimatedLogo } from "~/components/logo";
 import { BackgroundDots } from "~/components/background-dots";
 import { cn } from "~/utils/cn";
@@ -202,12 +197,10 @@ function PerformanceDemo() {
 
 export default function Home() {
   const [toggled, setToggled] = createSignal(false);
-  let toggleThumb: HTMLDivElement | undefined;
-  const toggleTransition = useLayoutTransition(() => toggleThumb);
 
   onMount(() => {
     const timer = setInterval(() => {
-      toggleTransition(() => setToggled((t) => !t));
+      setToggled((t) => !t);
     }, 2000);
     onCleanup(() => clearInterval(timer));
   });
@@ -324,10 +317,8 @@ export default function Home() {
               }}
             >
               <motion.div
-                ref={(el) => {
-                  toggleThumb = el;
-                }}
                 layout
+                layoutDependencies={[toggled]}
                 transition={{
                   type: "spring",
                   stiffness: 300,

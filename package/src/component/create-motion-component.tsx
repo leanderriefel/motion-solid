@@ -1,5 +1,6 @@
 import type { Component, ComponentProps } from "solid-js";
 import {
+  createComputed,
   createEffect,
   createMemo,
   createRenderEffect,
@@ -20,6 +21,7 @@ import type {
 import { createMotionState } from "../state";
 import { useAnimationState } from "../animation";
 import { useGestures, useDragGesture } from "../gestures";
+import { layoutManager } from "../layout/layout-manager";
 import { MotionStateContext, useMotionState } from "./context";
 import { useMotionConfig } from "./motion-config";
 import { motionKeys } from "./motion-keys";
@@ -369,6 +371,56 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       const initial = initialStyles();
       const existing = styleProps.style as Record<string, string> | undefined;
       return { ...(existing ?? {}), ...initial };
+    });
+
+    let didAutoLayoutSnapshot = false;
+
+    createComputed(() => {
+      const layoutEnabled =
+        Boolean(motionOptions.layout) || Boolean(motionOptions.layoutId);
+
+      if (!layoutEnabled) {
+        didAutoLayoutSnapshot = false;
+        return;
+      }
+
+      void motionOptions.layoutRoot;
+      void motionOptions.layoutScroll;
+      void motionOptions.layoutCrossfade;
+      void styleProps.style;
+      void (elementProps as Record<string, unknown>).class;
+      void (elementProps as Record<string, unknown>).classList;
+      void (elementProps as Record<string, unknown>).children;
+      void (elementProps as Record<string, unknown>).textContent;
+      void (elementProps as Record<string, unknown>).innerHTML;
+
+      const dependencies = motionOptions.layoutDependencies;
+      if (dependencies) {
+        for (const dependency of dependencies) {
+          if (typeof dependency === "function") {
+            dependency();
+          }
+        }
+      }
+
+      const element = state.element;
+      if (!element) {
+        didAutoLayoutSnapshot = false;
+        return;
+      }
+
+      if (!didAutoLayoutSnapshot) {
+        didAutoLayoutSnapshot = true;
+        return;
+      }
+
+      const layoutId = motionOptions.layoutId;
+      if (typeof layoutId === "string" && layoutId) {
+        layoutManager.scheduleLayoutIdMeasure(layoutId);
+        return;
+      }
+
+      layoutManager.scheduleSubtreeMeasure(element);
     });
 
     return (

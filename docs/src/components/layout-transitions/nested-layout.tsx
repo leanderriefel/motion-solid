@@ -1,31 +1,24 @@
 import { createSignal, For } from "solid-js";
-import { motion, useLayoutTransition } from "motion-solid";
+import { motion } from "motion-solid";
 import source from "./nested-layout.tsx?raw";
 import { Animation } from "../demos/animation";
 
 export const NestedLayout = () => {
   const [expanded, setExpanded] = createSignal(false);
   const [dense, setDense] = createSignal(false);
-  let container: HTMLDivElement | undefined;
-  const transition = useLayoutTransition(() => container, {
-    scope: "descendants",
-  });
 
-  const toggle = () =>
-    transition(() => {
-      setExpanded((v) => !v);
-      setDense((v) => !v);
-    });
+  const toggle = () => {
+    setExpanded((v) => !v);
+    setDense((v) => !v);
+  };
 
   const count = () => (dense() ? 3 : 6);
 
   return (
     <Animation name="Nested Layout" source={source}>
       <motion.div
-        ref={(el) => {
-          container = el;
-        }}
         layout
+        layoutDependencies={[expanded, dense]}
         class="w-full max-w-xs overflow-hidden rounded-xl border border-border bg-card"
       >
         <motion.div

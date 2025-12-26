@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import { layoutTransition, motion } from "motion-solid";
+import { motion } from "motion-solid";
 import source from "./tab-indicator.tsx?raw";
 import { Animation } from "../demos/animation";
 
@@ -11,15 +11,17 @@ export const TabIndicator = () => {
   return (
     <Animation name="Tab Indicator" source={source}>
       <div class="w-full max-w-xs">
-        <div class="relative flex rounded-lg border border-border bg-card p-1">
+        <motion.div
+          layout
+          layoutDependencies={[active]}
+          class="relative flex rounded-lg border border-border bg-card p-1"
+        >
           <For each={tabs}>
             {(tab, index) => (
               <button
                 type="button"
                 class="relative flex-1 px-3 py-2 text-sm font-medium"
-                onClick={() =>
-                  layoutTransition("tab-indicator", () => setActive(index()))
-                }
+                onClick={() => setActive(index())}
               >
                 <span class="relative z-10">{tab}</span>
                 <Show when={active() === index()}>
@@ -31,7 +33,7 @@ export const TabIndicator = () => {
               </button>
             )}
           </For>
-        </div>
+        </motion.div>
       </div>
     </Animation>
   );
