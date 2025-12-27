@@ -12,6 +12,7 @@ import { AiFillGithub } from "solid-icons/ai";
 import { cn } from "~/utils/cn";
 import { BackgroundDots } from "~/components/background-dots";
 import { ThemeSwitcher } from "~/components/theme-switcher";
+import { useColorMode } from "@kobalte/core";
 
 type TocItem = {
   id: string;
@@ -24,8 +25,13 @@ const docsNav = [
     title: "Getting Started",
     items: [
       { href: "/docs/getting-started", label: "Getting Started" },
+      { href: "/docs/caveats", label: "Caveats" },
       { href: "/docs/demos", label: "Demos" },
     ],
+  },
+  {
+    title: "Components",
+    items: [{ href: "/docs/motion-component", label: "motion" }],
   },
 ];
 
@@ -33,6 +39,7 @@ export default function Layout(props: ParentProps) {
   const isDocsPage = useMatch(() => "/docs/*");
   const location = useLocation();
   const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
+  const { colorMode } = useColorMode();
 
   createEffect(() => {
     location.pathname;
@@ -211,7 +218,7 @@ export default function Layout(props: ParentProps) {
               </aside>
             </div>
           </div>
-          <BackgroundDots opacity={0.25} />
+          <BackgroundDots opacity={colorMode() === "dark" ? 0.25 : 0.5} />
         </Show>
       </main>
       <div class="fixed h-96 w-40 bg-radial from-primary blur-[96px] rounded-full rotate-240 -top-64 left-20 -z-40" />

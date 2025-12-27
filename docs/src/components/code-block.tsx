@@ -1,4 +1,11 @@
-import { JSX, Show, createResource, createSignal, onMount } from "solid-js";
+import {
+  JSX,
+  Show,
+  Suspense,
+  createResource,
+  createSignal,
+  onMount,
+} from "solid-js";
 import { codeToHtml } from "shiki";
 import { useColorMode } from "@kobalte/core";
 
@@ -54,24 +61,29 @@ export const CodeBlock = (props: CodeBlockProps) => {
     },
   );
 
+  const renderFallback = () => (
+    <pre
+      ref={preRef}
+      class="p-4 text-xs font-mono leading-relaxed text-foreground"
+    >
+      {props.children}
+    </pre>
+  );
+
+  const highlightedHtml = () => highlighted.latest;
+
   return (
     <div class="not-prose my-4 overflow-hidden rounded-lg border border-border bg-card">
-      <Show
-        when={highlighted()}
-        fallback={
-          <pre
-            ref={preRef}
-            class="p-4 text-xs font-mono leading-relaxed text-foreground"
-          >
-            {props.children}
-          </pre>
-        }
-      >
-        <div
-          innerHTML={highlighted()!}
-          class="p-4 text-xs font-mono leading-relaxed [&>pre]:bg-transparent! [&>pre]:m-0!"
-        />
-      </Show>
+      <Suspense fallback={renderFallback()}>
+        <Show when={highlightedHtml()} fallback={renderFallback()}>
+          {(value) => (
+            <div
+              innerHTML={value()}
+              class="p-4 text-xs font-mono leading-relaxed [&>pre]:bg-transparent! [&>pre]:m-0!"
+            />
+          )}
+        </Show>
+      </Suspense>
     </div>
   );
 };

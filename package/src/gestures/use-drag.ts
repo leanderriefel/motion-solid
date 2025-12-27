@@ -99,7 +99,7 @@ const applyElastic = (
  * Get the constraints as pixel values
  */
 const resolveConstraints = (
-  constraints: DragConstraints | { current: Element } | undefined,
+  constraints: DragConstraints | Element | undefined,
   element: Element,
   onMeasureDragConstraints?: (
     constraints: DragConstraints,
@@ -110,8 +110,8 @@ const resolveConstraints = (
   let resolved: DragConstraints;
 
   // If it's a ref to an element, calculate relative constraints
-  if ("current" in constraints && constraints.current instanceof Element) {
-    const parentRect = constraints.current.getBoundingClientRect();
+  if (constraints instanceof Element) {
+    const parentRect = constraints.getBoundingClientRect();
     const elementRect = element.getBoundingClientRect();
 
     resolved = {
@@ -335,7 +335,7 @@ export const useDragGesture = (args: DragGestureOptions) => {
 
       // Get constraints (with onMeasureDragConstraints callback)
       const constraints = resolveConstraints(
-        options.dragConstraints as DragConstraints | { current: Element },
+        options.dragConstraints as DragConstraints | Element,
         element,
         options.onMeasureDragConstraints as
           | ((constraints: DragConstraints) => DragConstraints | void)
@@ -386,7 +386,7 @@ export const useDragGesture = (args: DragGestureOptions) => {
 
       // Get constraints for final position (with onMeasureDragConstraints callback)
       const constraints = resolveConstraints(
-        options.dragConstraints as DragConstraints | { current: Element },
+        options.dragConstraints as DragConstraints | Element,
         element,
         options.onMeasureDragConstraints as
           | ((constraints: DragConstraints) => DragConstraints | void)

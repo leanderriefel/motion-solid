@@ -6,6 +6,7 @@ import type {
   VariantLabels,
 } from "motion-dom";
 import type { AnimationType } from "../animation/types";
+import type { BoundingBox } from "motion-utils";
 
 export type MotionElement = HTMLElement | SVGElement;
 
@@ -49,11 +50,12 @@ export interface SolidViewportOptions {
  */
 export type MotionOptions = Omit<
   MotionNodeOptions,
-  "custom" | "dragControls" | "viewport"
+  "custom" | "dragControls" | "viewport" | "dragConstraints"
 > & {
   custom?: unknown;
   dragControls?: unknown;
   viewport?: SolidViewportOptions;
+  dragConstraints?: false | Partial<BoundingBox> | Element;
   layoutDependencies?: Accessor<unknown>[];
 };
 

@@ -1,0 +1,8 @@
+# Caveats
+
+## Differences to motion/react and motion-v
+
+There are two main differences between motion-solid and Motion for React and Vue which may lead to some api differences or unexpected behavior:
+
+1. Exit animations: In React and Vue, the library can keep the actual component instances alive to play exit animations. In Solid, there are no real "components" at runtime. When `<Show>` or `<For>` remove items, `motion-solid` performs a "DOM handoff": we keep the actual DOM element around, not the component function. This is why, for example, exiting elements are no longer reactive, they are simply animating DOM nodes.
+2. Layout animations: In React and Vue, `getSnapshotBeforeUpdate` allows measuring the DOM before any mutation during a re-render. In Solid, signals update the DOM synchronously, so there is no re-render cycle. We rely on the "pure phase" (which we have access to only via `createComputed` or `createMemo`) to run logic before DOM mutations. Since we can't observe all signals globally, we track standard props (like `class`, `style`, `textContent`, etc.) by default. For other changes, you must use `layoutDependencies` to trigger layout animations.

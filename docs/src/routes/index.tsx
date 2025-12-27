@@ -4,6 +4,7 @@ import { AnimatePresence, motion, type StaggerFunction } from "motion-solid";
 import { AnimatedLogo } from "~/components/logo";
 import { BackgroundDots } from "~/components/background-dots";
 import { cn } from "~/utils/cn";
+import { useColorMode } from "@kobalte/core";
 
 type Token = { text: string; type: string };
 
@@ -198,6 +199,8 @@ function PerformanceDemo() {
 export default function Home() {
   const [toggled, setToggled] = createSignal(false);
 
+  const { colorMode } = useColorMode();
+
   onMount(() => {
     const timer = setInterval(() => {
       setToggled((t) => !t);
@@ -356,7 +359,7 @@ export default function Home() {
           </div>
         </motion.div>
       </div>
-      <BackgroundDots opacity={0.5} />
+      <BackgroundDots opacity={colorMode() === "dark" ? 0.5 : 1} />
     </div>
   );
 }

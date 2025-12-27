@@ -6,6 +6,7 @@ import pkg from "@vinxi/plugin-mdx";
 
 const { default: mdx } = pkg;
 export default defineConfig({
+  middleware: "src/middleware.ts",
   extensions: ["mdx", "md"],
   vite: {
     plugins: [
