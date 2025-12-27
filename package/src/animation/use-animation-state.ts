@@ -491,6 +491,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     layoutManager.register(node);
 
     onCleanup(() => {
+      layoutManager.captureLayoutIdSnapshot(node);
       layoutManager.unregister(node);
       if (layoutNode === node) layoutNode = null;
     });

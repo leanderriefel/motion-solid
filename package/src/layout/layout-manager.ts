@@ -732,6 +732,13 @@ class LayoutIdStack {
     return this.members.size === 0;
   }
 
+  recordSnapshot(node: LayoutNode): void {
+    const snapshot = getVisualBox(node);
+    if (snapshot && isUsableBox(snapshot)) {
+      this.snapshot = snapshot;
+    }
+  }
+
   hasSnapshot(): boolean {
     return this.snapshot !== null && isUsableBox(this.snapshot);
   }
@@ -741,6 +748,7 @@ class LayoutManager {
   private nodes = new Set<LayoutNode>();
   private nodeByElement = new WeakMap<Element, LayoutNode>();
   private stacks = new Map<string, LayoutIdStack>();
+  private autoMeasureScheduled = false;
 
   register(node: LayoutNode): void {
     this.nodes.add(node);
@@ -800,6 +808,13 @@ class LayoutManager {
 
     const stack = this.stacks.get(layoutId);
     stack?.relegate(node);
+  }
+
+  captureLayoutIdSnapshot(node: LayoutNode): void {
+    const layoutId = node.options.layoutId;
+    if (!layoutId) return;
+
+    this.stacks.get(layoutId)?.recordSnapshot(node);
   }
 
   private rebuildTree(nodes: LayoutNode[]): void {
@@ -948,6 +963,20 @@ class LayoutManager {
     };
   }
 
+  scheduleAutoMeasure(): void {
+    if (this.autoMeasureScheduled) return;
+
+    const snapshot = this.snapshotBefore(null, "descendants", true);
+    if (!snapshot) return;
+
+    this.autoMeasureScheduled = true;
+
+    schedulePostLayoutMeasure(() => {
+      this.autoMeasureScheduled = false;
+      this.measureAfter(snapshot);
+    });
+  }
+
   scheduleSubtreeMeasure(element: MotionElement): void {
     const snapshot = this.snapshotSubtree(element);
     if (!snapshot) return;
@@ -1006,6 +1035,11 @@ class LayoutManager {
   }
 
   scheduleLayoutIdRemeasure(layoutId: string): void {
+    if (this.autoMeasureScheduled) return;
+
+    const stack = this.stacks.get(layoutId);
+    if (!stack?.hasSnapshot()) return;
+
     const snapshot: LayoutTransitionSnapshot = {
       targets: [{ type: "layoutId", layoutId }],
       scope: "descendants",

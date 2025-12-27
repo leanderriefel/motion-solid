@@ -3,6 +3,7 @@ import {
   createMemo,
   createSignal,
   For,
+  Index,
   onCleanup,
 } from "solid-js";
 import { motion } from "motion-solid";
@@ -169,9 +170,7 @@ export default function PerformanceTest() {
           </div>
 
           <div class="rounded-xl border border-border bg-card/40 p-4">
-            <motion.div
-              layout
-              layoutDependencies={[items, tick, jitter, columns]}
+            <div
               class="grid gap-2"
               style={{
                 "grid-template-columns": `repeat(${columns()}, minmax(0, 1fr))`,
@@ -181,13 +180,14 @@ export default function PerformanceTest() {
                 {(index) => (
                   <motion.div
                     layout
+                    layoutDependencies={[tick]}
                     transition={{ type: "spring", stiffness: 450, damping: 40 }}
                     class="rounded-md border border-primary/30 bg-primary/15"
                     style={{ height: `${heightForIndex(index)}px` }}
                   />
                 )}
               </For>
-            </motion.div>
+            </div>
           </div>
         </div>
       </div>

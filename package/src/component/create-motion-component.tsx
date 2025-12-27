@@ -1,7 +1,6 @@
 import type { Component, ComponentProps } from "solid-js";
 import {
   createComputed,
-  createEffect,
   createMemo,
   createRenderEffect,
   createSignal,
@@ -384,21 +383,25 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         return;
       }
 
-      void motionOptions.layoutRoot;
-      void motionOptions.layoutScroll;
-      void motionOptions.layoutCrossfade;
-      void styleProps.style;
-      void (elementProps as Record<string, unknown>).class;
-      void (elementProps as Record<string, unknown>).classList;
-      void (elementProps as Record<string, unknown>).children;
-      void (elementProps as Record<string, unknown>).textContent;
-      void (elementProps as Record<string, unknown>).innerHTML;
-
-      const dependencies = motionOptions.layoutDependencies;
-      if (dependencies) {
-        for (const dependency of dependencies) {
-          if (typeof dependency === "function") {
-            dependency();
+      if (
+        !motionOptions.layoutDependencies ||
+        motionOptions.layoutDependencies.length === 0
+      ) {
+        void motionOptions.layoutRoot;
+        void motionOptions.layoutScroll;
+        void motionOptions.layoutCrossfade;
+        void styleProps.style;
+        void (elementProps as Record<string, unknown>).class;
+        void (elementProps as Record<string, unknown>).classList;
+        void (elementProps as Record<string, unknown>).textContent;
+        void (elementProps as Record<string, unknown>).innerHTML;
+      } else {
+        const dependencies = motionOptions.layoutDependencies;
+        if (dependencies) {
+          for (const dependency of dependencies) {
+            if (typeof dependency === "function") {
+              dependency();
+            }
           }
         }
       }
@@ -414,13 +417,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         return;
       }
 
-      const layoutId = motionOptions.layoutId;
-      if (typeof layoutId === "string" && layoutId) {
-        layoutManager.scheduleLayoutIdMeasure(layoutId);
-        return;
-      }
-
-      layoutManager.scheduleSubtreeMeasure(element);
+      layoutManager.scheduleAutoMeasure();
     });
 
     return (
