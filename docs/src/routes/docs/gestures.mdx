@@ -1,0 +1,61 @@
+# Gestures
+
+Motion components support hover, tap, focus, viewport, and pan gestures.
+
+## Hover and tap
+
+```tsx
+<motion.button
+  whileHover={{ scale: 1.05 }}
+  whileTap={{ scale: 0.98 }}
+  onTap={() => console.log("tap")}
+/>
+```
+
+Tap callbacks:
+
+- `onTapStart` fires on pointer down.
+- `onTap` fires on pointer up inside the element.
+- `onTapCancel` fires when the pointer leaves or is canceled.
+
+If you need to capture pointer down at the document level, set `globalTapTarget={true}`.
+
+## Focus
+
+```tsx
+<motion.input whileFocus={{ scale: 1.02 }} />
+```
+
+## Viewport
+
+`whileInView` uses IntersectionObserver and supports Solid-friendly viewport options:
+
+```tsx
+<motion.div
+  initial={{ opacity: 0, y: 16 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  viewport={{ once: true, amount: 0.5 }}
+  onViewportEnter={(entry) => console.log("enter", entry)}
+  onViewportLeave={(entry) => console.log("leave", entry)}
+/>
+```
+
+`viewport` options:
+
+- `root`: Element or Document to use as the root.
+- `once`: run only once.
+- `margin`: root margin string.
+- `amount`: `"some" | "all" | number` for threshold.
+
+## Pan
+
+Pan events report the current point, delta, offset, and velocity.
+
+```tsx
+<motion.div
+  onPanSessionStart={(event, info) => console.log("session", info)}
+  onPanStart={(event, info) => console.log("start", info)}
+  onPan={(event, info) => console.log("move", info)}
+  onPanEnd={(event, info) => console.log("end", info)}
+/>
+```

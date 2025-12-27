@@ -1,0 +1,69 @@
+# Drag
+
+Drag is built into motion elements and works with `whileDrag` animations.
+
+## Basic drag
+
+```tsx
+<motion.div drag />
+```
+
+Axis locking:
+
+```tsx
+<motion.div drag="x" />
+<motion.div drag="y" />
+```
+
+## Constraints
+
+You can constrain drag to a bounding box or an element.
+
+```tsx
+let constraints!: HTMLDivElement;
+
+<div ref={constraints} class="relative">
+  <motion.div drag dragConstraints={constraints} />
+</div>;
+```
+
+```tsx
+<motion.div
+  drag
+  dragConstraints={{ left: -20, right: 20, top: -10, bottom: 10 }}
+/>
+```
+
+## Options
+
+- `dragElastic`: control how far the element can stretch past constraints.
+- `dragMomentum`: set `false` to disable inertia.
+- `dragDirectionLock`: lock to the initial drag axis.
+- `dragPropagation`: allow nested draggables to activate.
+- `dragSnapToOrigin`: snap back to the start on release.
+- `dragTransition`: transition for the release animation.
+- `dragListener`: set `false` to disable pointer listeners (use controls).
+
+## Drag controls
+
+```tsx
+import { createDragControls } from "motion-solid";
+
+const controls = createDragControls();
+
+<motion.div drag dragControls={controls} dragListener={false} />
+<button onPointerDown={(event) => controls.start(event)}>Drag</button>
+```
+
+## Callbacks
+
+```tsx
+<motion.div
+  drag
+  onDragStart={(event, info) => console.log("start", info)}
+  onDrag={(event, info) => console.log("drag", info)}
+  onDragEnd={(event, info) => console.log("end", info)}
+  onDirectionLock={(axis) => console.log("lock", axis)}
+  onDragTransitionEnd={() => console.log("transition done")}
+/>
+```

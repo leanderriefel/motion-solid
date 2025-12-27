@@ -1,0 +1,38 @@
+# MotionConfig
+
+MotionConfig lets you set defaults for transitions and reduced motion behavior.
+
+## Default transitions
+
+```tsx
+import { MotionConfig } from "motion-solid";
+
+<MotionConfig transition={{ type: "spring", stiffness: 300, damping: 30 }}>
+  <App />
+</MotionConfig>;
+```
+
+Every motion component inside the provider will use this transition unless it
+provides its own `transition` prop.
+
+## Reduced motion
+
+```tsx
+<MotionConfig reducedMotion="user">
+  <App />
+</MotionConfig>
+```
+
+`reducedMotion` accepts:
+
+- `"user"`: respect `prefers-reduced-motion`.
+- `"always"`: force reduced motion.
+- `"never"`: never reduce motion (default).
+
+When reduced motion is active, transform animations (x, y, scale, rotate, etc)
+use a `duration: 0` transition. Layout animations are not automatically reduced yet.
+
+## Hooks
+
+`useMotionConfig` returns the current config context, and `useReducedMotion`
+provides direct access to the user's system preference.

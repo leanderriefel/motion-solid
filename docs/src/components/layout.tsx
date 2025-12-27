@@ -25,13 +25,33 @@ const docsNav = [
     title: "Getting Started",
     items: [
       { href: "/docs/getting-started", label: "Getting Started" },
-      { href: "/docs/caveats", label: "Caveats" },
       { href: "/docs/demos", label: "Demos" },
+      { href: "/docs/caveats", label: "Caveats" },
     ],
   },
   {
-    title: "Components",
-    items: [{ href: "/docs/motion-component", label: "motion" }],
+    title: "Core",
+    items: [
+      { href: "/docs/motion-component", label: "motion" },
+      { href: "/docs/variants", label: "Variants" },
+      { href: "/docs/animate-presence", label: "AnimatePresence" },
+      { href: "/docs/motion-config", label: "MotionConfig" },
+    ],
+  },
+  {
+    title: "Interaction",
+    items: [
+      { href: "/docs/gestures", label: "Gestures" },
+      { href: "/docs/drag", label: "Drag" },
+    ],
+  },
+  {
+    title: "Layout",
+    items: [{ href: "/docs/layout", label: "Layout" }],
+  },
+  {
+    title: "Reference",
+    items: [{ href: "/docs/api-reference", label: "API Reference" }],
   },
 ];
 
@@ -160,14 +180,24 @@ export default function Layout(props: ParentProps) {
               </nav>
 
               <div class="docs-content min-w-0 max-w-2xl">
-                <div class="mt-6 rounded-lg border-2 border-red-500/30 bg-red-500/10 p-6 mb-12">
+                <div class="not-prose mt-6 rounded-lg border-2 border-red-500/30 bg-red-500/10 p-6 mb-12">
                   <div>
-                    <h4 class="font-semibold text-lg mb-1">Work in Progress</h4>
+                    <h4 class="font-semibold text-lg mb-1">Beta Status</h4>
                     <p class="text-sm opacity-90">
-                      The documentation is still being written. This library is
-                      in very early beta mode and many features may be broken or
-                      incomplete. Use with caution and expect breaking changes
-                      with minor version updates.
+                      This library is still in early beta and the API is subject
+                      to change and may get daily breaking changes. The
+                      documentaton may not be up to date with the latest
+                      features and include missing or outdated information. You
+                      can always create an issue on{" "}
+                      <a
+                        href="https://github.com/leanderriefel/motion-solid"
+                        target="_blank"
+                        class="text-primary hover:text-foreground transition-colors"
+                      >
+                        GitHub
+                      </a>{" "}
+                      or even better a pull request to fix the documentation or
+                      add new features.
                     </p>
                   </div>
                 </div>

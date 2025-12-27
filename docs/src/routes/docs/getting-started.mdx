@@ -13,4 +13,38 @@ pnpm add motion-solid
 bun add motion-solid
 ```
 
-Check out the [Demos](/docs/demos) to see what's possible.
+## Basic usage
+
+```tsx
+import { motion } from "motion-solid";
+
+<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} />;
+```
+
+## Exit animations
+
+```tsx
+import { AnimatePresence, motion } from "motion-solid";
+import { Show } from "solid-js";
+
+<AnimatePresence>
+  <Show when={open()}>
+    <motion.div exit={{ opacity: 0 }} />
+  </Show>
+</AnimatePresence>;
+```
+
+## Server-side rendering
+
+Motion components render with `initial` styles on the server, or with `animate`
+styles when `initial` is `false` or `undefined`.
+
+## Next steps
+
+- [Motion Component](/docs/motion-component)
+- [Variants](/docs/variants)
+- [Gestures](/docs/gestures)
+- [Drag](/docs/drag)
+- [Layout](/docs/layout)
+- [MotionConfig](/docs/motion-config)
+- [Demos](/docs/demos)

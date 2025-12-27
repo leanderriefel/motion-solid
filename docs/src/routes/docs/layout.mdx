@@ -1,0 +1,54 @@
+# Layout
+
+Layout animations smoothly transition elements between layout changes.
+
+## Basic layout
+
+```tsx
+<motion.div layout />
+```
+
+## Layout types
+
+- `layout={true}` animates position and size.
+- `layout="position"` animates only position.
+- `layout="size"` animates only size.
+- `layout="preserve-aspect"` keeps the element's aspect ratio when possible.
+
+## Shared layout transitions
+
+Use `layoutId` to animate between two elements that represent the same entity.
+
+```tsx
+<motion.div layoutId="card" />
+```
+
+Set `layoutCrossfade={false}` to disable opacity crossfades for shared layout transitions.
+
+## Solid-specific layout dependencies
+
+Solid updates the DOM synchronously, so layout animations need explicit dependencies
+for changes that are not standard props like `class` or `style`.
+
+If `layoutDependencies` is not provided, motion-solid tracks `class`, `classList`,
+`style`, `textContent`, and `innerHTML` automatically.
+
+```tsx
+const [isOn, setIsOn] = createSignal(false);
+
+<button
+  class={`flex ${isOn() ? "justify-start" : "justify-end"}`}
+  onClick={() => setIsOn((v) => !v)}
+>
+  <motion.div layout layoutDependencies={[isOn]} class="size-8 rounded-full" />
+</button>;
+```
+
+Here, `layoutDependencies={[isOn]}` is needed because the child's position changes
+when the parent's `class` changes, but the child itself has no tracked props
+changing.
+
+## Scroll and roots
+
+- `layoutScroll` marks an element as a scroll container for layout measurements.
+- `layoutRoot` makes an element the root of its own layout tree.

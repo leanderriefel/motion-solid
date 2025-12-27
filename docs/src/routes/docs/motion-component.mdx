@@ -1,31 +1,93 @@
 # Motion Component
 
-The `motion` component is the core component of the library. There is a `motion.*` for every HTML and SVG element that exists (e.g. `motion.div`, `motion.span`, `motion.button`, etc.).
-With it you get access to all kind of animation properties and callbacks.
+The `motion` proxy exposes a `motion.*` component for every HTML and SVG element.
+Motion components accept all native props plus motion-specific props.
 
-## Basic Usage
-
-Import `motion` from `motion-solid`:
+## Basic usage
 
 ```tsx
 import { motion } from "motion-solid";
-```
 
-Every `motion.*` component accepts all the same props as the corresponding HTML or SVG element plus all the motion props.
-
-```tsx
 <motion.div
   class="circle blue"
   initial={{ opacity: 0, scale: 0 }}
   animate={{ opacity: 1, scale: 1 }}
 >
   I'm a motion.div
-</motion.div>
+</motion.div>;
 ```
 
-## Server Side Rendering
+## Core props
 
-On the server, motion components render with the styles from the `initial` prop if provided, or the `animate` prop if `initial` is `undefined` or `false`. This server-side behavior mirrors the client-side behavior. Motion components have full SSR support; if you encounter any issues, please [open an issue](https://github.com/motion-solid/motion-solid/issues/new).
+### `initial`
+
+Initial state of the component. Can be:
+
+- An animation target
+- A variant label (see [Variants](/docs/variants))
+- `false` to skip the initial animation
+
+### `animate`
+
+Target to animate to on mount and update. Can be:
+
+- An animation target
+- A variant label or array of labels
+
+### `exit`
+
+Target to animate to on exit. Can be an animation target or a variant label.
+This only runs inside [AnimatePresence](/docs/animate-presence).
+
+### `transition`
+
+Default transition to use when a target does not specify one.
+`transitionEnd` values are applied after animations complete.
+
+### `variants`
+
+Map of variant names to animation targets. See [Variants](/docs/variants).
+
+### `custom`
+
+Custom data passed to variant functions. This can also be supplied by
+[AnimatePresence](/docs/animate-presence).
+
+### `inherit`
+
+Set to `false` to prevent inheriting variants from ancestors.
+
+### `style`
+
+Regular Solid style object merged with Motion's rendered styles.
+
+### `transformTemplate`
+
+Function that lets you control the final `transform` string.
+
+### `onUpdate`
+
+Callback invoked with the latest resolved values on every render.
+
+### `onAnimationStart` and `onAnimationComplete`
+
+Callbacks fired when the `animate` target starts or finishes.
+
+## Gestures and drag
+
+Motion supports `whileHover`, `whileTap`, `whileFocus`, `whileInView`, and
+`whileDrag` along with their corresponding event callbacks. See
+[Gestures](/docs/gestures) and [Drag](/docs/drag).
+
+## Layout
+
+Set `layout` or `layoutId` to enable layout animations, and use
+`layoutDependencies` for Solid-specific reactivity. See [Layout](/docs/layout).
+
+## Server-side rendering
+
+On the server, motion components render with the styles from the `initial` prop
+if provided, or the `animate` prop if `initial` is `undefined` or `false`.
 
 ```tsx
 // Server will output `translateX(100px)`
@@ -33,141 +95,14 @@ On the server, motion components render with the styles from the `initial` prop 
 ```
 
 ```tsx
-// Server will output `opacity: 0; scale: 0;`
+// Server will output `opacity: 0; transform: scale(0);`
 <motion.div
   initial={{ opacity: 0, scale: 0 }}
   animate={{ opacity: 1, scale: 1 }}
 />
 ```
 
-## Custom components
+## Planned
 
-Currently not supported. Will be added in the future.
-
-## Props
-
-### `initial`
-
-Initial state of the component. Can be:
-
-An animation target
-
-```tsx
-<motion.div initial={{ opacity: 0, scale: 0 }} />
-```
-
-A variant label (see [Variants](/docs/variants))
-
-```tsx
-<motion.div initial="hidden" />
-```
-
-`false` to skip initial animation and render as the values found in the `animate` prop
-
-```tsx
-<motion.div initial={false} animate={{ opacity: 1, scale: 1 }} />
-```
-
-### `animate`
-
-A target to animate to on enter and on update. Can be:
-
-An animation target
-
-```tsx
-<motion.div animate={{ opacity: 1, scale: 1 }} />
-```
-
-A variant label (see [Variants](/docs/variants))
-
-```tsx
-<motion.div animate="visible" />
-```
-
-### `exit`
-
-A target to animate to on exit. Can be:
-
-An animation target
-
-```tsx
-<motion.div exit={{ opacity: 0, scale: 0 }} />
-```
-
-A variant label (see [Variants](/docs/variants))
-
-```tsx
-<motion.div exit="hidden" />
-```
-
-This prop is only available when used inside an `AnimatePresence`. For more information, see [AnimatePresence](/docs/animate-presence).
-
-### `transition`
-
-The default transition for this component to use when an animation prop (animate, whileHover etc) has no transition defined.
-
-```tsx
-<motion.div
-  animate={{ x: 1.2 }}
-  transition={{ type: "tween", duration: 0.5 }}
-/>
-```
-
-### `variants`
-
-An object of variant labels and their corresponding animation targets. For more information, see [Variants](/docs/variants).
-
-```tsx
-<motion.div
-  variants={{
-    hidden: { opacity: 0, scale: 0 },
-    visible: { opacity: 1, scale: 1 },
-  }}
-/>
-```
-
-### `style`
-
-For now this is the normal `style` prop. In the future this will add support for motion-dom's motion values and independent motion values.
-
-### `whileHover`
-
-A target to animate to while the component is hovered. Can be:
-
-An animation target
-
-```tsx
-<motion.div whileHover={{ x: 100 }} />
-```
-
-A variant label (see [Variants](/docs/variants))
-
-```tsx
-<motion.div whileHover="hover" />
-```
-
-```tsx
-<motion.div
-  whileHover="hover"
-  variants={{
-    hidden: { opacity: 0, scale: 0 },
-    hover: { opacity: 1, scale: 1 },
-  }}
-/>
-```
-
-### `onHoverStart`
-
-Callback function that is called when a pointer starts hovering over the component.
-
-```tsx
-<motion.div onHoverStart={() => console.log("Hover started")} />
-```
-
-### `onHoverEnd`
-
-Callback function that is called when a pointer stops hovering over the component.
-
-```tsx
-<motion.div onHoverEnd={() => console.log("Hover ended")} />
-```
+- Custom components (`motion(Component)`) are not supported yet.
+- MotionValue support in the `style` prop is planned.

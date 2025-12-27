@@ -1,0 +1,106 @@
+# Variants
+
+Variants let you name animation targets and reuse them across `initial`, `animate`, `exit`, and the `while*` props.
+
+## Defining variants
+
+```tsx
+import { motion } from "motion-solid";
+
+const card = {
+  hidden: { opacity: 0, y: 12 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35 },
+  },
+};
+
+<motion.div initial="hidden" animate="visible" variants={card} />;
+```
+
+## Variant labels
+
+These props accept a variant label string or an array of labels:
+
+- `initial`
+- `animate`
+- `exit`
+- `whileHover`
+- `whileTap`
+- `whileFocus`
+- `whileInView`
+- `whileDrag`
+
+When you pass an array, each label is merged in order.
+
+```tsx
+<motion.div animate={["visible", "highlight"]} variants={card} />
+```
+
+## Function variants and `custom`
+
+A variant can be a function. Motion Solid calls it with `(custom, current, velocity)`.
+
+```tsx
+const item = {
+  hidden: { opacity: 0 },
+  visible: (custom: { delay: number }) => ({
+    opacity: 1,
+    transition: { delay: custom.delay },
+  }),
+};
+
+<motion.div custom={{ delay: 0.2 }} variants={item} animate="visible" />;
+```
+
+`custom` can also be provided by `AnimatePresence`, so exiting children can receive data.
+
+## Orchestration
+
+You can coordinate parent and child animations via a variant `transition`:
+
+```tsx
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      when: "beforeChildren",
+      delayChildren: 0.1,
+      staggerChildren: 0.05,
+      staggerDirection: 1,
+    },
+  },
+};
+```
+
+- `when: "beforeChildren"` delays children until the parent finishes.
+- `when: "afterChildren"` waits for children before starting the parent.
+- `delayChildren` adds a base delay for each child.
+- `staggerChildren` and `staggerDirection` control stagger order.
+
+For custom staggering, use `stagger`:
+
+```tsx
+import { stagger } from "motion-solid";
+
+const container = {
+  show: {
+    transition: {
+      delayChildren: stagger(0.08, { from: "center" }),
+    },
+  },
+};
+```
+
+## Inheritance
+
+Variant labels resolve against the closest ancestor `variants` by default. Set `inherit={false}` to opt out.
+
+```tsx
+<motion.ul variants={list} initial="hidden" animate="show">
+  <motion.li variants={item} />
+  <motion.li variants={item} animate="peek" inherit={false} />
+</motion.ul>
+```

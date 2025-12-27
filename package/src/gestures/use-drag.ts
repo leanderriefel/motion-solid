@@ -438,6 +438,8 @@ export const useDragGesture = (args: DragGestureOptions) => {
         damping: 40,
       };
 
+      const transitionPromises: Array<Promise<unknown>> = [];
+
       if (dragX && mvX) {
         const currentX = mvX.get();
         if (currentX !== targetX) {
@@ -447,22 +449,27 @@ export const useDragGesture = (args: DragGestureOptions) => {
             keyframes: targetX,
             transition,
           });
-          controls?.finished.then(() => {
-            options.onDragTransitionEnd?.();
-          });
+          if (controls) transitionPromises.push(controls.finished);
         }
       }
 
       if (dragY && mvY) {
         const currentY = mvY.get();
         if (currentY !== targetY) {
-          startMotionValueAnimation({
+          const controls = startMotionValueAnimation({
             name: "y",
             motionValue: mvY as MotionValue<string | number>,
             keyframes: targetY,
             transition,
           });
+          if (controls) transitionPromises.push(controls.finished);
         }
+      }
+
+      if (transitionPromises.length > 0) {
+        void Promise.allSettled(transitionPromises).then(() => {
+          options.onDragTransitionEnd?.();
+        });
       }
     };
 
