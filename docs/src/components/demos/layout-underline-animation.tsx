@@ -32,6 +32,7 @@ export const LayoutUnderlineAnimation = () => {
                   <motion.div
                     class="absolute -bottom-px left-0 h-px w-full bg-primary"
                     layoutId="underline"
+                    layoutDependencies={[selected]}
                     transition={{ type: "tween" }}
                   />
                 </Show>

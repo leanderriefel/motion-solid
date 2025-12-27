@@ -1038,7 +1038,12 @@ class LayoutManager {
     if (this.autoMeasureScheduled) return;
 
     const stack = this.stacks.get(layoutId);
-    if (!stack?.hasSnapshot()) return;
+    if (!stack) return;
+
+    if (!stack.hasSnapshot()) {
+      this.scheduleLayoutIdMeasure(layoutId);
+      return;
+    }
 
     const snapshot: LayoutTransitionSnapshot = {
       targets: [{ type: "layoutId", layoutId }],
