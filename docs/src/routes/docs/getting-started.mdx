@@ -14,29 +14,3 @@ bun add motion-solid
 ```
 
 Check out the [Demos](/docs/demos) to see what's possible.
-
-## Layout transitions
-
-Layout animations run automatically for elements with `layout` or `layoutId`
-when their layout-affecting props change. For reactive values that don't flow
-through props (resources, stores, external state), add `layoutDependencies` to
-opt into layout snapshots. For more, see [Layout Transitions](/docs/layout-transitions).
-
-```tsx
-import { motion } from "motion-solid";
-
-const [open, setOpen] = createSignal(false);
-
-<button onClick={() => setOpen((value) => !value)} />;
-
-<motion.div layout>{open() ? "Open" : "Closed"}</motion.div>;
-
-const [data] = createResource(fetcher);
-
-<motion.div layout layoutDependencies={[data]}>
-  {data()}
-</motion.div>;
-```
-
-External layout changes (scroll, resize, fonts, images) do not animate unless
-something reactive triggers a layout snapshot.

@@ -27,22 +27,6 @@ const docsNav = [
       { href: "/docs/demos", label: "Demos" },
     ],
   },
-  {
-    title: "Components",
-    items: [
-      { href: "/docs/motion", label: "Motion" },
-      { href: "/docs/presence", label: "Presence" },
-    ],
-  },
-  {
-    title: "Animation",
-    items: [
-      { href: "/docs/layout-transitions", label: "Layout Transitions" },
-      { href: "/docs/transitions", label: "Transitions" },
-      { href: "/docs/gestures", label: "Gestures" },
-      { href: "/docs/variants", label: "Variants" },
-    ],
-  },
 ];
 
 export default function Layout(props: ParentProps) {
