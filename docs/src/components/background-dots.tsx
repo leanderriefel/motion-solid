@@ -5,7 +5,6 @@ import { onCleanup, onMount } from "solid-js";
 import { motion } from "motion-solid";
 import { cn } from "~/utils/cn";
 
-const TWO_PI = Math.PI * 2;
 const FORCEFIELD_RADIUS = 250;
 const FORCEFIELD_STRENGTH = 25;
 
@@ -15,6 +14,7 @@ const FILL_STYLES = Array.from(
 );
 
 export const BackgroundDots = (props: { class?: string; opacity?: number }) => {
+  // oxlint-disable-next-line no-unassigned-vars
   let canvasRef!: HTMLCanvasElement;
   let rafId: number;
 

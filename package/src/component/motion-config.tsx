@@ -4,7 +4,6 @@ import {
   createMemo,
   createSignal,
   onCleanup,
-  onMount,
   useContext,
 } from "solid-js";
 import type { Transition } from "motion-dom";

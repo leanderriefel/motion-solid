@@ -106,7 +106,7 @@ export const buildAnimationTypeMotionValues = (args: {
   existingValues?: MotionValues;
   owner?: MotionValueOwner;
 }): MotionValues => {
-  const values: MotionValues = { ...(args.existingValues ?? {}) };
+  const values: MotionValues = { ...args.existingValues };
 
   for (const type of animationTypes) {
     const target = args.targetsByType[type];

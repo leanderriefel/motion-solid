@@ -1,13 +1,11 @@
 import {
   createContext,
   createUniqueId,
-  onCleanup,
   useContext,
   type Accessor,
   type FlowComponent,
   type JSX,
   createSignal,
-  createEffect,
   createMemo,
 } from "solid-js";
 import { createListTransition } from "@solid-primitives/transition-group";
@@ -71,11 +69,6 @@ export interface PresenceContextValue {
   custom: Accessor<unknown>;
 
   /**
-   * Register a descendant that should delay unmount until exit completes.
-   */
-  register: (id: string) => VoidFunction;
-
-  /**
    * Mark a registered descendant as safe to remove.
    */
   onExitComplete: (id: string, element?: Element) => void;
@@ -107,8 +100,6 @@ export const usePresence = (): [
   if (!presence) return [isPresent, undefined];
 
   const id = createUniqueId();
-  const unregister = presence.register(id);
-  onCleanup(unregister);
 
   const safeToRemove = () => {
     presence.onExitComplete(id);
@@ -125,92 +116,6 @@ export const useIsPresent = (): Accessor<boolean> => {
 export const usePresenceData = (): Accessor<unknown> => {
   const presence = usePresenceContext();
   return () => presence?.custom() ?? undefined;
-};
-
-type PresenceChildProps = {
-  isPresent: Accessor<boolean>;
-  initial: Accessor<boolean>;
-  custom: Accessor<unknown>;
-  onExitComplete?: () => void;
-  register?: (id: string) => VoidFunction;
-  children?: JSX.Element;
-};
-
-const PresenceChild: FlowComponent<PresenceChildProps> = (props) => {
-  const completed = new Map<string, boolean>();
-  const [didCompleteExit, setDidCompleteExit] = createSignal(false);
-
-  // This ensures that we don't complete the exit immediately if no one has registered yet.
-  // We wait one microtask to allow registrations to happen.
-  let isChecking = false;
-
-  const maybeCompleteExit = () => {
-    if (props.isPresent()) {
-      setDidCompleteExit(false);
-      return;
-    }
-
-    if (didCompleteExit() || isChecking) return;
-
-    isChecking = true;
-    queueMicrotask(() => {
-      isChecking = false;
-
-      if (!props.isPresent() && !didCompleteExit()) {
-        let allDone = true;
-        for (const done of completed.values()) {
-          if (!done) {
-            allDone = false;
-            break;
-          }
-        }
-
-        if (allDone) {
-          setDidCompleteExit(true);
-          props.onExitComplete?.();
-        }
-      }
-    });
-  };
-
-  const register = (id: string) => {
-    completed.set(id, false);
-
-    return () => {
-      completed.delete(id);
-      maybeCompleteExit();
-    };
-  };
-
-  const onExitComplete = (id: string) => {
-    if (!completed.has(id)) return;
-    completed.set(id, true);
-    maybeCompleteExit();
-  };
-
-  createEffect(() => {
-    if (props.isPresent()) {
-      for (const id of completed.keys()) completed.set(id, false);
-      setDidCompleteExit(false);
-      return;
-    }
-
-    maybeCompleteExit();
-  });
-
-  const value: PresenceContextValue = {
-    isPresent: props.isPresent,
-    initial: props.initial,
-    custom: props.custom,
-    register,
-    onExitComplete,
-  };
-
-  return (
-    <PresenceContext.Provider value={value}>
-      {props.children}
-    </PresenceContext.Provider>
-  );
 };
 
 type AnimatePresenceContentProps = {
@@ -486,16 +391,10 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
     }
   };
 
-  // Register isn't used for the Handoff flow usually, but we keep it for API compat
-  const register = (id: string) => {
-    return () => {};
-  };
-
   const context: PresenceContextValue = {
     isPresent: isPresentInParent, // Pass through parent presence (or true if root)
     initial: () => initial(),
     custom,
-    register,
     onExitComplete,
     isEntranceBlocked,
   };

@@ -78,11 +78,11 @@ export const animateMotionValue = <V extends AnyResolvedKeyframe>(
       delay: -elapsed,
       onUpdate: (v: V) => {
         value.set(v);
-        valueTransition.onUpdate && valueTransition.onUpdate(v);
+        valueTransition.onUpdate?.(v);
       },
       onComplete: () => {
         onComplete();
-        valueTransition.onComplete && valueTransition.onComplete();
+        valueTransition.onComplete?.();
       },
       name,
       motionValue: value,

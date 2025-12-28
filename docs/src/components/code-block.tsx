@@ -24,7 +24,8 @@ const getLanguageFromClass = (className: string) => {
 };
 
 export const CodeBlock = (props: CodeBlockProps) => {
-  let preRef: HTMLPreElement | undefined;
+  // oxlint-disable-next-line no-unassigned-vars
+  let preRef!: HTMLPreElement;
   const [payload, setPayload] = createSignal<HighlightPayload | null>(null);
 
   const { colorMode } = useColorMode();

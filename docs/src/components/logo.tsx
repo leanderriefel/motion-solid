@@ -1,4 +1,4 @@
-import { motion, motionKeys } from "motion-solid";
+import { motion } from "motion-solid";
 import { ComponentProps, splitProps } from "solid-js";
 import { cn } from "~/utils/cn";
 

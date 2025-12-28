@@ -3,7 +3,6 @@ import {
   createMemo,
   createSignal,
   For,
-  Index,
   onCleanup,
 } from "solid-js";
 import { motion } from "motion-solid";

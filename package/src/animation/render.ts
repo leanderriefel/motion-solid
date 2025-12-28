@@ -5,7 +5,6 @@ import {
   numberValueTypes,
   isCSSVariableName,
 } from "motion-dom";
-import { isStringOrNumber } from "./types";
 
 type TransformState = Record<string, string | number>;
 

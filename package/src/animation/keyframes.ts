@@ -1,5 +1,5 @@
-import type { AnyResolvedKeyframe, MotionValue, Transition } from "motion-dom";
-import { isRecord, isStringOrNumber } from "./types";
+import type { AnyResolvedKeyframe } from "motion-dom";
+import { isStringOrNumber } from "./types";
 
 export const pickInitialFromKeyframes = (
   keyframes: unknown,

@@ -62,7 +62,9 @@ export default function Layout(props: ParentProps) {
   const { colorMode } = useColorMode();
 
   createEffect(() => {
+    // oxlint-disable-next-line no-unused-expressions
     location.pathname;
+
     if (!isDocsPage()) {
       setTocItems([]);
       return;
