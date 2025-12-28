@@ -16,8 +16,6 @@ export type LayoutAnimationType =
   | "size"
   | "preserve-aspect";
 
-type LayoutTransitionScope = "descendants";
-
 type LayoutTransitionTarget = MotionElement | string;
 
 type ProjectionUpdate = {
@@ -69,6 +67,12 @@ type LayoutNode = {
   scaleX: MotionValue<number>;
   scaleY: MotionValue<number>;
 
+  // Local projection transform values applied to the element.
+  projectionTranslateX: number;
+  projectionTranslateY: number;
+  projectionScaleX: number;
+  projectionScaleY: number;
+
   projectionAnimations: AnimationPlaybackControlsWithThen[];
   projectionCycleId: number;
 
@@ -94,7 +98,6 @@ type LayoutTransitionTargetDescriptor =
 
 type LayoutTransitionSnapshot = {
   targets: LayoutTransitionTargetDescriptor[];
-  scope: LayoutTransitionScope;
   includeAll: boolean;
   nodes: LayoutNode[];
   beforeBoxes: Map<LayoutNode, Box>;
@@ -176,61 +179,53 @@ const assertLayoutTarget = (
 
 /**
  * Get the current visual box of a node, taking animation into account.
- * Computes the visual box from the current transform motion values.
+ * Computes the visual box from the current projection transform values,
+ * including accumulated parent transforms.
  */
 const getVisualBox = (node: LayoutNode): Box | null => {
-  const latestBox = node.latestBox;
+  const latestBox = node.latestBox ?? node.prevBox;
 
   if (!latestBox) {
-    return node.prevBox;
+    return null;
   }
 
-  // If no animation is active, return the latest measured box
-  if (!node.delta) {
-    return latestBox;
-  }
-
-  // Get current transform values
-  const translateX = node.translateX.get();
-  const translateY = node.translateY.get();
-  const scaleX = node.scaleX.get();
-  const scaleY = node.scaleY.get();
-
-  // If transform is at identity, return latestBox
-  if (
-    Math.abs(translateX) <= 0.5 &&
-    Math.abs(translateY) <= 0.5 &&
-    Math.abs(scaleX - 1) <= 0.0001 &&
-    Math.abs(scaleY - 1) <= 0.0001
-  ) {
-    return latestBox;
-  }
-
-  // Calculate the current visual box by applying the inverse transform
-  // The transform is applied around the center, so we need to account for that
-  const latestWidth = latestBox.x.max - latestBox.x.min;
-  const latestHeight = latestBox.y.max - latestBox.y.min;
-  const latestCenterX = (latestBox.x.min + latestBox.x.max) / 2;
-  const latestCenterY = (latestBox.y.min + latestBox.y.max) / 2;
-
-  // Visual center = latestCenter + translate
-  const visualCenterX = latestCenterX + translateX;
-  const visualCenterY = latestCenterY + translateY;
-
-  // Visual size = latestSize * scale
-  const visualWidth = latestWidth * scaleX;
-  const visualHeight = latestHeight * scaleY;
-
-  return {
-    x: {
-      min: visualCenterX - visualWidth / 2,
-      max: visualCenterX + visualWidth / 2,
-    },
-    y: {
-      min: visualCenterY - visualHeight / 2,
-      max: visualCenterY + visualHeight / 2,
-    },
+  const nodeCenter = getNodeCenter(node);
+  const localTransform: AccumulatedTransform = {
+    translateX: node.projectionTranslateX,
+    translateY: node.projectionTranslateY,
+    scaleX: node.projectionScaleX,
+    scaleY: node.projectionScaleY,
+    originX: nodeCenter.x,
+    originY: nodeCenter.y,
   };
+
+  const parentTransform = getAccumulatedParentTransform(node);
+
+  const localIsIdentity =
+    Math.abs(localTransform.translateX) <= 0.5 &&
+    Math.abs(localTransform.translateY) <= 0.5 &&
+    Math.abs(localTransform.scaleX - 1) <= 0.0001 &&
+    Math.abs(localTransform.scaleY - 1) <= 0.0001;
+
+  const parentIsIdentity =
+    Math.abs(parentTransform.translateX) <= 0.5 &&
+    Math.abs(parentTransform.translateY) <= 0.5 &&
+    Math.abs(parentTransform.scaleX - 1) <= 0.0001 &&
+    Math.abs(parentTransform.scaleY - 1) <= 0.0001;
+
+  if (localIsIdentity && parentIsIdentity) {
+    return latestBox;
+  }
+
+  let visualBox = latestBox;
+  if (!localIsIdentity) {
+    visualBox = applyTransformToBox(visualBox, localTransform);
+  }
+  if (!parentIsIdentity) {
+    visualBox = applyTransformToBox(visualBox, parentTransform);
+  }
+
+  return visualBox;
 };
 
 const calcLength = (axis: Axis): number => axis.max - axis.min;
@@ -343,6 +338,14 @@ type AccumulatedTransform = {
   originY: number;
 };
 
+type ProjectionTransform = {
+  transform: string | null;
+  translateX: number;
+  translateY: number;
+  scaleX: number;
+  scaleY: number;
+};
+
 const getNodeCenter = (node: LayoutNode): { x: number; y: number } => {
   const box = node.latestBox ?? node.prevBox;
   if (!box) return { x: 0, y: 0 };
@@ -361,13 +364,12 @@ const getNodeCurrentTransform = (
   scaleX: number;
   scaleY: number;
 } => {
-  // Read directly from motion values - these are animated with actual values
-  // so spring overshoot works correctly
+  // Use the actual projection values applied to the element.
   return {
-    translateX: node.translateX.get(),
-    translateY: node.translateY.get(),
-    scaleX: node.scaleX.get(),
-    scaleY: node.scaleY.get(),
+    translateX: node.projectionTranslateX,
+    translateY: node.projectionTranslateY,
+    scaleX: node.projectionScaleX,
+    scaleY: node.projectionScaleY,
   };
 };
 
@@ -446,7 +448,29 @@ const applyTransformToPoint = (
   return { x, y };
 };
 
-const buildNodeProjectionTransform = (node: LayoutNode): string | null => {
+const applyTransformToBox = (
+  box: Box,
+  transform: AccumulatedTransform,
+): Box => {
+  const p1 = applyTransformToPoint(transform, box.x.min, box.y.min);
+  const p2 = applyTransformToPoint(transform, box.x.max, box.y.min);
+  const p3 = applyTransformToPoint(transform, box.x.min, box.y.max);
+  const p4 = applyTransformToPoint(transform, box.x.max, box.y.max);
+
+  const minX = Math.min(p1.x, p2.x, p3.x, p4.x);
+  const maxX = Math.max(p1.x, p2.x, p3.x, p4.x);
+  const minY = Math.min(p1.y, p2.y, p3.y, p4.y);
+  const maxY = Math.max(p1.y, p2.y, p3.y, p4.y);
+
+  return {
+    x: { min: minX, max: maxX },
+    y: { min: minY, max: maxY },
+  };
+};
+
+const buildNodeProjectionTransform = (
+  node: LayoutNode,
+): ProjectionTransform => {
   const parentTransform = getAccumulatedParentTransform(node);
   const nodeCenter = getNodeCenter(node);
 
@@ -463,47 +487,63 @@ const buildNodeProjectionTransform = (node: LayoutNode): string | null => {
     Math.abs(desiredScaleX - 1) <= 0.0001 &&
     Math.abs(desiredScaleY - 1) <= 0.0001;
 
+  let tx = 0;
+  let ty = 0;
+  let sx = 1;
+  let sy = 1;
+
   if (isEffectivelyIdentity && !node.delta) {
-    // No animation, just counteract parent scale
-    const scaleX = safeInvert(parentTransform.scaleX);
-    const scaleY = safeInvert(parentTransform.scaleY);
+    // No animation active. Check if we need to counteract parent transform.
+    const parentScaleX = parentTransform.scaleX;
+    const parentScaleY = parentTransform.scaleY;
 
-    const isIdentity =
-      Math.abs(scaleX - 1) <= 0.0001 && Math.abs(scaleY - 1) <= 0.0001;
+    const isParentIdentity =
+      Math.abs(parentScaleX - 1) <= 0.0001 &&
+      Math.abs(parentScaleY - 1) <= 0.0001 &&
+      Math.abs(parentTransform.translateX) <= 0.5 &&
+      Math.abs(parentTransform.translateY) <= 0.5;
 
-    if (isIdentity) return null;
+    if (!isParentIdentity) {
+      // Where the node's center ends up after parent transform
+      const afterParent = applyTransformToPoint(
+        parentTransform,
+        nodeCenter.x,
+        nodeCenter.y,
+      );
 
-    return `translate3d(0px, 0px, 0) scale(${scaleX}, ${scaleY})`;
+      // We want the node to stay at its original position (nodeCenter)
+      // So we need to translate it back: nodeCenter - afterParent
+      // But this translation happens inside the parent's scaled space, so divide by parent scale
+      tx = (nodeCenter.x - afterParent.x) / parentTransform.scaleX;
+      ty = (nodeCenter.y - afterParent.y) / parentTransform.scaleY;
+
+      // Counteract parent scale
+      sx = safeInvert(parentTransform.scaleX);
+      sy = safeInvert(parentTransform.scaleY);
+    }
+  } else {
+    // Where the node's center should be in page coords
+    const desiredCenterX = nodeCenter.x + desiredTranslateX;
+    const desiredCenterY = nodeCenter.y + desiredTranslateY;
+
+    // Where the node's center ends up after parent transform (before node's own transform)
+    const afterParent = applyTransformToPoint(
+      parentTransform,
+      nodeCenter.x,
+      nodeCenter.y,
+    );
+
+    // Local translation needed to reach desired position
+    // Note: parent scale affects our translation, so we need to account for it
+    tx = (desiredCenterX - afterParent.x) / parentTransform.scaleX;
+    ty = (desiredCenterY - afterParent.y) / parentTransform.scaleY;
+
+    // Local scale to counteract parent scale and achieve desired scale
+    sx = desiredScaleX / parentTransform.scaleX;
+    sy = desiredScaleY / parentTransform.scaleY;
   }
 
-  // Where the node's center should be in page coords
-  const desiredCenterX = nodeCenter.x + desiredTranslateX;
-  const desiredCenterY = nodeCenter.y + desiredTranslateY;
-
-  // Where the node's center ends up after parent transform (before node's own transform)
-  const afterParent = applyTransformToPoint(
-    parentTransform,
-    nodeCenter.x,
-    nodeCenter.y,
-  );
-
-  // Local translation needed to reach desired position
-  // Note: parent scale affects our translation, so we need to account for it
-  const localTranslateX =
-    (desiredCenterX - afterParent.x) / parentTransform.scaleX;
-  const localTranslateY =
-    (desiredCenterY - afterParent.y) / parentTransform.scaleY;
-
-  // Local scale to counteract parent scale and achieve desired scale
-  const localScaleX = desiredScaleX / parentTransform.scaleX;
-  const localScaleY = desiredScaleY / parentTransform.scaleY;
-
   // Sanitize values
-  let tx = localTranslateX;
-  let ty = localTranslateY;
-  let sx = localScaleX;
-  let sy = localScaleY;
-
   if (!Number.isFinite(tx)) tx = 0;
   if (!Number.isFinite(ty)) ty = 0;
   if (!Number.isFinite(sx) || sx === 0) sx = 1;
@@ -515,9 +555,17 @@ const buildNodeProjectionTransform = (node: LayoutNode): string | null => {
     Math.abs(sx - 1) <= 0.0001 &&
     Math.abs(sy - 1) <= 0.0001;
 
-  if (isIdentity) return null;
+  const transform = isIdentity
+    ? null
+    : `translate3d(${tx}px, ${ty}px, 0) scale(${sx}, ${sy})`;
 
-  return `translate3d(${tx}px, ${ty}px, 0) scale(${sx}, ${sy})`;
+  return {
+    transform,
+    translateX: tx,
+    translateY: ty,
+    scaleX: sx,
+    scaleY: sy,
+  };
 };
 
 /**
@@ -751,7 +799,8 @@ class LayoutManager {
   private nodes = new Set<LayoutNode>();
   private nodeByElement = new WeakMap<Element, LayoutNode>();
   private stacks = new Map<string, LayoutIdStack>();
-  private autoMeasureScheduled = false;
+  private pendingAutoMeasureTargets: Set<LayoutTransitionTarget> | null = null;
+  private pendingAutoMeasureSnapshot: LayoutTransitionSnapshot | null = null;
 
   register(node: LayoutNode): void {
     this.nodes.add(node);
@@ -849,7 +898,6 @@ class LayoutManager {
 
   snapshotBefore(
     targets: LayoutTransitionTarget[] | null,
-    scope: LayoutTransitionScope,
     includeAll = false,
   ): LayoutTransitionSnapshot | null {
     if (typeof window === "undefined") return null;
@@ -879,7 +927,7 @@ class LayoutManager {
           this.resolveTargetNode(descriptor),
         );
 
-        const scoped = this.collectScopeNodes(targetNode, scope);
+        const scoped = this.collectScopeNodes(targetNode);
         for (const node of scoped) {
           nodesSet.add(node);
         }
@@ -891,6 +939,17 @@ class LayoutManager {
     if (nodes.length === 0) return null;
 
     this.sortByDepth(nodes);
+
+    // IMPORTANT: Calculate visual snapshots BEFORE updating latestBox!
+    // The motion values (translateX, scaleX, etc.) are calibrated relative to
+    // the CURRENT latestBox. If we update latestBox first, then getVisualBox
+    // will calculate wrong positions, causing scale/translate accumulation bugs.
+    const visualSnapshots = new Map<LayoutNode, Box | null>();
+    for (const node of nodes) {
+      if (node.delta) {
+        visualSnapshots.set(node, getVisualBox(node));
+      }
+    }
 
     const scrollContainers = this.collectScrollContainers();
     const beforeBoxes = this.measureNodes(
@@ -904,16 +963,8 @@ class LayoutManager {
       node.latestBox = box;
     }
 
-    const visualSnapshots = new Map<LayoutNode, Box | null>();
-    for (const node of nodes) {
-      if (node.delta) {
-        visualSnapshots.set(node, getVisualBox(node));
-      }
-    }
-
     return {
       targets: descriptors,
-      scope,
       includeAll,
       nodes,
       beforeBoxes,
@@ -932,10 +983,19 @@ class LayoutManager {
 
     this.rebuildTree(allNodes);
 
-    const nodes = this.collectScopeNodes(node, "descendants");
+    const nodes = this.collectScopeNodes(node);
     if (nodes.length === 0) return null;
 
     this.sortByDepth(nodes);
+
+    // IMPORTANT: Calculate visual snapshots BEFORE updating latestBox!
+    // See comment in snapshotBefore() for explanation.
+    const visualSnapshots = new Map<LayoutNode, Box | null>();
+    for (const subtreeNode of nodes) {
+      if (subtreeNode.delta) {
+        visualSnapshots.set(subtreeNode, getVisualBox(subtreeNode));
+      }
+    }
 
     const scrollContainers = this.collectScrollContainers();
     const beforeBoxes = this.measureNodes(
@@ -949,16 +1009,8 @@ class LayoutManager {
       subtreeNode.latestBox = box;
     }
 
-    const visualSnapshots = new Map<LayoutNode, Box | null>();
-    for (const subtreeNode of nodes) {
-      if (subtreeNode.delta) {
-        visualSnapshots.set(subtreeNode, getVisualBox(subtreeNode));
-      }
-    }
-
     return {
       targets: [{ type: "element", element }],
-      scope: "descendants",
       includeAll: false,
       nodes,
       beforeBoxes,
@@ -966,18 +1018,90 @@ class LayoutManager {
     };
   }
 
-  scheduleAutoMeasure(): void {
-    if (this.autoMeasureScheduled) return;
+  scheduleAutoMeasure(element: LayoutTransitionTarget | null): void {
+    // If element is null, we need to measure all nodes (global layout change)
+    // In that case, clear any pending targets and do a full measure
+    if (element === null) {
+      const alreadyScheduled = this.pendingAutoMeasureTargets !== null;
+      this.pendingAutoMeasureTargets = null; // Signal full measure mode
+      this.pendingAutoMeasureSnapshot = null;
 
-    const snapshot = this.snapshotBefore(null, "descendants", true);
-    if (!snapshot) return;
+      if (alreadyScheduled) return; // Already have a pending microtask
 
-    this.autoMeasureScheduled = true;
+      const snapshot = this.snapshotBefore(null, true);
+      if (!snapshot) return;
+
+      schedulePostLayoutMeasure(() => {
+        this.pendingAutoMeasureTargets = null;
+        this.pendingAutoMeasureSnapshot = null;
+        this.measureAfter(snapshot);
+      });
+      return;
+    }
+
+    // Check if we already have this element pending
+    if (this.pendingAutoMeasureTargets?.has(element)) return;
+
+    // Take snapshot synchronously BEFORE DOM changes
+    const elementSnapshot = this.snapshotBefore([element], false);
+    if (!elementSnapshot) return;
+
+    // Accumulate targets for batched measuring
+    const isFirstTarget = this.pendingAutoMeasureTargets === null;
+    if (isFirstTarget) {
+      this.pendingAutoMeasureTargets = new Set();
+      this.pendingAutoMeasureSnapshot = elementSnapshot;
+    } else if (this.pendingAutoMeasureSnapshot) {
+      // Merge this snapshot into the accumulated one
+      this.mergeSnapshots(this.pendingAutoMeasureSnapshot, elementSnapshot);
+    }
+    this.pendingAutoMeasureTargets!.add(element);
+
+    // Only schedule microtask for the first target
+    if (!isFirstTarget) return;
 
     schedulePostLayoutMeasure(() => {
-      this.autoMeasureScheduled = false;
+      const snapshot = this.pendingAutoMeasureSnapshot;
+      this.pendingAutoMeasureTargets = null;
+      this.pendingAutoMeasureSnapshot = null;
+
+      if (!snapshot) return;
+
       this.measureAfter(snapshot);
     });
+  }
+
+  private mergeSnapshots(
+    target: LayoutTransitionSnapshot,
+    source: LayoutTransitionSnapshot,
+  ): void {
+    // Merge targets
+    for (const desc of source.targets) {
+      target.targets.push(desc);
+    }
+
+    // Merge nodes (avoid duplicates)
+    const existingNodes = new Set(target.nodes);
+    for (const node of source.nodes) {
+      if (!existingNodes.has(node)) {
+        target.nodes.push(node);
+        existingNodes.add(node);
+      }
+    }
+
+    // Merge beforeBoxes
+    for (const [node, box] of source.beforeBoxes) {
+      if (!target.beforeBoxes.has(node)) {
+        target.beforeBoxes.set(node, box);
+      }
+    }
+
+    // Merge visualSnapshots
+    for (const [node, box] of source.visualSnapshots) {
+      if (!target.visualSnapshots.has(node)) {
+        target.visualSnapshots.set(node, box);
+      }
+    }
   }
 
   scheduleSubtreeMeasure(element: MotionElement): void {
@@ -997,10 +1121,19 @@ class LayoutManager {
 
     this.rebuildTree(allNodes);
 
-    const nodes = this.collectScopeNodes(targetNode, "descendants");
+    const nodes = this.collectScopeNodes(targetNode);
     if (nodes.length === 0) return null;
 
     this.sortByDepth(nodes);
+
+    // IMPORTANT: Calculate visual snapshots BEFORE updating latestBox!
+    // See comment in snapshotBefore() for explanation.
+    const visualSnapshots = new Map<LayoutNode, Box | null>();
+    for (const subtreeNode of nodes) {
+      if (subtreeNode.delta) {
+        visualSnapshots.set(subtreeNode, getVisualBox(subtreeNode));
+      }
+    }
 
     const scrollContainers = this.collectScrollContainers();
     const beforeBoxes = this.measureNodes(
@@ -1014,16 +1147,8 @@ class LayoutManager {
       subtreeNode.latestBox = box;
     }
 
-    const visualSnapshots = new Map<LayoutNode, Box | null>();
-    for (const subtreeNode of nodes) {
-      if (subtreeNode.delta) {
-        visualSnapshots.set(subtreeNode, getVisualBox(subtreeNode));
-      }
-    }
-
     return {
       targets: [{ type: "layoutId", layoutId }],
-      scope: "descendants",
       includeAll: false,
       nodes,
       beforeBoxes,
@@ -1038,7 +1163,8 @@ class LayoutManager {
   }
 
   scheduleLayoutIdRemeasure(layoutId: string): void {
-    if (this.autoMeasureScheduled) return;
+    // Skip if we already have pending auto-measure (will include this anyway)
+    if (this.pendingAutoMeasureTargets !== null) return;
 
     const stack = this.stacks.get(layoutId);
     if (!stack) return;
@@ -1050,7 +1176,6 @@ class LayoutManager {
 
     const snapshot: LayoutTransitionSnapshot = {
       targets: [{ type: "layoutId", layoutId }],
-      scope: "descendants",
       includeAll: false,
       nodes: [],
       beforeBoxes: new Map(),
@@ -1085,7 +1210,7 @@ class LayoutManager {
         const targetNode = this.resolveTargetNode(target);
         if (!targetNode) continue;
 
-        const scoped = this.collectScopeNodes(targetNode, snapshot.scope);
+        const scoped = this.collectScopeNodes(targetNode);
         for (const node of scoped) {
           if (this.nodes.has(node)) {
             merged.add(node);
@@ -1208,10 +1333,7 @@ class LayoutManager {
     return this.nodeByElement.get(target.element) ?? null;
   }
 
-  private collectScopeNodes(
-    target: LayoutNode,
-    scope: LayoutTransitionScope,
-  ): LayoutNode[] {
+  private collectScopeNodes(target: LayoutNode): LayoutNode[] {
     const nodes: LayoutNode[] = [];
     const stack: LayoutNode[] = [target];
 
@@ -1220,10 +1342,8 @@ class LayoutManager {
       if (!node) continue;
       nodes.push(node);
 
-      if (scope === "descendants") {
-        for (const child of node.children) {
-          stack.push(child);
-        }
+      for (const child of node.children) {
+        stack.push(child);
       }
     }
 
@@ -1459,6 +1579,10 @@ export const createLayoutNode = (args: {
     translateY,
     scaleX,
     scaleY,
+    projectionTranslateX: 0,
+    projectionTranslateY: 0,
+    projectionScaleX: 1,
+    projectionScaleY: 1,
     projectionAnimations: [],
     projectionCycleId: 0,
 
@@ -1472,9 +1596,16 @@ export const createLayoutNode = (args: {
     scheduleRender: args.scheduleRender,
 
     updateProjection: (immediate = false) => {
-      const transform = buildNodeProjectionTransform(node);
-      const nextScaleX = node.scaleX.get();
-      const nextScaleY = node.scaleY.get();
+      const projection = buildNodeProjectionTransform(node);
+
+      node.projectionTranslateX = projection.translateX;
+      node.projectionTranslateY = projection.translateY;
+      node.projectionScaleX = projection.scaleX;
+      node.projectionScaleY = projection.scaleY;
+
+      const transform = projection.transform;
+      const nextScaleX = projection.scaleX;
+      const nextScaleY = projection.scaleY;
 
       const scaleChanged =
         latestProjectionScaleX === null ||
@@ -1482,7 +1613,10 @@ export const createLayoutNode = (args: {
         Math.abs(nextScaleX - latestProjectionScaleX) > 0.0001 ||
         Math.abs(nextScaleY - latestProjectionScaleY) > 0.0001;
 
-      if (transform === latestProjectionTransform && !scaleChanged) return;
+      const projectionChanged =
+        transform !== latestProjectionTransform || scaleChanged;
+
+      if (!projectionChanged) return;
       latestProjectionTransform = transform;
       latestProjectionScaleX = nextScaleX;
       latestProjectionScaleY = nextScaleY;
@@ -1496,6 +1630,11 @@ export const createLayoutNode = (args: {
         },
         immediate,
       );
+
+      // Ensure descendants update when this node's projection changes.
+      for (const child of node.children) {
+        child.updateProjection(false);
+      }
     },
 
     syncScaleCorrectionSubscriptions: () => {

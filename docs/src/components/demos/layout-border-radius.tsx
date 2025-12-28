@@ -45,7 +45,6 @@ export const LayoutBorderRadius = () => {
           >
             <motion.p
               layout
-              layoutDependencies={[expanded]}
               transition={{
                 visualDuration: 1,
                 type: "spring",

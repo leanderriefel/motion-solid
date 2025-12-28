@@ -532,7 +532,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         return;
       }
 
-      layoutManager.scheduleAutoMeasure();
+      layoutManager.scheduleAutoMeasure(state.element);
     });
 
     return (
