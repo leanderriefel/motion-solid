@@ -10,16 +10,16 @@ const underDampedSpringProperties = new Set([
   "y",
   "z",
   "rotate",
-  "rotateX",
-  "rotateY",
-  "rotateZ",
+  "rotate-x",
+  "rotate-y",
+  "rotate-z",
   "scale",
-  "scaleX",
-  "scaleY",
-  "scaleZ",
+  "scale-x",
+  "scale-y",
+  "scale-z",
   "skew",
-  "skewX",
-  "skewY",
+  "skew-x",
+  "skew-y",
 ]);
 
 /**
@@ -28,7 +28,7 @@ const underDampedSpringProperties = new Set([
  */
 const criticallyDampedSpringProperties = new Set([
   "opacity",
-  "backgroundColor",
+  "background-color",
   "color",
   "fill",
   "stroke",

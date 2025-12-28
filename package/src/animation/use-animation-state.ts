@@ -18,7 +18,6 @@ import type {
 import {
   motionValue,
   supportsBrowserAnimation,
-  transformProps,
   defaultTransformValue,
   readTransformValue,
 } from "motion-dom";
@@ -36,7 +35,12 @@ import {
   areKeyframesEqual,
 } from "./keyframes";
 import { startMotionValueAnimation } from "./motion-value";
-import { buildHTMLStyles, createRenderState } from "./render";
+import {
+  buildHTMLStyles,
+  createRenderState,
+  isTransformProp,
+  toMotionDomTransformKey,
+} from "./render";
 import {
   resolveDefinitionToTarget,
   getTransitionForKey,
@@ -45,6 +49,10 @@ import {
 import type { PresenceContextValue } from "../component/presence";
 import type { MotionConfigContextValue } from "../component/motion-config";
 import { createLayoutNode, layoutManager } from "../layout/layout-manager";
+import {
+  scaleCorrectedKeys,
+  applyScaleCorrection,
+} from "../projection/scale-correction";
 
 type TransformTemplate = (
   transform: Record<string, string | number>,
@@ -78,6 +86,11 @@ export interface AnimationStateOptions {
     waitForChildren: () => Promise<void>;
     signalParentComplete: () => void;
   } | null;
+  /**
+   * Get style prop values for scale correction.
+   * These are values set via the style prop that need scale correction during layout animations.
+   */
+  getStyleValues?: () => Record<string, string | number> | undefined;
 }
 
 // Transform properties that should be disabled when reduced motion is active
@@ -86,20 +99,21 @@ const transformPropertiesSet = new Set([
   "y",
   "z",
   "rotate",
-  "rotateX",
-  "rotateY",
-  "rotateZ",
+  "rotate-x",
+  "rotate-y",
+  "rotate-z",
   "scale",
-  "scaleX",
-  "scaleY",
-  "scaleZ",
+  "scale-x",
+  "scale-y",
+  "scale-z",
   "skew",
-  "skewX",
-  "skewY",
-  "translateX",
-  "translateY",
-  "translateZ",
+  "skew-x",
+  "skew-y",
+  "translate-x",
+  "translate-y",
+  "translate-z",
   "perspective",
+  "transform-perspective",
 ]);
 
 export const useAnimationState = (args: AnimationStateOptions): void => {
@@ -114,6 +128,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     parentOrchestration,
     signalAnimationComplete,
     childOrchestration,
+    getStyleValues,
   } = args;
 
   const motionValueOwner: MotionValueOwner = {
@@ -144,10 +159,23 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   let projectionTransform: string | null = null;
   let projectionOpacity: number | null = null;
   let prevProjectionOpacity: number | null = null;
+  let projectionScaleX: number = 1;
+  let projectionScaleY: number = 1;
+  let projectionTargetBox: {
+    x: { min: number; max: number };
+    y: { min: number; max: number };
+  } | null = null;
 
   let wasProjectionTransformActive = false;
   let restoreInlineTransform: string | null = null;
   let projectionBaseTransform: string | null = null;
+  let wasProjectionScaling = false;
+  const scaleCorrectionPrevValues = new Map<string, string>();
+  // Track which shorthand keys are being corrected (to restore them later)
+  // Maps shorthand key -> original value (e.g., "border-radius" -> "24px")
+  const scaleCorrectionShorthandValues = new Map<string, string>();
+  // Track all longhand keys we've set (to remove them on restoration)
+  const scaleCorrectionLonghandKeys = new Set<string>();
 
   let layoutNode: ReturnType<typeof createLayoutNode> | null = null;
 
@@ -188,7 +216,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     for (const [key, v] of latestValues.entries()) {
       if (waapiActiveKeys.has(key)) continue;
       // If WAAPI is controlling `transform`, don't generate a transform string from transform props.
-      if (waapiActiveKeys.has("transform") && transformProps.has(key)) continue;
+      if (waapiActiveKeys.has("transform") && isTransformProp(key)) continue;
       if (isStringOrNumber(v)) values[key] = v;
     }
 
@@ -261,12 +289,101 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
     prevProjectionOpacity = projectionOpacity;
 
-    // Apply styles (use direct property assignment for camelCase keys)
+    // Handle scale-correctable properties (border-radius, box-shadow)
+    // During active projection scaling, we apply corrected values.
+    // The style prop still contains raw values for SSR/hydration.
+    const styleValues = getStyleValues?.();
+
+    // Check if projection is actively scaling (not at identity)
+    const isProjectionScaling =
+      projectionTransform !== null &&
+      projectionTargetBox !== null &&
+      (Math.abs(projectionScaleX - 1) > 0.0001 ||
+        Math.abs(projectionScaleY - 1) > 0.0001);
+
+    // Only process scale-correctable keys when we have style values to work with
+    if (styleValues && Object.keys(styleValues).length > 0) {
+      for (const key in scaleCorrectedKeys) {
+        // First check latestValues (animation values), then fall back to style prop values
+        let value: string | number | undefined = latestValues.get(key) as
+          | string
+          | number
+          | undefined;
+
+        // If not in latestValues, check style prop
+        if (value === undefined) {
+          value = styleValues[key];
+        }
+
+        if (value === undefined) continue;
+        if (typeof value !== "string" && typeof value !== "number") continue;
+
+        if (isProjectionScaling) {
+          // Apply scale correction during active projection
+          const corrections = applyScaleCorrection(
+            key,
+            value,
+            projectionScaleX,
+            projectionScaleY,
+            projectionTargetBox,
+          );
+
+          // Save the shorthand value for restoration (if not already saved)
+          if (!scaleCorrectionShorthandValues.has(key)) {
+            scaleCorrectionShorthandValues.set(key, String(value));
+          }
+
+          for (const {
+            key: correctedKey,
+            value: correctedValue,
+          } of corrections) {
+            // Track this longhand key so we can remove it on restoration
+            scaleCorrectionLonghandKeys.add(correctedKey);
+
+            const strValue = String(correctedValue);
+            renderState.style[correctedKey] = strValue;
+            scaleCorrectionPrevValues.set(correctedKey, strValue);
+          }
+        }
+        // When NOT scaling, don't set renderState.style - let Solid's style prop handle it
+      }
+    }
+
+    // If we were scaling but no longer are, restore the original values
+    // so that style prop takes over again
+    if (wasProjectionScaling && !isProjectionScaling) {
+      // First, remove all longhand properties we set during animation
+      // by setting them to empty string (which removes them from inline style)
+      for (const longhandKey of scaleCorrectionLonghandKeys) {
+        renderState.style[longhandKey] = "";
+        // Clear from prevStyle so next frame doesn't skip the restore
+        prevStyle.delete(longhandKey);
+      }
+
+      // Then restore the shorthand values (e.g., "border-radius", "box-shadow")
+      // This ensures the original shorthand takes effect again
+      for (const [
+        shorthandKey,
+        shorthandValue,
+      ] of scaleCorrectionShorthandValues) {
+        renderState.style[shorthandKey] = shorthandValue;
+        // Clear from prevStyle so the value is applied
+        prevStyle.delete(shorthandKey);
+      }
+
+      scaleCorrectionPrevValues.clear();
+      scaleCorrectionShorthandValues.clear();
+      scaleCorrectionLonghandKeys.clear();
+    }
+    wasProjectionScaling = isProjectionScaling;
+
+    // Apply styles (use setProperty to support kebab-case keys)
     for (const key in renderState.style) {
       const value = renderState.style[key];
       if (value === undefined) continue;
-      if (prevStyle.get(key) === value) continue;
-      (element.style as unknown as Record<string, string>)[key] = value;
+      const prevValue = prevStyle.get(key);
+      if (prevValue === value) continue;
+      element.style.setProperty(key, value);
       prevStyle.set(key, value);
     }
 
@@ -445,11 +562,23 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   });
 
   const applyProjection = (
-    update: { transform?: string | null; opacity?: number | null },
+    update: {
+      transform?: string | null;
+      opacity?: number | null;
+      scaleX?: number | null;
+      scaleY?: number | null;
+      targetBox?: {
+        x: { min: number; max: number };
+        y: { min: number; max: number };
+      } | null;
+    },
     immediate: boolean,
   ) => {
     if ("transform" in update) projectionTransform = update.transform ?? null;
     if ("opacity" in update) projectionOpacity = update.opacity ?? null;
+    if ("scaleX" in update) projectionScaleX = update.scaleX ?? 1;
+    if ("scaleY" in update) projectionScaleY = update.scaleY ?? 1;
+    if ("targetBox" in update) projectionTargetBox = update.targetBox ?? null;
 
     if (immediate) {
       renderToDom();
@@ -802,10 +931,11 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
         continue;
       }
 
-      if (transformProps.has(key)) {
+      if (isTransformProp(key)) {
+        const motionDomKey = toMotionDomTransformKey(key);
         const value = element
-          ? readTransformValue(element, key)
-          : defaultTransformValue(key);
+          ? readTransformValue(element, motionDomKey)
+          : defaultTransformValue(motionDomKey);
         baseValueCache.set(key, value);
         baseAnimate[key] = value;
         continue;

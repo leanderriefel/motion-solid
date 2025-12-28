@@ -35,6 +35,13 @@ export const animateMotionValue = <V extends AnyResolvedKeyframe>(
   return (onComplete) => {
     const valueTransition = getValueTransition(transition, name) || {};
 
+    // DEBUG: trace transition flow
+    if (name === "translateX" || name === "scaleX") {
+      console.log(`[animateMotionValue] name=${name}`);
+      console.log(`  input transition:`, JSON.stringify(transition));
+      console.log(`  valueTransition:`, JSON.stringify(valueTransition));
+    }
+
     /**
      * Most transition values are currently completely overwritten by value-specific
      * transitions. In the future it'd be nicer to blend these transitions. But for now
@@ -89,6 +96,24 @@ export const animateMotionValue = <V extends AnyResolvedKeyframe>(
       Object.assign(options, getDefaultTransition(name, options));
     }
 
+    // DEBUG: after defaults applied
+    if (name === "translateX" || name === "scaleX") {
+      console.log(
+        `  isTransitionDefined:`,
+        isTransitionDefined(valueTransition),
+      );
+      console.log(
+        `  options after defaults:`,
+        JSON.stringify({
+          type: options.type,
+          duration: options.duration,
+          stiffness: options.stiffness,
+          damping: options.damping,
+          ease: options.ease,
+        }),
+      );
+    }
+
     /**
      * Both WAAPI and our internal animation functions use durations
      * as defined by milliseconds, while our external API defines them
@@ -99,6 +124,19 @@ export const animateMotionValue = <V extends AnyResolvedKeyframe>(
     }
     if (options.repeatDelay !== undefined) {
       options.repeatDelay = secondsToMilliseconds(options.repeatDelay);
+    }
+
+    // DEBUG: final options
+    if (name === "translateX" || name === "scaleX") {
+      console.log(
+        `  final options:`,
+        JSON.stringify({
+          type: options.type,
+          duration: options.duration,
+          stiffness: options.stiffness,
+          damping: options.damping,
+        }),
+      );
     }
 
     /**

@@ -3,5 +3,6 @@ export { EnterAnimation } from "./enter-animation";
 export { ExitAnimation } from "./exit-animation";
 export { HoverAndTapAnimation } from "./hover-and-tap-animation";
 export { LayoutAnimation } from "./layout-animation";
+export { LayoutBorderRadius } from "./layout-border-radius";
 export { LayoutUnderlineAnimation } from "./layout-underline-animation";
 export { ScrollAnimation } from "./scroll-animation";

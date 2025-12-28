@@ -13,14 +13,22 @@
     "start": "bun --filter @motion-solid/docs start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "typecheck": "tsc --noEmit"
   },
   "lint-staged": {
-    "**/*": "prettier --write --ignore-unknown"
+    "**/*": [
+      "prettier --write --ignore-unknown",
+      "oxlint"
+    ]
   },
   "devDependencies": {
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
-    "prettier": "^3.7.4"
+    "oxlint": "npm:oxlint-tsgolint@^0.10.0",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3"
   }
 }

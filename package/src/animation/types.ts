@@ -1,5 +1,6 @@
 import type { MotionValue, TargetAndTransition } from "motion-dom";
-import { motionValue, transformProps, defaultTransformValue } from "motion-dom";
+import { motionValue, defaultTransformValue } from "motion-dom";
+import { isTransformProp, toMotionDomTransformKey } from "./render";
 import type { MotionValues } from "../types";
 
 type MotionValueOwner = NonNullable<MotionValue<unknown>["owner"]>;
@@ -67,8 +68,8 @@ const createMotionValueForKey = (
  */
 const cssDefaultValues: Record<string, string | number> = {
   opacity: 1,
-  fillOpacity: 1,
-  strokeOpacity: 1,
+  "fill-opacity": 1,
+  "stroke-opacity": 1,
   // Filter functions default to their identity values
   blur: 0,
   brightness: 1,
@@ -77,11 +78,11 @@ const cssDefaultValues: Record<string, string | number> = {
   saturate: 1,
   sepia: 0,
   invert: 0,
-  hueRotate: 0,
+  "hue-rotate": 0,
   // SVG properties
-  pathLength: 0,
-  pathOffset: 0,
-  strokeDashoffset: 0,
+  "path-length": 0,
+  "path-offset": 0,
+  "stroke-dashoffset": 0,
 };
 
 /**
@@ -117,8 +118,9 @@ export const buildAnimationTypeMotionValues = (args: {
         // For transform properties, use the default transform value (0 for most, 1 for scale)
         // rather than the target value. This ensures animations start from the correct
         // initial state when no explicit `initial` prop is provided.
-        if (transformProps.has(key)) {
-          const defaultValue = defaultTransformValue(key);
+        if (isTransformProp(key)) {
+          const motionDomKey = toMotionDomTransformKey(key);
+          const defaultValue = defaultTransformValue(motionDomKey);
           values[key] = createMotionValueForKey(defaultValue, args.owner);
           continue;
         }

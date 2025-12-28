@@ -1,6 +1,6 @@
 import {
-  transformProps,
-  transformPropOrder,
+  transformProps as motionDomTransformProps,
+  transformPropOrder as motionDomTransformPropOrder,
   getValueAsType,
   numberValueTypes,
   isCSSVariableName,
@@ -32,6 +32,33 @@ const translateAlias: Record<string, string> = {
   transformPerspective: "perspective",
 };
 
+const originKeyMap: Record<string, "originX" | "originY" | "originZ"> = {
+  "origin-x": "originX",
+  "origin-y": "originY",
+  "origin-z": "originZ",
+};
+
+const camelToKebab = (key: string): string =>
+  key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+
+const kebabToCamel = (key: string): string =>
+  key.replace(/-([a-z])/g, (_match, char: string) => char.toUpperCase());
+
+const transformProps = new Set(
+  Array.from(motionDomTransformProps, (key) => camelToKebab(key)),
+);
+
+const transformPropOrder = motionDomTransformPropOrder.map(camelToKebab);
+
+const getValueType = (key: string) =>
+  numberValueTypes[key] ?? numberValueTypes[kebabToCamel(key)];
+
+export const isTransformProp = (key: string): boolean =>
+  transformProps.has(key);
+
+export const toMotionDomTransformKey = (key: string): string =>
+  kebabToCamel(key);
+
 export const buildTransform = (
   latestValues: Record<string, string | number>,
   transform: TransformState,
@@ -49,6 +76,8 @@ export const buildTransform = (
 
     if (value === undefined) continue;
 
+    const motionDomKey = toMotionDomTransformKey(key);
+
     let valueIsDefault = true;
     if (typeof value === "number") {
       valueIsDefault = value === (key.startsWith("scale") ? 1 : 0);
@@ -58,11 +87,11 @@ export const buildTransform = (
 
     if (!valueIsDefault || transformTemplate) {
       const valueAsType =
-        getValueAsType(value, numberValueTypes[key]) ?? String(value);
+        getValueAsType(value, numberValueTypes[motionDomKey]) ?? String(value);
 
       if (!valueIsDefault) {
         transformIsDefault = false;
-        const transformName = translateAlias[key] || key;
+        const transformName = translateAlias[motionDomKey] || motionDomKey;
         transformString += `${transformName}(${valueAsType}) `;
       }
 
@@ -100,7 +129,7 @@ export const buildHTMLStyles = (
     const value = latestValues[key];
     if (value === undefined) continue;
 
-    if (transformProps.has(key)) {
+    if (isTransformProp(key)) {
       hasTransform = true;
       continue;
     } else if (isCSSVariableName(key)) {
@@ -108,11 +137,12 @@ export const buildHTMLStyles = (
       continue;
     } else {
       const valueAsType =
-        getValueAsType(value, numberValueTypes[key]) ?? String(value);
+        getValueAsType(value, getValueType(key)) ?? String(value);
 
-      if (key.startsWith("origin")) {
+      const originKey = originKeyMap[key];
+      if (originKey) {
         hasTransformOrigin = true;
-        transformOrigin[key as keyof typeof transformOrigin] = valueAsType;
+        transformOrigin[originKey] = valueAsType;
       } else {
         style[key] = valueAsType;
       }
@@ -133,7 +163,7 @@ export const buildHTMLStyles = (
 
   if (hasTransformOrigin) {
     const { originX = "50%", originY = "50%", originZ = 0 } = transformOrigin;
-    style.transformOrigin = `${originX} ${originY} ${originZ}`;
+    style["transform-origin"] = `${originX} ${originY} ${originZ}`;
   }
 };
 

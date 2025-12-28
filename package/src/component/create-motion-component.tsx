@@ -10,7 +10,7 @@ import {
 import { Dynamic } from "solid-js/web";
 import { createStore } from "solid-js/store";
 import { mergeRefs } from "@solid-primitives/refs";
-import type { Transition, Variants } from "motion-dom";
+import type { Variants } from "motion-dom";
 import type {
   ElementInstance,
   ElementTag,
@@ -29,17 +29,121 @@ import {
   OrchestrationContext,
   useOrchestration,
   type OrchestrationContextValue,
-  type WhenOrchestration,
 } from "./orchestration-context";
 import { isStaggerFunction, type StaggerFunction } from "../animation/stagger";
 import { resolveDefinitionToTarget } from "../animation/variants";
 import { pickInitialFromKeyframes } from "../animation/keyframes";
-import { buildHTMLStyles, createRenderState } from "../animation/render";
+import {
+  buildHTMLStyles,
+  buildTransform,
+  createRenderState,
+} from "../animation/render";
+import { scaleCorrectedKeys } from "../projection/scale-correction";
 
 type TransformTemplate = (
   transform: Record<string, string | number>,
   generatedTransform: string,
 ) => string;
+
+/**
+ * Transform shortcut properties that can be used in the style prop.
+ * These will be converted to a CSS transform string.
+ */
+const styleTransformShortcuts = new Set([
+  "x",
+  "y",
+  "z",
+  "rotate",
+  "rotate-x",
+  "rotate-y",
+  "rotate-z",
+  "scale",
+  "scale-x",
+  "scale-y",
+  "scale-z",
+  "skew",
+  "skew-x",
+  "skew-y",
+  "translate-x",
+  "translate-y",
+  "translate-z",
+  "perspective",
+  "transform-perspective",
+]);
+
+/**
+ * Process style prop to handle transform shortcuts and extract scale-correctable values.
+ * Returns the processed style object and the extracted values for scale correction.
+ *
+ * @param style - The raw style prop
+ * @param excludeScaleCorrected - If true, scale-correctable properties are excluded from processedStyle
+ *                                 (used during active layout animations to prevent Solid from overriding our corrections)
+ */
+const processStyleProp = (
+  style: Record<string, string | number> | string | undefined,
+  excludeScaleCorrected = false,
+): {
+  processedStyle: Record<string, string | number>;
+  scaleCorrectionValues: Record<string, string | number>;
+} => {
+  if (!style || typeof style === "string") {
+    return { processedStyle: {}, scaleCorrectionValues: {} };
+  }
+
+  const processedStyle: Record<string, string | number> = {};
+  const scaleCorrectionValues: Record<string, string | number> = {};
+  const transformValues: Record<string, string | number> = {};
+  let hasTransformShortcuts = false;
+
+  for (const key in style) {
+    const value = style[key];
+    if (value === undefined) continue;
+
+    // Check if it's a transform shortcut
+    if (styleTransformShortcuts.has(key)) {
+      hasTransformShortcuts = true;
+      transformValues[key] = value;
+      continue;
+    }
+
+    // Use kebab-case keys for scale correction
+    const normalizedKey = key;
+
+    // Check if it needs scale correction
+    if (normalizedKey in scaleCorrectedKeys) {
+      scaleCorrectionValues[normalizedKey] = value;
+
+      // If excluding scale-corrected properties (during active projection),
+      // don't add to processedStyle - our renderToDom will handle it
+      if (excludeScaleCorrected) {
+        continue;
+      }
+    }
+
+    // Pass through to processed style
+    processedStyle[key] = value;
+  }
+
+  // If we have transform shortcuts, build the transform string
+  if (hasTransformShortcuts) {
+    const renderState = createRenderState();
+    const transformString = buildTransform(
+      transformValues,
+      renderState.transform,
+    );
+    if (transformString && transformString !== "none") {
+      // Merge with existing transform if present
+      const existingTransform = processedStyle.transform;
+      if (existingTransform && typeof existingTransform === "string") {
+        processedStyle.transform = `${transformString} ${existingTransform}`;
+      } else {
+        processedStyle.transform = transformString;
+      }
+    }
+  }
+
+  return { processedStyle, scaleCorrectionValues };
+};
 
 const getInitialStyles = (
   options: MotionOptions,
@@ -188,12 +292,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       },
     });
 
-    const layoutEnabled = createMemo(
-      () =>
-        Boolean(resolvedMotionOptions.layout) ||
-        Boolean(resolvedMotionOptions.layoutId),
-    );
-
     const initialStyles = createMemo(() => {
       return getInitialStyles(resolvedMotionOptions, parent);
     });
@@ -332,6 +430,22 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     let cachedElement: Element | null = null;
 
+    // Process style prop for transform shortcuts and scale correction values
+    // Note: We do NOT exclude scale-correctable properties from the style prop
+    // passed to Solid for initial render/SSR. Instead, renderToDom will override
+    // these values during active layout animations when scale correction is needed.
+    const processedStyleData = createMemo(() => {
+      const rawStyle = styleProps.style as
+        | Record<string, string | number>
+        | string
+        | undefined;
+      // Never exclude - let Solid render the raw values, renderToDom will correct when needed
+      return processStyleProp(rawStyle, false);
+    });
+
+    // Getter for scale correction values from style prop
+    const getStyleValues = () => processedStyleData().scaleCorrectionValues;
+
     // Calculate additional delay from parent orchestration
     const getParentOrchestrationDelay = (): number => {
       if (!parentOrchestration) return 0;
@@ -351,6 +465,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         parentOrchestration?.signalChildComplete();
       },
       childOrchestration,
+      getStyleValues,
     });
     useGestures({ state, setState, options: resolvedMotionOptions });
     useDragGesture({ state, setState, options: resolvedMotionOptions });
@@ -368,8 +483,8 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     const mergedStyles = createMemo(() => {
       const initial = initialStyles();
-      const existing = styleProps.style as Record<string, string> | undefined;
-      return { ...(existing ?? {}), ...initial };
+      const { processedStyle } = processedStyleData();
+      return { ...processedStyle, ...initial };
     });
 
     let didAutoLayoutSnapshot = false;

@@ -23,6 +23,9 @@ type LayoutTransitionTarget = MotionElement | string;
 type ProjectionUpdate = {
   transform?: string | null;
   opacity?: number | null;
+  scaleX?: number | null;
+  scaleY?: number | null;
+  targetBox?: Box | null;
 };
 
 type ProjectionUpdateHandler = (
@@ -1436,6 +1439,8 @@ export const createLayoutNode = (args: {
   const opacity = motionValue(1);
 
   let latestProjectionTransform: string | null = null;
+  let latestProjectionScaleX: number | null = null;
+  let latestProjectionScaleY: number | null = null;
 
   const scaleCorrectionSubscriptions = new Map<LayoutNode, VoidFunction>();
 
@@ -1468,11 +1473,29 @@ export const createLayoutNode = (args: {
 
     updateProjection: (immediate = false) => {
       const transform = buildNodeProjectionTransform(node);
+      const nextScaleX = node.scaleX.get();
+      const nextScaleY = node.scaleY.get();
 
-      if (transform === latestProjectionTransform) return;
+      const scaleChanged =
+        latestProjectionScaleX === null ||
+        latestProjectionScaleY === null ||
+        Math.abs(nextScaleX - latestProjectionScaleX) > 0.0001 ||
+        Math.abs(nextScaleY - latestProjectionScaleY) > 0.0001;
+
+      if (transform === latestProjectionTransform && !scaleChanged) return;
       latestProjectionTransform = transform;
+      latestProjectionScaleX = nextScaleX;
+      latestProjectionScaleY = nextScaleY;
 
-      node.apply({ transform }, immediate);
+      node.apply(
+        {
+          transform,
+          scaleX: nextScaleX,
+          scaleY: nextScaleY,
+          targetBox: node.latestBox,
+        },
+        immediate,
+      );
     },
 
     syncScaleCorrectionSubscriptions: () => {
@@ -1532,13 +1555,24 @@ export const createLayoutNode = (args: {
       node.stop();
       node.delta = null;
       latestProjectionTransform = null;
+      latestProjectionScaleX = null;
+      latestProjectionScaleY = null;
 
       for (const unsub of scaleCorrectionSubscriptions.values()) {
         unsub();
       }
       scaleCorrectionSubscriptions.clear();
 
-      node.apply({ transform: null, opacity: null }, false);
+      node.apply(
+        {
+          transform: null,
+          opacity: null,
+          scaleX: null,
+          scaleY: null,
+          targetBox: null,
+        },
+        false,
+      );
     },
   };
 
