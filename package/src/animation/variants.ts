@@ -1,12 +1,11 @@
 import type {
   AnyResolvedKeyframe,
   TargetAndTransition,
-  Transition,
   Variant,
   VariantLabels,
   Variants,
 } from "motion-dom";
-import type { MotionOptions, MotionState } from "../types";
+import type { MotionOptions, MotionState, Transition } from "../types";
 import { isRecord, isStringOrNumber } from "./types";
 
 const hasFunction = (obj: Record<string, unknown>, key: string): boolean =>

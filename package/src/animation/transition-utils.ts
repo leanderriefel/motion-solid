@@ -1,4 +1,5 @@
-import type { Transition, ValueTransition } from "motion-dom";
+import type { ValueTransition } from "motion-dom";
+import type { Transition } from "../types";
 
 /**
  * Check if a transition has any animation-defining properties set.

@@ -6,7 +6,7 @@ import {
   onCleanup,
   useContext,
 } from "solid-js";
-import type { Transition } from "motion-dom";
+import type { Transition } from "../types";
 
 export type ReducedMotionConfig = "always" | "never" | "user";
 

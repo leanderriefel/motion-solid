@@ -1,8 +1,8 @@
 import { createEffect, onCleanup } from "solid-js";
 import type { SetStoreFunction } from "solid-js/store";
-import type { MotionValue, Transition } from "motion-dom";
+import type { MotionValue } from "motion-dom";
 import { motionValue } from "motion-dom";
-import type { MotionOptions, MotionState } from "../types";
+import type { MotionOptions, MotionState, Transition } from "../types";
 import { startMotionValueAnimation } from "../animation/motion-value";
 
 export interface DragGestureOptions {

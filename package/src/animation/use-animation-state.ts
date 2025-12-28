@@ -12,7 +12,6 @@ import type {
   AnyResolvedKeyframe,
   AnimationPlaybackControlsWithThen,
   MotionValue,
-  Transition,
   VariantLabels,
 } from "motion-dom";
 import {
@@ -21,7 +20,12 @@ import {
   defaultTransformValue,
   readTransformValue,
 } from "motion-dom";
-import type { MotionOptions, MotionState, MotionValues } from "../types";
+import type {
+  MotionOptions,
+  MotionState,
+  MotionValues,
+  Transition,
+} from "../types";
 import {
   animationTypes,
   type AnimationType,
@@ -48,11 +52,11 @@ import {
 } from "./variants";
 import type { PresenceContextValue } from "../component/presence";
 import type { MotionConfigContextValue } from "../component/motion-config";
-import { createLayoutNode, layoutManager } from "../layout/layout-manager";
 import {
-  scaleCorrectedKeys,
-  applyScaleCorrection,
-} from "../projection/scale-correction";
+  createProjectionNode,
+  projectionManager,
+} from "../projection/projection-manager";
+import type { ProjectionUpdate } from "../projection/node/types";
 
 type TransformTemplate = (
   transform: Record<string, string | number>,
@@ -87,8 +91,7 @@ export interface AnimationStateOptions {
     signalParentComplete: () => void;
   } | null;
   /**
-   * Get style prop values for scale correction.
-   * These are values set via the style prop that need scale correction during layout animations.
+   * Get style prop values to restore when projection overrides inline styles.
    */
   getStyleValues?: () => Record<string, string | number> | undefined;
 }
@@ -141,6 +144,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   });
 
   const latestValues = new Map<string, AnyResolvedKeyframe>();
+  const projectionLatestValues: Record<string, string | number> = {};
   const waapiActiveKeys = new Set<string>();
   const renderState = createRenderState();
   const prevStyle = new Map<string, string>();
@@ -152,27 +156,17 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   const presenceId = presence ? createUniqueId() : null;
 
   let projectionTransform: string | null = null;
+  let projectionTransformOrigin: string | null = null;
   let projectionOpacity: number | null = null;
   let prevProjectionOpacity: number | null = null;
-  let projectionScaleX: number = 1;
-  let projectionScaleY: number = 1;
-  let projectionTargetBox: {
-    x: { min: number; max: number };
-    y: { min: number; max: number };
-  } | null = null;
+  let projectionStyles: Record<string, string | number> | null = null;
+  const prevProjectionStyleKeys = new Set<string>();
 
   let wasProjectionTransformActive = false;
   let restoreInlineTransform: string | null = null;
   let projectionBaseTransform: string | null = null;
-  let wasProjectionScaling = false;
-  const scaleCorrectionPrevValues = new Map<string, string>();
-  // Track which shorthand keys are being corrected (to restore them later)
-  // Maps shorthand key -> original value (e.g., "border-radius" -> "24px")
-  const scaleCorrectionShorthandValues = new Map<string, string>();
-  // Track all longhand keys we've set (to remove them on restoration)
-  const scaleCorrectionLonghandKeys = new Set<string>();
 
-  let layoutNode: ReturnType<typeof createLayoutNode> | null = null;
+  let layoutNode: ReturnType<typeof createProjectionNode> | null = null;
 
   const findVariantAncestor = (
     type: AnimationType | "initial",
@@ -222,8 +216,12 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     );
 
     const hasMotionTransform = renderState.style.transform !== undefined;
+    const projectionIsActive =
+      projectionTransform !== null && projectionTransform !== "none";
 
-    if (projectionTransform !== null && !waapiActiveKeys.has("transform")) {
+    if (projectionIsActive && !waapiActiveKeys.has("transform")) {
+      const activeProjectionTransform = projectionTransform as string;
+
       if (!wasProjectionTransformActive) {
         restoreInlineTransform = element.style.transform;
         // Snapshot the element's base transform before applying projection.
@@ -247,8 +245,8 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
       const combinedTransform =
         baseTransform === "" || baseTransform === "none"
-          ? projectionTransform
-          : `${projectionTransform} ${baseTransform}`;
+          ? activeProjectionTransform
+          : `${activeProjectionTransform} ${baseTransform}`;
 
       renderState.style.transform = combinedTransform;
     } else if (
@@ -284,93 +282,42 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
     prevProjectionOpacity = projectionOpacity;
 
-    // Handle scale-correctable properties (border-radius, box-shadow)
-    // During active projection scaling, we apply corrected values.
-    // The style prop still contains raw values for SSR/hydration.
     const styleValues = getStyleValues?.();
+    const projectionOverrides: Record<string, string | number> = {};
 
-    // Check if projection is actively scaling (not at identity)
-    const isProjectionScaling =
-      projectionTransform !== null &&
-      projectionTargetBox !== null &&
-      (Math.abs(projectionScaleX - 1) > 0.0001 ||
-        Math.abs(projectionScaleY - 1) > 0.0001);
-
-    // Only process scale-correctable keys when we have style values to work with
-    if (styleValues && Object.keys(styleValues).length > 0) {
-      for (const key in scaleCorrectedKeys) {
-        // First check latestValues (animation values), then fall back to style prop values
-        let value: string | number | undefined = latestValues.get(key) as
-          | string
-          | number
-          | undefined;
-
-        // If not in latestValues, check style prop
-        if (value === undefined) {
-          value = styleValues[key];
-        }
-
-        if (value === undefined) continue;
-        if (typeof value !== "string" && typeof value !== "number") continue;
-
-        if (isProjectionScaling) {
-          // Apply scale correction during active projection
-          const corrections = applyScaleCorrection(
-            key,
-            value,
-            projectionScaleX,
-            projectionScaleY,
-            projectionTargetBox,
-          );
-
-          // Save the shorthand value for restoration (if not already saved)
-          if (!scaleCorrectionShorthandValues.has(key)) {
-            scaleCorrectionShorthandValues.set(key, String(value));
-          }
-
-          for (const {
-            key: correctedKey,
-            value: correctedValue,
-          } of corrections) {
-            // Track this longhand key so we can remove it on restoration
-            scaleCorrectionLonghandKeys.add(correctedKey);
-
-            const strValue = String(correctedValue);
-            renderState.style[correctedKey] = strValue;
-            scaleCorrectionPrevValues.set(correctedKey, strValue);
-          }
-        }
-        // When NOT scaling, don't set renderState.style - let Solid's style prop handle it
+    if (projectionStyles) {
+      for (const [key, value] of Object.entries(
+        projectionStyles as Record<string, string | number>,
+      )) {
+        projectionOverrides[key] = value;
       }
     }
 
-    // If we were scaling but no longer are, restore the original values
-    // so that style prop takes over again
-    if (wasProjectionScaling && !isProjectionScaling) {
-      // First, remove all longhand properties we set during animation
-      // by setting them to empty string (which removes them from inline style)
-      for (const longhandKey of scaleCorrectionLonghandKeys) {
-        renderState.style[longhandKey] = "";
-        // Clear from prevStyle so next frame doesn't skip the restore
-        prevStyle.delete(longhandKey);
-      }
-
-      // Then restore the shorthand values (e.g., "border-radius", "box-shadow")
-      // This ensures the original shorthand takes effect again
-      for (const [
-        shorthandKey,
-        shorthandValue,
-      ] of scaleCorrectionShorthandValues) {
-        renderState.style[shorthandKey] = shorthandValue;
-        // Clear from prevStyle so the value is applied
-        prevStyle.delete(shorthandKey);
-      }
-
-      scaleCorrectionPrevValues.clear();
-      scaleCorrectionShorthandValues.clear();
-      scaleCorrectionLonghandKeys.clear();
+    if (projectionTransformOrigin !== null) {
+      projectionOverrides["transform-origin"] = projectionTransformOrigin;
     }
-    wasProjectionScaling = isProjectionScaling;
+
+    const nextProjectionKeys = new Set(Object.keys(projectionOverrides));
+
+    for (const key of nextProjectionKeys) {
+      renderState.style[key] = String(projectionOverrides[key]);
+    }
+
+    if (prevProjectionStyleKeys.size > 0) {
+      for (const key of prevProjectionStyleKeys) {
+        if (nextProjectionKeys.has(key)) continue;
+        if (renderState.style[key] !== undefined) continue;
+
+        const baseValue = styleValues?.[key];
+        renderState.style[key] =
+          baseValue !== undefined ? String(baseValue) : "";
+      }
+    }
+
+    prevProjectionStyleKeys.clear();
+    for (const key of nextProjectionKeys) {
+      prevProjectionStyleKeys.add(key);
+    }
 
     // Apply styles (use setProperty to support kebab-case keys)
     for (const key in renderState.style) {
@@ -556,24 +503,11 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     });
   });
 
-  const applyProjection = (
-    update: {
-      transform?: string | null;
-      opacity?: number | null;
-      scaleX?: number | null;
-      scaleY?: number | null;
-      targetBox?: {
-        x: { min: number; max: number };
-        y: { min: number; max: number };
-      } | null;
-    },
-    immediate: boolean,
-  ) => {
-    if ("transform" in update) projectionTransform = update.transform ?? null;
-    if ("opacity" in update) projectionOpacity = update.opacity ?? null;
-    if ("scaleX" in update) projectionScaleX = update.scaleX ?? 1;
-    if ("scaleY" in update) projectionScaleY = update.scaleY ?? 1;
-    if ("targetBox" in update) projectionTargetBox = update.targetBox ?? null;
+  const applyProjection = (update: ProjectionUpdate, immediate: boolean) => {
+    projectionTransform = update.transform ?? null;
+    projectionTransformOrigin = update.transformOrigin ?? null;
+    projectionOpacity = update.opacity ?? null;
+    projectionStyles = update.styles ?? null;
 
     if (immediate) {
       renderToDom();
@@ -589,7 +523,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   const getLayoutNodeOptions = () => ({
     layout: options.layout,
     layoutId: options.layoutId,
-    layoutCrossfade: options.layoutCrossfade,
+    crossfade: options.layoutCrossfade,
     layoutScroll: options.layoutScroll,
     layoutRoot: options.layoutRoot,
     transition: options.transition as Transition | undefined,
@@ -603,20 +537,21 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     const element = state.element;
     if (!element || !layoutEnabled()) return;
 
-    const node = createLayoutNode({
+    const node = createProjectionNode({
       element,
       options: untrack(getLayoutNodeOptions),
       apply: applyProjection,
       render: renderToDom,
       scheduleRender,
+      latestValues: projectionLatestValues,
+      getStyleValues,
     });
 
     layoutNode = node;
-    layoutManager.register(node);
+    projectionManager.register(node);
 
     onCleanup(() => {
-      layoutManager.captureLayoutIdSnapshot(node);
-      layoutManager.unregister(node);
+      projectionManager.unregister(node);
       if (layoutNode === node) layoutNode = null;
     });
   });
@@ -628,7 +563,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
     if (!enabled || !node) return;
 
-    layoutManager.updateNodeOptions(node, nextOptions);
+    projectionManager.updateNodeOptions(node, nextOptions);
     // Layout measurements are scheduled by auto layout tracking.
   });
 
@@ -715,10 +650,20 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       const latest = mv.get();
       latestValues.set(key, latest);
       setState("resolvedValues", key, latest);
+      if (isStringOrNumber(latest)) {
+        projectionLatestValues[key] = latest;
+      } else {
+        delete projectionLatestValues[key];
+      }
 
       const unsubscribe = mv.on("change", (next) => {
         latestValues.set(key, next as AnyResolvedKeyframe);
         setState("resolvedValues", key, next as AnyResolvedKeyframe);
+        if (isStringOrNumber(next)) {
+          projectionLatestValues[key] = next;
+        } else {
+          delete projectionLatestValues[key];
+        }
 
         /**
          * When `motion-dom` animates via WAAPI it doesn't emit per-frame MotionValue
@@ -781,7 +726,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     if (!wasExiting && isExiting) {
       const node = layoutNode;
       if (node?.options.layoutId) {
-        layoutManager.relegate(node);
+        node.relegate();
       }
     }
 
@@ -1106,10 +1051,14 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           };
         }
 
+        const projectionTransformActive =
+          projectionTransform !== null && projectionTransform !== "none";
+        const projectionOpacityActive = projectionOpacity !== null;
+
         const canUseWaapi =
           // Avoid fighting with projection writes which also target `transform`/`opacity`.
-          (key === "transform" ? projectionTransform === null : true) &&
-          (key === "opacity" ? projectionOpacity === null : true) &&
+          (key === "transform" ? !projectionTransformActive : true) &&
+          (key === "opacity" ? !projectionOpacityActive : true) &&
           Boolean(
             supportsBrowserAnimation<string | number>({
               keyframes: keyframes as any,

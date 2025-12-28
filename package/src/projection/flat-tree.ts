@@ -1,13 +1,7 @@
-/**
- * FlatTree - A depth-sorted collection for projection nodes.
- * Nodes are lazily sorted by depth before iteration, ensuring parent-before-child processing.
- */
-
 type WithDepth = { depth: number };
 
-function compareByDepth(a: WithDepth, b: WithDepth): number {
-  return a.depth - b.depth;
-}
+const compareByDepth = (a: WithDepth, b: WithDepth): number =>
+  a.depth - b.depth;
 
 export class FlatTree<T extends WithDepth> {
   private children: T[] = [];

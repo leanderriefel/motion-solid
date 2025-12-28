@@ -20,7 +20,7 @@ import type {
 import { createMotionState } from "../state";
 import { useAnimationState } from "../animation";
 import { useGestures, useDragGesture } from "../gestures";
-import { layoutManager } from "../layout/layout-manager";
+import { projectionManager } from "../projection/projection-manager";
 import { MotionStateContext, useMotionState } from "./context";
 import { useMotionConfig } from "./motion-config";
 import { motionKeys } from "./motion-keys";
@@ -38,7 +38,6 @@ import {
   buildTransform,
   createRenderState,
 } from "../animation/render";
-import { scaleCorrectedKeys } from "../projection/scale-correction";
 
 type TransformTemplate = (
   transform: Record<string, string | number>,
@@ -72,26 +71,19 @@ const styleTransformShortcuts = new Set([
 ]);
 
 /**
- * Process style prop to handle transform shortcuts and extract scale-correctable values.
- * Returns the processed style object and the extracted values for scale correction.
+ * Process style prop to handle transform shortcuts.
+ * Returns the processed style object.
  *
  * @param style - The raw style prop
- * @param excludeScaleCorrected - If true, scale-correctable properties are excluded from processedStyle
- *                                 (used during active layout animations to prevent Solid from overriding our corrections)
  */
 const processStyleProp = (
   style: Record<string, string | number> | string | undefined,
-  excludeScaleCorrected = false,
-): {
-  processedStyle: Record<string, string | number>;
-  scaleCorrectionValues: Record<string, string | number>;
-} => {
+): Record<string, string | number> => {
   if (!style || typeof style === "string") {
-    return { processedStyle: {}, scaleCorrectionValues: {} };
+    return {};
   }
 
   const processedStyle: Record<string, string | number> = {};
-  const scaleCorrectionValues: Record<string, string | number> = {};
   const transformValues: Record<string, string | number> = {};
   let hasTransformShortcuts = false;
 
@@ -104,20 +96,6 @@ const processStyleProp = (
       hasTransformShortcuts = true;
       transformValues[key] = value;
       continue;
-    }
-
-    // Use kebab-case keys for scale correction
-    const normalizedKey = key;
-
-    // Check if it needs scale correction
-    if (normalizedKey in scaleCorrectedKeys) {
-      scaleCorrectionValues[normalizedKey] = value;
-
-      // If excluding scale-corrected properties (during active projection),
-      // don't add to processedStyle - our renderToDom will handle it
-      if (excludeScaleCorrected) {
-        continue;
-      }
     }
 
     // Pass through to processed style
@@ -142,7 +120,7 @@ const processStyleProp = (
     }
   }
 
-  return { processedStyle, scaleCorrectionValues };
+  return processedStyle;
 };
 
 const getInitialStyles = (
@@ -430,21 +408,20 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     let cachedElement: Element | null = null;
 
-    // Process style prop for transform shortcuts and scale correction values
-    // Note: We do NOT exclude scale-correctable properties from the style prop
-    // passed to Solid for initial render/SSR. Instead, renderToDom will override
-    // these values during active layout animations when scale correction is needed.
-    const processedStyleData = createMemo(() => {
-      const rawStyle = styleProps.style as
-        | Record<string, string | number>
-        | string
-        | undefined;
-      // Never exclude - let Solid render the raw values, renderToDom will correct when needed
-      return processStyleProp(rawStyle, false);
-    });
+    // Process style prop for transform shortcuts.
+    // Keep raw values available so projection can restore overrides.
+    const processedStyleData = createMemo<Record<string, string | number>>(
+      () => {
+        const rawStyle = styleProps.style as
+          | Record<string, string | number>
+          | string
+          | undefined;
+        // Never exclude - let Solid render the raw values, renderToDom will correct when needed
+        return processStyleProp(rawStyle);
+      },
+    );
 
-    // Getter for scale correction values from style prop
-    const getStyleValues = () => processedStyleData().scaleCorrectionValues;
+    const getStyleValues = () => processedStyleData();
 
     // Calculate additional delay from parent orchestration
     const getParentOrchestrationDelay = (): number => {
@@ -483,7 +460,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     const mergedStyles = createMemo(() => {
       const initial = initialStyles();
-      const { processedStyle } = processedStyleData();
+      const processedStyle = processedStyleData();
       return { ...processedStyle, ...initial };
     });
 
@@ -532,7 +509,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         return;
       }
 
-      layoutManager.scheduleAutoMeasure(state.element);
+      projectionManager.scheduleUpdate(state.element);
     });
 
     return (

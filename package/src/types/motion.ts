@@ -3,6 +3,7 @@ import type {
   AnyResolvedKeyframe,
   MotionValue,
   MotionNodeOptions,
+  Transition as MotionDomTransition,
   VariantLabels,
 } from "motion-dom";
 import type { AnimationType } from "../animation/types";
@@ -16,6 +17,10 @@ export type MotionValues = Record<
 >;
 
 export type MotionGoals = Record<string, AnyResolvedKeyframe>;
+
+export type Transition = Omit<MotionDomTransition, "type"> & {
+  type?: "spring" | "tween" | false;
+};
 
 export interface MotionGesturesState {
   hover: boolean;
@@ -50,12 +55,19 @@ export interface SolidViewportOptions {
  */
 export type MotionOptions = Omit<
   MotionNodeOptions,
-  "custom" | "dragControls" | "viewport" | "dragConstraints"
+  | "custom"
+  | "dragControls"
+  | "viewport"
+  | "dragConstraints"
+  | "transition"
+  | "dragTransition"
 > & {
   custom?: unknown;
   dragControls?: unknown;
   viewport?: SolidViewportOptions;
   dragConstraints?: false | Partial<BoundingBox> | Element;
+  transition?: Transition;
+  dragTransition?: Transition;
   layoutDependencies?: Accessor<unknown>[];
 };
 

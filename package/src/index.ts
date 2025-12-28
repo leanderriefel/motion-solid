@@ -64,4 +64,5 @@ export { useGestures, createDragControls, type DragControls } from "./gestures";
 export { useReducedMotion } from "./hooks";
 
 // Re-export useful types from motion-dom
-export type { Variant, Variants, Transition } from "motion-dom";
+export type { Variant, Variants } from "motion-dom";
+export type { Transition } from "./types";
