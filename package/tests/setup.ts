@@ -1,4 +1,4 @@
-import { vi, beforeEach, afterEach, expect } from "vitest";
+import { vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 
 // Global fake timers

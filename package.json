@@ -15,8 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "lint": "tsgolint",
-    "lint:fix": "tsgolint --fix"
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
   },
   "lint-staged": {
     "**/*": [

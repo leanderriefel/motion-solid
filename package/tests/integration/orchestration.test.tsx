@@ -7,7 +7,6 @@ describe("orchestration", () => {
   describe("staggerChildren", () => {
     it("delays child animations by staggerChildren amount", async () => {
       const childStarts: number[] = [];
-      const startTime = Date.now();
 
       const Child = (props: { index: number }) => (
         <motion.div
@@ -407,11 +406,6 @@ describe("orchestration", () => {
       ));
 
       await vi.advanceTimersByTimeAsync(500);
-
-      // Child should complete before parent starts
-      const childCompleteIndex = events.indexOf("child-complete");
-      const parentStartIndex = events.indexOf("parent-start");
-      // Note: The exact order depends on implementation
     });
 
     // NOTE: Depends on onAnimationComplete callback which doesn't work in jsdom

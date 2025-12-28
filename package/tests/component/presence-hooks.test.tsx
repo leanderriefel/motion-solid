@@ -1,13 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import {
   AnimatePresence,
   motion,
   usePresence,
   useIsPresent,
   usePresenceData,
-  PresenceContext,
 } from "../../src";
 
 describe("presence hooks", () => {
@@ -60,7 +59,11 @@ describe("presence hooks", () => {
       };
 
       render(() => (
-        <AnimatePresence>{show() && <TestComponent />}</AnimatePresence>
+        <AnimatePresence>
+          <Show when={show()}>
+            <TestComponent />
+          </Show>
+        </AnimatePresence>
       ));
 
       expect(presenceResult![0]()).toBe(true);
@@ -325,7 +328,7 @@ describe("presence hooks", () => {
 
       const TestComponent = () => {
         // We can't directly use useContext in the test, but we can check via usePresence behavior
-        const [isPresent, safeToRemove] = usePresence();
+        const [_, safeToRemove] = usePresence();
         // Outside context, safeToRemove is undefined
         contextValue = safeToRemove;
         return <div>Test</div>;
@@ -358,6 +361,7 @@ describe("presence hooks", () => {
   describe("edge cases", () => {
     it("handles rapid mount/unmount cycles", async () => {
       const [show, setShow] = createSignal(true);
+      // oxlint-disable-next-line no-unused-vars
       let mountCount = 0;
 
       const TestComponent = () => {
@@ -367,7 +371,11 @@ describe("presence hooks", () => {
       };
 
       render(() => (
-        <AnimatePresence>{show() && <TestComponent />}</AnimatePresence>
+        <AnimatePresence>
+          <Show when={show()}>
+            <TestComponent />
+          </Show>
+        </AnimatePresence>
       ));
 
       for (let i = 0; i < 5; i++) {

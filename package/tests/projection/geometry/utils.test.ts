@@ -9,7 +9,6 @@ import {
   axisDeltaEquals,
 } from "../../../src/projection/geometry/utils";
 import {
-  createAxis,
   createBox,
   createAxisDelta,
   createDelta,

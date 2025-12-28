@@ -9,9 +9,7 @@ import {
   transformBox,
 } from "../../../src/projection/geometry/delta-apply";
 import {
-  createAxis,
   createBox,
-  createAxisDelta,
   createDelta,
 } from "../../../src/projection/geometry/models";
 

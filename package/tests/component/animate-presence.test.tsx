@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
-import { createSignal, For } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { AnimatePresence, motion } from "../../src";
 
 describe("AnimatePresence", () => {
@@ -131,7 +131,9 @@ describe("AnimatePresence", () => {
 
       render(() => (
         <AnimatePresence onExitComplete={onExitComplete}>
-          {show() && <motion.div data-testid="child">Child</motion.div>}
+          <Show when={show()}>
+            <motion.div data-testid="child">Child</motion.div>
+          </Show>
         </AnimatePresence>
       ));
 
@@ -272,7 +274,7 @@ describe("AnimatePresence", () => {
       render(() => (
         <div style={{ position: "relative" }}>
           <AnimatePresence mode="popLayout">
-            {show() && (
+            <Show when={show()}>
               <motion.div
                 data-testid="child"
                 exit={{ opacity: 0 }}
@@ -280,7 +282,7 @@ describe("AnimatePresence", () => {
               >
                 Child
               </motion.div>
-            )}
+            </Show>
           </AnimatePresence>
         </div>
       ));
@@ -368,7 +370,9 @@ describe("AnimatePresence", () => {
 
       render(() => (
         <AnimatePresence custom={{ direction: 1 }}>
-          {show() && <TestComponent />}
+          <Show when={show()}>
+            <TestComponent />
+          </Show>
         </AnimatePresence>
       ));
 
@@ -382,11 +386,11 @@ describe("AnimatePresence", () => {
 
       render(() => (
         <AnimatePresence custom={direction()}>
-          {show() && (
+          <Show when={show()}>
             <motion.div data-testid="child" exit={{ opacity: 0 }}>
               Child
             </motion.div>
-          )}
+          </Show>
         </AnimatePresence>
       ));
 
@@ -406,7 +410,7 @@ describe("AnimatePresence", () => {
 
       render(() => (
         <AnimatePresence>
-          {showOuter() && (
+          <Show when={showOuter()}>
             <motion.div data-testid="outer" exit={{ opacity: 0 }}>
               <AnimatePresence propagate onExitComplete={innerExitComplete}>
                 <motion.div data-testid="inner" exit={{ opacity: 0 }}>
@@ -414,7 +418,7 @@ describe("AnimatePresence", () => {
                 </motion.div>
               </AnimatePresence>
             </motion.div>
-          )}
+          </Show>
         </AnimatePresence>
       ));
 
@@ -433,7 +437,7 @@ describe("AnimatePresence", () => {
 
       render(() => (
         <AnimatePresence>
-          {show() && (
+          <Show when={show()}>
             <motion.div
               data-testid="child"
               initial={{ opacity: 0 }}
@@ -443,7 +447,7 @@ describe("AnimatePresence", () => {
             >
               Child
             </motion.div>
-          )}
+          </Show>
         </AnimatePresence>
       ));
 
@@ -501,20 +505,21 @@ describe("AnimatePresence", () => {
     });
 
     it("works with conditional rendering inside", async () => {
-      const [showChild, setShowChild] = createSignal(true);
+      const [showChild, _] = createSignal(true);
       const [condition, setCondition] = createSignal(true);
 
       render(() => (
         <AnimatePresence>
-          {showChild() && (
+          <Show when={showChild()}>
             <motion.div data-testid="wrapper" exit={{ opacity: 0 }}>
-              {condition() ? (
+              <Show
+                when={condition()}
+                fallback={<span data-testid="false-content">False</span>}
+              >
                 <span data-testid="true-content">True</span>
-              ) : (
-                <span data-testid="false-content">False</span>
-              )}
+              </Show>
             </motion.div>
-          )}
+          </Show>
         </AnimatePresence>
       ));
 
@@ -531,13 +536,13 @@ describe("AnimatePresence", () => {
 
       render(() => (
         <AnimatePresence>
-          {show() && (
+          <Show when={show()}>
             <motion.div data-testid="level1" exit={{ opacity: 0 }}>
               <motion.div data-testid="level2">
                 <motion.div data-testid="level3">Deep content</motion.div>
               </motion.div>
             </motion.div>
-          )}
+          </Show>
         </AnimatePresence>
       ));
 

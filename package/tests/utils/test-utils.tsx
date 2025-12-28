@@ -1,6 +1,5 @@
-import { render as solidRender, cleanup } from "@solidjs/testing-library";
+import { cleanup } from "@solidjs/testing-library";
 import { vi, afterEach } from "vitest";
-import type { JSX } from "solid-js";
 
 // Re-export everything from testing-library
 export * from "@solidjs/testing-library";
