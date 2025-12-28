@@ -16,6 +16,7 @@ import type {
   ElementTag,
   MotionElement,
   MotionOptions,
+  MotionStyle,
 } from "../types";
 import { createMotionState } from "../state";
 import { useAnimationState } from "../animation";
@@ -176,10 +177,32 @@ const getInitialStyles = (
   return renderState.style as Record<string, string>;
 };
 
-export type MotionProps<Tag extends ElementTag> = ComponentProps<Tag> &
+/**
+ * Motion component props type for internal use.
+ * This is the base type that works correctly with splitProps.
+ */
+type MotionPropsInternal<Tag extends ElementTag> = ComponentProps<Tag> &
   MotionOptions & {
     key?: string | number;
   };
+
+/**
+ * Motion component props type.
+ * Extends the base element's props with motion-specific options.
+ * The `style` prop is extended to support transform shortcuts (x, y, scale, rotate, etc.)
+ *
+ * @example
+ * ```tsx
+ * <motion.div style={{ x: 100, opacity: 0.5 }} />
+ * ```
+ */
+export type MotionProps<Tag extends ElementTag> = Omit<
+  MotionPropsInternal<Tag>,
+  "style"
+> & {
+  /** Extended style prop that supports transform shortcuts (x, y, scale, rotate, etc.) */
+  style?: MotionStyle;
+};
 
 interface OrchestrationOptions {
   when?: false | "beforeChildren" | "afterChildren";
@@ -246,7 +269,9 @@ const extractOrchestrationOptions = (
 export const createMotionComponent = <Tag extends ElementTag = "div">(
   tag: Tag,
 ): Component<MotionProps<Tag>> => {
-  return (props) => {
+  // The internal implementation uses MotionPropsInternal which works correctly with splitProps
+  // The public MotionProps type extends the style prop with transform shortcuts
+  const component = (props: MotionPropsInternal<Tag>) => {
     const context = useMotionState();
     const parent = context ? context[0] : null;
     const presence = usePresenceContext();
@@ -525,4 +550,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       </MotionStateContext.Provider>
     );
   };
+
+  // Cast to the public MotionProps type which extends style with transform shortcuts
+  return component as unknown as Component<MotionProps<Tag>>;
 };

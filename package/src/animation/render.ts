@@ -47,16 +47,34 @@ const transformProps = new Set(
   Array.from(motionDomTransformProps, (key) => camelToKebab(key)),
 );
 
+// Also keep a set of the original camelCase props for quick lookup
+const transformPropsCamelCase = new Set(motionDomTransformProps);
+
 const transformPropOrder = motionDomTransformPropOrder.map(camelToKebab);
 
 const getValueType = (key: string) =>
   numberValueTypes[key] ?? numberValueTypes[kebabToCamel(key)];
 
+/**
+ * Check if a key is a transform property (supports both kebab-case and camelCase)
+ */
 export const isTransformProp = (key: string): boolean =>
-  transformProps.has(key);
+  transformProps.has(key) || transformPropsCamelCase.has(key);
 
 export const toMotionDomTransformKey = (key: string): string =>
   kebabToCamel(key);
+
+/**
+ * Normalize a transform property key from camelCase to kebab-case.
+ * Returns the key unchanged if it's not a camelCase transform prop.
+ */
+export const normalizeTransformKey = (key: string): string => {
+  // If it's already kebab-case or not a transform prop, return as-is
+  if (transformProps.has(key)) return key;
+  // If it's a camelCase transform prop, convert to kebab-case
+  if (transformPropsCamelCase.has(key)) return camelToKebab(key);
+  return key;
+};
 
 export const buildTransform = (
   latestValues: Record<string, string | number>,
@@ -71,7 +89,9 @@ export const buildTransform = (
     const key = transformPropOrder[i];
     if (key === undefined) continue;
 
-    const value = latestValues[key];
+    // Look up value using kebab-case key first, then try camelCase
+    const camelKey = kebabToCamel(key);
+    const value = latestValues[key] ?? latestValues[camelKey];
 
     if (value === undefined) continue;
 

@@ -1,4 +1,5 @@
 import type { Accessor } from "solid-js";
+import type { JSX } from "solid-js";
 import type {
   AnyResolvedKeyframe,
   MotionValue,
@@ -8,6 +9,38 @@ import type {
 } from "motion-dom";
 import type { AnimationType } from "../animation/types";
 import type { BoundingBox } from "motion-utils";
+
+/**
+ * Transform shortcut properties that can be used in the style prop.
+ * These are converted to CSS transform strings at runtime.
+ */
+export interface StyleTransformShortcuts {
+  x?: string | number;
+  y?: string | number;
+  z?: string | number;
+  rotate?: string | number;
+  "rotate-x"?: string | number;
+  "rotate-y"?: string | number;
+  "rotate-z"?: string | number;
+  scale?: string | number;
+  "scale-x"?: string | number;
+  "scale-y"?: string | number;
+  "scale-z"?: string | number;
+  skew?: string | number;
+  "skew-x"?: string | number;
+  "skew-y"?: string | number;
+  "translate-x"?: string | number;
+  "translate-y"?: string | number;
+  "translate-z"?: string | number;
+  perspective?: string | number;
+  "transform-perspective"?: string | number;
+}
+
+/**
+ * Extended style prop type that includes transform shortcuts.
+ * Allows using `x`, `y`, `scale`, etc. directly in the style prop.
+ */
+export type MotionStyle = JSX.CSSProperties & StyleTransformShortcuts;
 
 export type MotionElement = HTMLElement | SVGElement;
 

@@ -7,9 +7,46 @@ import type {
 } from "motion-dom";
 import type { MotionOptions, MotionState, Transition } from "../types";
 import { isRecord, isStringOrNumber } from "./types";
+import { normalizeTransformKey } from "./render";
 
 const hasFunction = (obj: Record<string, unknown>, key: string): boolean =>
   typeof obj[key] === "function";
+
+const normalizeKeyedObject = (
+  source: Record<string, unknown>,
+): Record<string, unknown> => {
+  const result: Record<string, unknown> = {};
+  for (const key in source) {
+    const normalizedKey = normalizeTransformKey(key);
+    if (normalizedKey in result && key !== normalizedKey) continue;
+    result[normalizedKey] = source[key];
+  }
+  return result;
+};
+
+const normalizeTarget = (target: TargetAndTransition): TargetAndTransition => {
+  const normalized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(target)) {
+    if (key === "transition" || key === "transitionEnd") continue;
+    const normalizedKey = normalizeTransformKey(key);
+    if (normalizedKey in normalized && key !== normalizedKey) continue;
+    normalized[normalizedKey] = value;
+  }
+
+  const transition = isRecord(target.transition)
+    ? normalizeKeyedObject(target.transition as Record<string, unknown>)
+    : target.transition;
+
+  const transitionEnd = isRecord(target.transitionEnd)
+    ? normalizeKeyedObject(target.transitionEnd as Record<string, unknown>)
+    : target.transitionEnd;
+
+  if (transition !== undefined) normalized.transition = transition;
+  if (transitionEnd !== undefined) normalized.transitionEnd = transitionEnd;
+
+  return normalized as TargetAndTransition;
+};
 
 const isLegacyAnimationControls = (value: unknown): boolean => {
   if (!isRecord(value)) return false;
@@ -27,7 +64,7 @@ export const isVariantLabels = (value: unknown): value is VariantLabels =>
 export const isTargetAndTransition = (
   value: unknown,
 ): value is TargetAndTransition =>
-  isRecord(value) && !isLegacyAnimationControls(value);
+  isRecord(value) && !Array.isArray(value) && !isLegacyAnimationControls(value);
 
 export const buildResolvedValues = (
   state: MotionState,
@@ -96,10 +133,10 @@ export const resolveVariantToTarget = (args: {
     const velocity = buildResolvedVelocities(state);
     const resolved = variant(options.custom, current, velocity);
     if (typeof resolved === "string") return null;
-    return resolved;
+    return normalizeTarget(resolved);
   }
 
-  return variant;
+  return normalizeTarget(variant);
 };
 
 export const resolveVariantLabelsToTarget = (args: {
@@ -155,7 +192,7 @@ export const resolveDefinitionToTarget = (args: {
   const { definition, options, state } = args;
 
   if (!definition || definition === false) return null;
-  if (isTargetAndTransition(definition)) return definition;
+  if (isTargetAndTransition(definition)) return normalizeTarget(definition);
 
   if (isVariantLabels(definition)) {
     // First, try to resolve from local variants

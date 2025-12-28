@@ -97,27 +97,9 @@ export interface AnimationStateOptions {
 }
 
 // Transform properties that should be disabled when reduced motion is active
-const transformPropertiesSet = new Set([
-  "x",
-  "y",
-  "z",
-  "rotate",
-  "rotate-x",
-  "rotate-y",
-  "rotate-z",
-  "scale",
-  "scale-x",
-  "scale-y",
-  "scale-z",
-  "skew",
-  "skew-x",
-  "skew-y",
-  "translate-x",
-  "translate-y",
-  "translate-z",
-  "perspective",
-  "transform-perspective",
-]);
+// Use isTransformProp to support both kebab-case and camelCase keys
+const isReducedMotionTransformProp = (key: string): boolean =>
+  isTransformProp(key);
 
 export const useAnimationState = (args: AnimationStateOptions): void => {
   const {
@@ -1033,7 +1015,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
         // Apply reduced motion: instant transition for transform properties
         const shouldReduceMotion = motionConfig?.isReducedMotion() ?? false;
         let finalTransition = perKeyTransition as Transition | undefined;
-        if (shouldReduceMotion && transformPropertiesSet.has(key)) {
+        if (shouldReduceMotion && isReducedMotionTransformProp(key)) {
           finalTransition = { duration: 0 };
         }
 

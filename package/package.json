@@ -17,7 +17,9 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "solid-js": ">=1.0.0"
@@ -29,11 +31,16 @@
     "motion-utils": "^12.23.6"
   },
   "devDependencies": {
+    "@solidjs/testing-library": "^0.8.10",
+    "@testing-library/jest-dom": "^6.6.3",
     "esbuild-plugin-solid": "^0.6.0",
+    "jsdom": "^27.4.0",
     "solid-js": "^1.9.10",
     "tsup": "^8.5.1",
     "tsup-preset-solid": "^2.2.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite-plugin-solid": "^2.11.10",
+    "vitest": "^4.0.16"
   },
   "exports": {
     ".": {

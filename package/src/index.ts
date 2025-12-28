@@ -53,6 +53,8 @@ export type {
   MotionVariantsState,
   MotionOptions,
   MotionState,
+  StyleTransformShortcuts,
+  MotionStyle,
 } from "./types";
 
 export { isSVGElement, isHTMLElement } from "./types";

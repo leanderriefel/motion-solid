@@ -11,11 +11,12 @@
     "build": "bun --filter motion-solid build",
     "build:docs": "bun --filter @motion-solid/docs build",
     "start": "bun --filter @motion-solid/docs start",
+    "test": "bun --filter motion-solid test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix"
+    "lint": "tsgolint",
+    "lint:fix": "tsgolint --fix"
   },
   "lint-staged": {
     "**/*": [
@@ -26,7 +27,7 @@
   "devDependencies": {
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
-    "oxlint": "npm:oxlint-tsgolint@^0.10.0",
+    "oxlint": "^1.35.0",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3"
   }

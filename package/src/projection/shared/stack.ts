@@ -130,7 +130,9 @@ export class NodeStack {
     node.show();
 
     if (prevLead) {
-      prevLead.instance && prevLead.scheduleRender();
+      if (prevLead.instance) {
+        prevLead.scheduleRender();
+      }
       node.scheduleRender();
       node.resumeFrom = prevLead;
 
@@ -164,18 +166,19 @@ export class NodeStack {
     this.members.forEach((node) => {
       const { options, resumingFrom } = node;
 
-      options.onExitComplete && options.onExitComplete();
+      options.onExitComplete?.();
 
       if (resumingFrom) {
-        resumingFrom.options.onExitComplete &&
-          resumingFrom.options.onExitComplete();
+        resumingFrom.options.onExitComplete?.();
       }
     });
   }
 
   scheduleRender(): void {
     this.members.forEach((node) => {
-      node.instance && node.scheduleRender(false);
+      if (node.instance) {
+        node.scheduleRender(false);
+      }
     });
   }
 
