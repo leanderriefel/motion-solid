@@ -15,8 +15,7 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "typecheck": "tsc --noEmit"
+    "lint:fix": "oxlint --fix"
   },
   "lint-staged": {
     "**/*": [

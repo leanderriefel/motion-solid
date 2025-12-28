@@ -151,11 +151,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
   const presenceId = presence ? createUniqueId() : null;
 
-  if (presence && presenceId) {
-    const unregister = presence.register(presenceId);
-    onCleanup(unregister);
-  }
-
   let projectionTransform: string | null = null;
   let projectionOpacity: number | null = null;
   let prevProjectionOpacity: number | null = null;
