@@ -4,6 +4,7 @@ import type { MotionValue } from "motion-dom";
 import { motionValue } from "motion-dom";
 import type { MotionOptions, MotionState, Transition } from "../types";
 import { startMotionValueAnimation } from "../animation/motion-value";
+import { MotionElement } from "../animation/motion-element";
 
 export interface DragGestureOptions {
   state: MotionState;
@@ -161,9 +162,10 @@ export const useDragGesture = (args: DragGestureOptions) => {
     if (!dragEnabled || !element) return;
 
     type MotionValueOwner = NonNullable<MotionValue<unknown>["owner"]>;
+    type MotionValueOwnerProps = ReturnType<MotionValueOwner["getProps"]>;
     const owner: MotionValueOwner = {
       current: element,
-      getProps: () => options,
+      getProps: () => options as MotionValueOwnerProps,
     };
 
     const dragX = options.drag === true || options.drag === "x";
@@ -213,6 +215,19 @@ export const useDragGesture = (args: DragGestureOptions) => {
     let velocity: Point = { x: 0, y: 0 };
     let lockedDirection: "x" | "y" | null = null;
     let activePointerId: number | null = null;
+
+    // Create MotionElement for drag animations (x/y are simple numeric values,
+    // but we pass the element for consistency with the keyframe resolution system)
+    const dragMotionElement =
+      element instanceof HTMLElement || element instanceof SVGElement
+        ? new MotionElement(
+            element,
+            state.values as Record<string, MotionValue<unknown>>,
+            () => {
+              // Drag render is handled by the main animation state
+            },
+          )
+        : null;
 
     // Options
     const elastic =
@@ -448,6 +463,7 @@ export const useDragGesture = (args: DragGestureOptions) => {
             motionValue: mvX as MotionValue<string | number>,
             keyframes: targetX,
             transition,
+            element: dragMotionElement,
           });
           if (controls) transitionPromises.push(controls.finished);
         }
@@ -461,6 +477,7 @@ export const useDragGesture = (args: DragGestureOptions) => {
             motionValue: mvY as MotionValue<string | number>,
             keyframes: targetY,
             transition,
+            element: dragMotionElement,
           });
           if (controls) transitionPromises.push(controls.finished);
         }

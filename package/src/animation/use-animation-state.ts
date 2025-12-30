@@ -13,14 +13,18 @@ import type {
   AnimationPlaybackControlsWithThen,
   MotionValue,
   VariantLabels,
+  Process,
 } from "motion-dom";
 import {
   motionValue,
   supportsBrowserAnimation,
   defaultTransformValue,
   readTransformValue,
+  frame,
+  cancelFrame,
 } from "motion-dom";
 import type {
+  MotionAnimationDefinition,
   MotionOptions,
   MotionState,
   MotionValues,
@@ -57,6 +61,7 @@ import {
   projectionManager,
 } from "../projection/projection-manager";
 import type { ProjectionUpdate } from "../projection/node/types";
+import { MotionElement } from "./motion-element";
 
 type TransformTemplate = (
   transform: Record<string, string | number>,
@@ -64,6 +69,7 @@ type TransformTemplate = (
 ) => string;
 
 type MotionValueOwner = NonNullable<MotionValue<unknown>["owner"]>;
+type MotionValueOwnerProps = ReturnType<MotionValueOwner["getProps"]>;
 
 export interface AnimationStateOptions {
   state: MotionState;
@@ -118,7 +124,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
   const motionValueOwner: MotionValueOwner = {
     current: state.element,
-    getProps: () => options,
+    getProps: () => options as MotionValueOwnerProps,
   };
 
   createEffect(() => {
@@ -131,9 +137,12 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   const renderState = createRenderState();
   const prevStyle = new Map<string, string>();
   const prevVars = new Map<string, string>();
-  let frameId: number | null = null;
+  let renderHandle: Process | null = null;
   let isUnmounted = false;
   let effectRunId = 0;
+
+  // MotionElement instance for DOMKeyframesResolver integration
+  let motionElement: MotionElement | null = null;
 
   const presenceId = presence ? createUniqueId() : null;
 
@@ -291,8 +300,26 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
         if (renderState.style[key] !== undefined) continue;
 
         const baseValue = styleValues?.[key];
-        renderState.style[key] =
-          baseValue !== undefined ? String(baseValue) : "";
+        if (baseValue !== undefined) {
+          renderState.style[key] = String(baseValue);
+          continue;
+        }
+
+        const borderRadius = styleValues?.["border-radius"];
+        if (
+          borderRadius !== undefined &&
+          key.startsWith("border-") &&
+          key.endsWith("-radius")
+        ) {
+          const radiusValue = String(borderRadius);
+          if (renderState.style["border-radius"] === undefined) {
+            renderState.style["border-radius"] = radiusValue;
+          }
+          renderState.style[key] = radiusValue;
+          continue;
+        }
+
+        renderState.style[key] = "";
       }
     }
 
@@ -327,11 +354,11 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   };
 
   const scheduleRender = () => {
-    if (frameId !== null) return;
+    if (renderHandle !== null) return;
     if (typeof requestAnimationFrame === "undefined") return;
 
-    frameId = requestAnimationFrame(() => {
-      frameId = null;
+    renderHandle = frame.render(() => {
+      renderHandle = null;
       if (isUnmounted) return;
       renderToDom();
     });
@@ -433,6 +460,16 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           (k) => k !== "transition" && k !== "transitionEnd",
         );
 
+        // Create a MotionElement for exit animation handoff
+        const handoffElement =
+          el instanceof HTMLElement || el instanceof SVGElement
+            ? new MotionElement(
+                el,
+                state.values as Record<string, MotionValue<unknown>>,
+                renderToDom,
+              )
+            : null;
+
         const promises: Array<Promise<unknown>> = [];
 
         for (const key of exitKeys) {
@@ -451,6 +488,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
             motionValue: mv as MotionValue<string | number>,
             keyframes,
             transition: perKeyTransition as Transition | undefined,
+            element: handoffElement,
           });
 
           if (controls) promises.push(controls.finished);
@@ -470,9 +508,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     }
 
     isUnmounted = true;
-    if (frameId !== null && typeof cancelAnimationFrame !== "undefined") {
-      cancelAnimationFrame(frameId);
-      frameId = null;
+    if (renderHandle) {
+      cancelFrame(renderHandle);
+      renderHandle = null;
     }
     stopAll();
   });
@@ -483,6 +521,30 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     createEffect(() => {
       if (state.element) scheduleRender();
     });
+  });
+
+  // Create/update MotionElement when DOM element is available.
+  // This enables DOMKeyframesResolver for proper keyframe resolution.
+  createEffect(() => {
+    const el = state.element;
+    if (el && (el instanceof HTMLElement || el instanceof SVGElement)) {
+      if (motionElement) {
+        // Update existing instance if element changed
+        motionElement.current = el;
+        motionElement.setValues(
+          state.values as Record<string, MotionValue<unknown>>,
+        );
+      } else {
+        // Create new instance
+        motionElement = new MotionElement(
+          el,
+          state.values as Record<string, MotionValue<unknown>>,
+          renderToDom,
+        );
+      }
+    } else {
+      motionElement = null;
+    }
   });
 
   const applyProjection = (update: ProjectionUpdate, immediate: boolean) => {
@@ -980,10 +1042,29 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     const needsToWaitForParent = parentWhen === "beforeChildren";
     const needsToWaitForChildren = childWhen === "afterChildren";
 
+    const autoTransitionEnd = new Map<string, string>();
+
+    /**
+     * Check if a value is "auto"
+     */
+    const isAutoValue = (value: unknown): value is "auto" => value === "auto";
+
+    /**
+     * Check if keyframes contain any "auto" values
+     */
+    const hasAutoKeyframes = (keyframes: unknown): boolean =>
+      Array.isArray(keyframes)
+        ? keyframes.some(isAutoValue)
+        : isAutoValue(keyframes);
+
     /**
      * Start animations for all keys that need to be animated.
      * This is extracted as a function so it can be called either synchronously
      * or after waiting for orchestration.
+     *
+     * Note: DOMKeyframesResolver (via motion-dom) now handles "auto" value resolution
+     * automatically using batched frame scheduling. We just need to track which
+     * keys should restore to "auto" after animation completes (autoTransitionEnd).
      */
     const startAnimations = () => {
       const startedKeys: string[] = [];
@@ -994,6 +1075,15 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
         const mv = (nextValues as MotionValues)[key];
         if (!mv) continue;
+
+        // Track "auto" values that need to be restored after animation
+        if (
+          type === "animate" &&
+          (key === "width" || key === "height") &&
+          hasAutoKeyframes(keyframes)
+        ) {
+          autoTransitionEnd.set(key, "auto");
+        }
 
         const shouldRestart =
           prevType.get(key) !== type ||
@@ -1043,10 +1133,10 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           (key === "opacity" ? !projectionOpacityActive : true) &&
           Boolean(
             supportsBrowserAnimation<string | number>({
-              keyframes: keyframes as any,
+              keyframes: keyframes as (string | number)[],
               name: key,
               motionValue: mv as MotionValue<string | number>,
-              ...(finalTransition as any),
+              ...(finalTransition as Record<string, unknown>),
             }),
           );
 
@@ -1055,6 +1145,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           motionValue: mv as MotionValue<string | number>,
           keyframes,
           transition: finalTransition,
+          element: motionElement,
         });
 
         if (controls) {
@@ -1077,7 +1168,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           (k) => running.get(k)?.type === "animate",
         );
         if (startedAnimateKey && resolvedTargetsByType.animate) {
-          options.onAnimationStart(resolvedTargetsByType.animate);
+          options.onAnimationStart(
+            resolvedTargetsByType.animate as MotionAnimationDefinition,
+          );
         }
       }
     };
@@ -1137,7 +1230,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
             type === "animate" &&
             typeof options.onAnimationComplete === "function"
           ) {
-            options.onAnimationComplete(target);
+            options.onAnimationComplete(target as MotionAnimationDefinition);
           }
 
           // Signal parent orchestration that this component's animation completed
@@ -1155,17 +1248,42 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
           // Apply transitionEnd values for all animation types
           const end = target.transitionEnd;
-          if (end && typeof end === "object" && end !== null) {
-            for (const [k, v] of Object.entries(end)) {
-              if (!isStringOrNumber(v)) continue;
-              const existing = state.values[k];
-              if (!existing) continue;
-              if (typeof v === "number") {
-                (existing as MotionValue<number>).set(v);
-              } else {
-                (existing as MotionValue<string>).set(v);
+          const shouldApplyAuto =
+            type === "animate" && autoTransitionEnd.size > 0;
+
+          if (
+            (end && typeof end === "object" && end !== null) ||
+            shouldApplyAuto
+          ) {
+            const mergedEnd: Record<string, string | number> = {};
+
+            if (end && typeof end === "object" && end !== null) {
+              for (const [k, v] of Object.entries(end)) {
+                if (!isStringOrNumber(v)) continue;
+                mergedEnd[k] = v;
               }
             }
+
+            if (shouldApplyAuto) {
+              for (const [k, v] of autoTransitionEnd.entries()) {
+                if (mergedEnd[k] === undefined) mergedEnd[k] = v;
+              }
+            }
+
+            // Use frame.update() to batch the transitionEnd value application
+            // This ensures the "auto" value is applied at the right time in the
+            // frame loop, after all animations have rendered their final state.
+            frame.update(() => {
+              for (const [k, v] of Object.entries(mergedEnd)) {
+                const existing = state.values[k];
+                if (!existing) continue;
+                if (typeof v === "number") {
+                  (existing as MotionValue<number>).set(v);
+                } else {
+                  (existing as MotionValue<string>).set(v);
+                }
+              }
+            });
           }
         });
       }

@@ -213,13 +213,12 @@ describe("motion component", () => {
       expect(element.style.transform).toContain("translateZ");
     });
 
-    // NOTE: scaleX/scaleY are not directly supported - use "scale-x"/"scale-y" kebab-case
-    // which TypeScript types don't include. Use `scale` for uniform scaling.
+    // NOTE: Use kebab-case transform keys for per-axis scaling.
     it.skip("supports scaleX and scaleY", async () => {
       render(() => (
         <motion.div
           data-testid="target"
-          initial={{ scaleX: 1.5, scaleY: 0.5 }}
+          initial={{ "scale-x": 1.5, "scale-y": 0.5 }}
         />
       ));
       await vi.advanceTimersByTimeAsync(50);
@@ -228,11 +227,10 @@ describe("motion component", () => {
       expect(element.style.transform).toContain("scaleY");
     });
 
-    // NOTE: rotateZ is not directly supported - use "rotate-z" kebab-case
-    // which TypeScript types don't include. Use `rotate` for z-axis rotation.
+    // NOTE: Use kebab-case transform keys for axis-specific rotation.
     it.skip("supports rotateX, rotateY, rotateZ", async () => {
       render(() => (
-        <motion.div data-testid="target" initial={{ rotateZ: 45 }} />
+        <motion.div data-testid="target" initial={{ "rotate-z": 45 }} />
       ));
       await vi.advanceTimersByTimeAsync(50);
       const element = screen.getByTestId("target");

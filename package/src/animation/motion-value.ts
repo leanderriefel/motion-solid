@@ -19,6 +19,7 @@ import { MotionGlobalConfig, secondsToMilliseconds } from "motion-utils";
 import { getFinalKeyframe } from "./get-final-keyframe";
 import { getDefaultTransition } from "./default-transitions";
 import { isTransitionDefined } from "./transition-utils";
+import type { WithRender } from "./motion-element";
 
 /**
  * Animate a MotionValue to a target value or keyframes.
@@ -31,6 +32,7 @@ export const animateMotionValue = <V extends AnyResolvedKeyframe>(
   value: MotionValue<V>,
   target: V | UnresolvedKeyframes<V>,
   transition: ValueTransition & { elapsed?: number } = {},
+  element?: WithRender | null,
 ): StartAnimation => {
   return (onComplete) => {
     const valueTransition = getValueTransition(transition, name) || {};
@@ -79,6 +81,7 @@ export const animateMotionValue = <V extends AnyResolvedKeyframe>(
       },
       name,
       motionValue: value,
+      element: element ?? undefined,
     };
 
     /**
@@ -178,29 +181,47 @@ export const startMotionValueAnimation = <V extends AnyResolvedKeyframe>(args: {
   motionValue: MotionValue<V>;
   keyframes: unknown;
   transition?: Transition;
+  element?: WithRender | null;
 }): AnimationPlaybackControlsWithThen | undefined => {
-  const { name, motionValue, keyframes, transition } = args;
+  const { name, motionValue, keyframes, transition, element } = args;
   const current = motionValue.get();
 
-  const isMatchingKeyframe = (value: unknown): value is V => {
-    if (typeof value !== "string" && typeof value !== "number") return false;
-    return typeof value === typeof current;
-  };
+  let targetToAnimate: V | V[];
 
-  const resolvedTarget: V | V[] | null = Array.isArray(keyframes)
-    ? (keyframes.filter(isMatchingKeyframe) as V[])
-    : isMatchingKeyframe(keyframes)
-      ? (keyframes as V)
-      : null;
+  if (element) {
+    // When MotionElement is provided, DOMKeyframesResolver handles type conversion.
+    // Pass through keyframes as-is (it can handle "auto", "none", unit conversions, etc.)
+    if (Array.isArray(keyframes)) {
+      if (keyframes.length === 0) return undefined;
+      targetToAnimate =
+        keyframes.length === 1 ? (keyframes[0] as V) : (keyframes as V[]);
+    } else if (keyframes !== undefined && keyframes !== null) {
+      targetToAnimate = keyframes as V;
+    } else {
+      return undefined;
+    }
+  } else {
+    // No element - use strict type matching for safety
+    const isMatchingKeyframe = (value: unknown): value is V => {
+      if (typeof value !== "string" && typeof value !== "number") return false;
+      return typeof value === typeof current;
+    };
 
-  if (resolvedTarget === null) return undefined;
-  if (Array.isArray(resolvedTarget) && resolvedTarget.length === 0)
-    return undefined;
+    const resolvedTarget: V | V[] | null = Array.isArray(keyframes)
+      ? (keyframes.filter(isMatchingKeyframe) as V[])
+      : isMatchingKeyframe(keyframes)
+        ? (keyframes as V)
+        : null;
 
-  const targetToAnimate: V | V[] =
-    Array.isArray(resolvedTarget) && resolvedTarget.length === 1
-      ? resolvedTarget[0]!
-      : resolvedTarget;
+    if (resolvedTarget === null) return undefined;
+    if (Array.isArray(resolvedTarget) && resolvedTarget.length === 0)
+      return undefined;
+
+    targetToAnimate =
+      Array.isArray(resolvedTarget) && resolvedTarget.length === 1
+        ? resolvedTarget[0]!
+        : resolvedTarget;
+  }
 
   let controls: AnimationPlaybackControlsWithThen | undefined;
 
@@ -210,6 +231,7 @@ export const startMotionValueAnimation = <V extends AnyResolvedKeyframe>(args: {
       motionValue,
       targetToAnimate,
       transition as ValueTransition,
+      element,
     );
 
     const animation = startAnimation(complete);

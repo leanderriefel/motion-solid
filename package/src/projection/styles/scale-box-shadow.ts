@@ -2,11 +2,12 @@ import { complex, mixNumber } from "motion-dom";
 import type { ScaleCorrectorDefinition } from "./types";
 
 export const correctBoxShadow: ScaleCorrectorDefinition = {
-  correct: (latest: string | number, { treeScale, projectionDelta }) => {
+  correct: (latest, { treeScale, projectionDelta }) => {
     if (typeof latest !== "string") return latest;
     const original = latest;
     const shadow = complex.parse(latest);
 
+    // we dont support multiple shadows
     if (shadow.length > 5) return original;
 
     const template = complex.createTransformer(latest);

@@ -10,13 +10,13 @@ import {
 import { Dynamic } from "solid-js/web";
 import { createStore } from "solid-js/store";
 import { mergeRefs } from "@solid-primitives/refs";
-import type { Variants } from "motion-dom";
 import type {
   ElementInstance,
   ElementTag,
   MotionElement,
   MotionOptions,
   MotionStyle,
+  Variants,
 } from "../types";
 import { createMotionState } from "../state";
 import { useAnimationState } from "../animation";
@@ -71,6 +71,11 @@ const styleTransformShortcuts = new Set([
   "transform-perspective",
 ]);
 
+const normalizeStyleKey = (key: string): string => {
+  if (key.startsWith("--")) return key;
+  return key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+};
+
 /**
  * Process style prop to handle transform shortcuts.
  * Returns the processed style object.
@@ -92,15 +97,17 @@ const processStyleProp = (
     const value = style[key];
     if (value === undefined) continue;
 
+    const normalizedKey = normalizeStyleKey(key);
+
     // Check if it's a transform shortcut
-    if (styleTransformShortcuts.has(key)) {
+    if (styleTransformShortcuts.has(normalizedKey)) {
       hasTransformShortcuts = true;
-      transformValues[key] = value;
+      transformValues[normalizedKey] = value;
       continue;
     }
 
     // Pass through to processed style
-    processedStyle[key] = value;
+    processedStyle[normalizedKey] = value;
   }
 
   // If we have transform shortcuts, build the transform string
@@ -181,8 +188,11 @@ const getInitialStyles = (
  * Motion component props type for internal use.
  * This is the base type that works correctly with splitProps.
  */
-type MotionPropsInternal<Tag extends ElementTag> = ComponentProps<Tag> &
-  MotionOptions & {
+type MotionPropsInternal<Tag extends ElementTag> = Omit<
+  ComponentProps<Tag>,
+  "onAnimationStart" | "onAnimationComplete"
+> &
+  MotionOptions<Tag> & {
     key?: string | number;
   };
 
@@ -277,7 +287,11 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     const presence = usePresenceContext();
     const motionConfig = useMotionConfig();
     const parentOrchestration = useOrchestration();
-    const [local, motionOptions, rest] = splitProps(props, ["ref"], motionKeys);
+    const [local, motionOptions, rest] = splitProps(
+      props as Record<string, unknown>,
+      ["ref"],
+      motionKeys as readonly string[],
+    ) as [{ ref?: unknown }, MotionOptions, Record<string, unknown>];
 
     const [styleProps, elementProps] = splitProps(rest, ["style"]);
 
@@ -293,10 +307,11 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         if (motionOptions.custom !== undefined) return motionOptions.custom;
         return presence?.custom();
       },
-    });
+    }) as MotionOptions;
+    const resolvedOptions = resolvedMotionOptions;
 
     const initialStyles = createMemo(() => {
-      return getInitialStyles(resolvedMotionOptions, parent);
+      return getInitialStyles(resolvedOptions, parent);
     });
 
     // Register this component as a child with parent's orchestration
@@ -426,7 +441,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     const [state, setState] = createStore(
       createMotionState({
-        options: resolvedMotionOptions,
+        options: resolvedOptions,
         parent,
       }),
     );
@@ -457,7 +472,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     useAnimationState({
       state,
       setState,
-      options: resolvedMotionOptions,
+      options: resolvedOptions,
       presence,
       getElement: () => cachedElement,
       motionConfig,
@@ -469,8 +484,8 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       childOrchestration,
       getStyleValues,
     });
-    useGestures({ state, setState, options: resolvedMotionOptions });
-    useDragGesture({ state, setState, options: resolvedMotionOptions });
+    useGestures({ state, setState, options: resolvedOptions });
+    useDragGesture({ state, setState, options: resolvedOptions });
 
     const ref = mergeRefs<ElementInstance<Tag> & MotionElement>(
       local.ref as ElementInstance<Tag> & MotionElement,

@@ -1,11 +1,12 @@
+import type { AnyResolvedKeyframe, VariantLabels } from "motion-dom";
 import type {
-  AnyResolvedKeyframe,
-  TargetAndTransition,
+  MotionOptions,
+  MotionState,
+  MotionTargetAndTransition,
+  Transition,
   Variant,
-  VariantLabels,
   Variants,
-} from "motion-dom";
-import type { MotionOptions, MotionState, Transition } from "../types";
+} from "../types";
 import { isRecord, isStringOrNumber } from "./types";
 import { normalizeTransformKey } from "./render";
 
@@ -24,7 +25,9 @@ const normalizeKeyedObject = (
   return result;
 };
 
-const normalizeTarget = (target: TargetAndTransition): TargetAndTransition => {
+const normalizeTarget = (
+  target: MotionTargetAndTransition,
+): MotionTargetAndTransition => {
   const normalized: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(target)) {
@@ -45,7 +48,7 @@ const normalizeTarget = (target: TargetAndTransition): TargetAndTransition => {
   if (transition !== undefined) normalized.transition = transition;
   if (transitionEnd !== undefined) normalized.transitionEnd = transitionEnd;
 
-  return normalized as TargetAndTransition;
+  return normalized as MotionTargetAndTransition;
 };
 
 const isLegacyAnimationControls = (value: unknown): boolean => {
@@ -63,7 +66,7 @@ export const isVariantLabels = (value: unknown): value is VariantLabels =>
 
 export const isTargetAndTransition = (
   value: unknown,
-): value is TargetAndTransition =>
+): value is MotionTargetAndTransition =>
   isRecord(value) && !Array.isArray(value) && !isLegacyAnimationControls(value);
 
 export const buildResolvedValues = (
@@ -88,10 +91,10 @@ export const buildResolvedVelocities = (
 };
 
 export const mergeTargets = (
-  a: TargetAndTransition,
-  b: TargetAndTransition,
-): TargetAndTransition => {
-  const next: TargetAndTransition = { ...a, ...b };
+  a: MotionTargetAndTransition,
+  b: MotionTargetAndTransition,
+): MotionTargetAndTransition => {
+  const next: MotionTargetAndTransition = { ...a, ...b };
 
   if ("transition" in a && !("transition" in b)) next.transition = a.transition;
   if ("transition" in b) next.transition = b.transition;
@@ -125,7 +128,7 @@ export const resolveVariantToTarget = (args: {
   variant: Variant;
   options: MotionOptions;
   state: MotionState;
-}): TargetAndTransition | null => {
+}): MotionTargetAndTransition | null => {
   const { variant, options, state } = args;
 
   if (typeof variant === "function") {
@@ -144,11 +147,11 @@ export const resolveVariantLabelsToTarget = (args: {
   variants: Variants;
   options: MotionOptions;
   state: MotionState;
-}): TargetAndTransition | null => {
+}): MotionTargetAndTransition | null => {
   const { labels, variants, options, state } = args;
   const labelList = Array.isArray(labels) ? labels : [labels];
 
-  let resolved: TargetAndTransition | null = null;
+  let resolved: MotionTargetAndTransition | null = null;
   for (const label of labelList) {
     const variant = variants[label];
     if (!variant) continue;
@@ -188,7 +191,7 @@ export const resolveDefinitionToTarget = (args: {
   definition: unknown;
   options: MotionOptions;
   state: MotionState;
-}): TargetAndTransition | null => {
+}): MotionTargetAndTransition | null => {
   const { definition, options, state } = args;
 
   if (!definition || definition === false) return null;

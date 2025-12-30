@@ -2,7 +2,7 @@ import { px } from "motion-dom";
 import type { Axis } from "motion-utils";
 import type { ScaleCorrectorDefinition } from "./types";
 
-const pixelsToPercent = (pixels: number, axis: Axis): number => {
+const pixelsToPercent = (pixels: number, axis: Axis) => {
   if (axis.max === axis.min) return 0;
   return (pixels / (axis.max - axis.min)) * 100;
 };

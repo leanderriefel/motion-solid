@@ -47,6 +47,9 @@ export function applyBoxDelta(box: Box, { x, y }: Delta): void {
   applyAxisDelta(box.y, y.translate, y.scale, y.originPoint);
 }
 
+const TREE_SCALE_SNAP_MIN = 0.999999999999;
+const TREE_SCALE_SNAP_MAX = 1.0000000000001;
+
 export function applyTreeDeltas(
   box: Box,
   treeScale: Point,
@@ -87,6 +90,14 @@ export function applyTreeDeltas(
     if (isSharedTransition && hasTransform(node.latestValues)) {
       transformBox(box, node.latestValues);
     }
+  }
+
+  if (treeScale.x < TREE_SCALE_SNAP_MAX && treeScale.x > TREE_SCALE_SNAP_MIN) {
+    treeScale.x = 1;
+  }
+
+  if (treeScale.y < TREE_SCALE_SNAP_MAX && treeScale.y > TREE_SCALE_SNAP_MIN) {
+    treeScale.y = 1;
   }
 }
 

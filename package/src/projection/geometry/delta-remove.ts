@@ -3,11 +3,7 @@ import type { Axis, Box } from "motion-utils";
 import type { ResolvedValues } from "../types";
 import { scalePoint } from "./delta-apply";
 
-const readValue = (
-  values: ResolvedValues,
-  key: string,
-  altKey?: string,
-): string | number | undefined => {
+const readValue = (values: ResolvedValues, key: string, altKey?: string) => {
   const direct = values[key];
   if (direct !== undefined) return direct;
   if (altKey) return values[altKey];

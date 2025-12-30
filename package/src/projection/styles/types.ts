@@ -1,5 +1,6 @@
 import type { Box, Delta, Point } from "motion-utils";
 import type { ResolvedValues } from "../types";
+import type { AnyResolvedKeyframe } from "motion-dom";
 
 export type ScaleCorrectorNode = {
   target?: Box;
@@ -8,9 +9,9 @@ export type ScaleCorrectorNode = {
 };
 
 export type ScaleCorrector = (
-  latest: string | number,
+  latest: AnyResolvedKeyframe,
   node: ScaleCorrectorNode,
-) => string | number;
+) => AnyResolvedKeyframe;
 
 export interface ScaleCorrectorDefinition {
   correct: ScaleCorrector;

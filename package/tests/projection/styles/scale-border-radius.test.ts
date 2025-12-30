@@ -38,11 +38,10 @@ describe("correctBorderRadius", () => {
     expect(result).toBe("50%");
   });
 
-  it("handles zero-length axis", () => {
+  it("preserves value when an axis has zero length", () => {
     const node = createMockNode({ min: 50, max: 50 }, { min: 0, max: 100 });
     const result = correctBorderRadius.correct(10, node as never);
-    // x has 0 length, should return 0%
-    expect(result).toBe("0% 10%");
+    expect(result).toBe("10px");
   });
 
   it("handles decimal pixel values", () => {

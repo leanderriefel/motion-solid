@@ -1,7 +1,7 @@
-import type { MotionValue, TargetAndTransition } from "motion-dom";
+import type { MotionValue } from "motion-dom";
 import { motionValue, defaultTransformValue } from "motion-dom";
 import { isTransformProp, toMotionDomTransformKey } from "./render";
-import type { MotionValues } from "../types";
+import type { MotionTargetAndTransition, MotionValues } from "../types";
 
 type MotionValueOwner = NonNullable<MotionValue<unknown>["owner"]>;
 
@@ -18,7 +18,7 @@ export const animationTypes = [
 export type AnimationType = (typeof animationTypes)[number];
 
 export type AnimationTypeTargets = Partial<
-  Record<AnimationType, TargetAndTransition>
+  Record<AnimationType, MotionTargetAndTransition>
 >;
 
 export type AnimationTypeValuesMap = Record<AnimationType, MotionValues>;
@@ -42,7 +42,7 @@ const pickInitialFromKeyframes = (
   return isStringOrNumber(keyframes) ? keyframes : null;
 };
 
-const targetKeysFromTarget = (target: TargetAndTransition): string[] => {
+const targetKeysFromTarget = (target: MotionTargetAndTransition): string[] => {
   const keys: string[] = [];
   for (const key of Object.keys(target)) {
     if (key === "transition" || key === "transitionEnd") continue;

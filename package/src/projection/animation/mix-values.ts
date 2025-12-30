@@ -56,10 +56,7 @@ export function mixValues(
         0,
       );
 
-      if (
-        percent.test(String(leadRadius)) ||
-        percent.test(String(followRadius))
-      ) {
+      if (percent.test(leadRadius) || percent.test(followRadius)) {
         target[borderKey] = `${target[borderKey]}%`;
       }
     } else {
@@ -76,15 +73,10 @@ export function mixValues(
   }
 }
 
-function getRadius(
-  values: ResolvedValues,
-  radiusName: string,
-): string | number | undefined {
-  if (values[radiusName] !== undefined) {
-    return values[radiusName] as string | number;
-  }
-  return values["border-radius"] as string | number | undefined;
-}
+const getRadius = (values: ResolvedValues, radiusName: string) =>
+  values[radiusName] !== undefined
+    ? values[radiusName]
+    : values["border-radius"];
 
 const easeCrossfadeIn = compress(0, 0.5, circOut);
 const easeCrossfadeOut = compress(0.5, 0.95, noop);

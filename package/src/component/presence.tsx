@@ -10,6 +10,7 @@ import {
 } from "solid-js";
 import { createListTransition } from "@solid-primitives/transition-group";
 import { resolveElements } from "@solid-primitives/refs";
+import { projectionManager } from "../projection/projection-manager";
 
 export type AnimatePresenceMode = "sync" | "wait" | "popLayout";
 
@@ -307,6 +308,36 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
     }
   };
 
+  const scheduleLayoutAnimationsForUnmount = (el: Element) => {
+    // Find the closest layout-enabled projection ancestor for this exiting element.
+    let parent = el.parentElement;
+    let layoutNode: any | undefined;
+
+    while (parent) {
+      const node = projectionManager.nodeByElement.get(parent);
+      if (node && (node.options.layout || node.options.layoutId)) {
+        layoutNode = node;
+        break;
+      }
+      parent = parent.parentElement;
+    }
+
+    if (!layoutNode?.instance) return;
+
+    // Schedule an update for the closest layout node. This snapshots the current layout
+    // (with this element still present) and flushes after it gets removed.
+    projectionManager.scheduleUpdate(layoutNode.instance);
+
+    // Ensure any layout-enabled ancestors also snapshot so they can animate too.
+    let ancestor = layoutNode.parent;
+    while (ancestor) {
+      if (ancestor.options.layout || ancestor.options.layoutId) {
+        ancestor.willUpdate();
+      }
+      ancestor = ancestor.parent;
+    }
+  };
+
   const rendered = createListTransition(getSource, {
     exitMethod: "keep-index",
     onChange: ({ removed, finishRemoved }) => {
@@ -324,7 +355,10 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
       for (const el of exitingElements) {
         if (mode === "popLayout") applyPopLayout(el);
 
-        props.pendingExits.set(el, () => finishRemoved([el]));
+        props.pendingExits.set(el, () => {
+          scheduleLayoutAnimationsForUnmount(el);
+          finishRemoved([el]);
+        });
 
         // Safety check: if after a tick the element hasn't started an animation, remove it.
         // This handles non-motion elements.

@@ -5,12 +5,12 @@ const readValue = (
   values: ResolvedValues | undefined,
   key: string,
   altKey?: string,
-): string | number | undefined => {
-  if (!values) return undefined;
+): string | number => {
+  if (!values) return 0;
   const direct = values[key];
   if (direct !== undefined) return direct;
-  if (altKey) return values[altKey];
-  return undefined;
+  if (altKey) return values[altKey] ?? 0;
+  return 0;
 };
 
 const formatNumber = (
@@ -33,7 +33,7 @@ export function buildProjectionTransform(
   const yTranslate = delta.y.translate / treeScale.y;
   const zTranslate = readValue(latestTransform, "z");
   if (xTranslate || yTranslate || zTranslate) {
-    transform = `translate3d(${xTranslate}px, ${yTranslate}px, ${zTranslate ?? 0}px) `;
+    transform = `translate3d(${xTranslate}px, ${yTranslate}px, ${zTranslate}px) `;
   }
 
   if (treeScale.x !== 1 || treeScale.y !== 1) {

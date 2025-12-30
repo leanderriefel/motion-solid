@@ -1,14 +1,15 @@
-import type { Accessor } from "solid-js";
-import type { JSX } from "solid-js";
+import type { Accessor, JSX } from "solid-js";
 import type {
   AnyResolvedKeyframe,
   MotionValue,
   MotionNodeOptions,
-  Transition as MotionDomTransition,
+  ValueAnimationTransition,
+  ValueTransition,
   VariantLabels,
 } from "motion-dom";
 import type { AnimationType } from "../animation/types";
 import type { BoundingBox } from "motion-utils";
+import type { ElementTag, SVGElements } from "./elements";
 
 /**
  * Transform shortcut properties that can be used in the style prop.
@@ -51,9 +52,116 @@ export type MotionValues = Record<
 
 export type MotionGoals = Record<string, AnyResolvedKeyframe>;
 
-export type Transition = Omit<MotionDomTransition, "type"> & {
+type MotionKeyframe = AnyResolvedKeyframe;
+
+type MotionKeyframesDefinition =
+  | MotionKeyframe
+  | MotionKeyframe[]
+  | Array<MotionKeyframe | null>;
+
+type KeysMatching<T, Value> = {
+  [K in keyof T]-?: T[K] extends Value ? K : never;
+}[keyof T];
+
+type CamelToKebab<S extends string> = S extends `${infer First}${infer Rest}`
+  ? Rest extends Uncapitalize<Rest>
+    ? `${Lowercase<First>}${CamelToKebab<Rest>}`
+    : `${Lowercase<First>}-${CamelToKebab<Rest>}`
+  : S;
+
+type SvgAttributeValues = string | number | undefined;
+
+type SvgAttributeKeys =
+  JSX.SVGElementTags[keyof JSX.SVGElementTags] extends infer T
+    ? T extends any
+      ? KeysMatching<T, SvgAttributeValues>
+      : never
+    : never;
+
+type KebabSvgAttributeKeys = SvgAttributeKeys extends string
+  ? CamelToKebab<SvgAttributeKeys>
+  : never;
+
+type MotionCssPropertyKeys = Exclude<
+  Extract<keyof JSX.CSSProperties, string>,
+  "transition" | "direction"
+>;
+
+type MotionTransformKeys =
+  | keyof StyleTransformShortcuts
+  | "origin-x"
+  | "origin-y"
+  | "origin-z";
+
+type MotionTargetKey<Tag extends ElementTag> =
+  | MotionCssPropertyKeys
+  | MotionTransformKeys
+  | ([Tag] extends [keyof SVGElements] ? KebabSvgAttributeKeys : never);
+
+type MotionTargetValues<Tag extends ElementTag> = Partial<
+  Record<MotionTargetKey<Tag>, MotionKeyframe>
+>;
+
+export type MotionTarget<Tag extends ElementTag = ElementTag> = Partial<
+  Record<MotionTargetKey<Tag>, MotionKeyframesDefinition>
+>;
+
+type BaseTransition = Omit<ValueAnimationTransition, "type"> & {
   type?: "spring" | "tween" | false;
 };
+
+type TransitionOverrides<Tag extends ElementTag> = Partial<
+  Record<MotionTargetKey<Tag>, ValueTransition>
+> & {
+  default?: ValueTransition;
+  layout?: ValueTransition;
+};
+
+export type Transition<Tag extends ElementTag = ElementTag> = BaseTransition &
+  TransitionOverrides<Tag>;
+
+export type MotionTargetAndTransition<Tag extends ElementTag = ElementTag> =
+  MotionTarget<Tag> & {
+    transition?: Transition<Tag>;
+    transitionEnd?: MotionTargetValues<Tag>;
+  };
+
+export type MotionTargetResolver<Tag extends ElementTag = ElementTag> = {
+  bivarianceHack(
+    custom: unknown,
+    current: MotionTargetValues<Tag>,
+    velocity: MotionTargetValues<Tag>,
+  ): MotionTargetAndTransition<Tag> | string;
+}["bivarianceHack"];
+
+export type Variant<Tag extends ElementTag = ElementTag> =
+  | MotionTargetAndTransition<Tag>
+  | MotionTargetResolver<Tag>;
+
+export type Variants<Tag extends ElementTag = ElementTag> = Record<
+  string,
+  Variant<Tag>
+>;
+
+export type MotionAnimationDefinition<Tag extends ElementTag = ElementTag> =
+  | MotionTargetAndTransition<Tag>
+  | VariantLabels
+  | boolean;
+
+export type MotionWhileDefinition<Tag extends ElementTag = ElementTag> =
+  | MotionTargetAndTransition<Tag>
+  | VariantLabels;
+
+export interface LegacyAnimationControls<Tag extends ElementTag = ElementTag> {
+  subscribe(visualElement: unknown): () => void;
+  start(
+    definition: MotionAnimationDefinition<Tag>,
+    transitionOverride?: Transition<Tag>,
+  ): Promise<any>;
+  set(definition: MotionAnimationDefinition<Tag>): void;
+  stop(): void;
+  mount(): () => void;
+}
 
 export interface MotionGesturesState {
   hover: boolean;
@@ -86,7 +194,7 @@ export interface SolidViewportOptions {
  * We also override `viewport` to use SolidJS-friendly types that accept
  * direct element references instead of requiring React-style ref objects.
  */
-export type MotionOptions = Omit<
+export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   MotionNodeOptions,
   | "custom"
   | "dragControls"
@@ -94,13 +202,40 @@ export type MotionOptions = Omit<
   | "dragConstraints"
   | "transition"
   | "dragTransition"
+  | "initial"
+  | "animate"
+  | "exit"
+  | "variants"
+  | "whileHover"
+  | "whileTap"
+  | "whileFocus"
+  | "whileInView"
+  | "whileDrag"
+  | "transformTemplate"
+  | "onAnimationStart"
+  | "onAnimationComplete"
 > & {
   custom?: unknown;
   dragControls?: unknown;
   viewport?: SolidViewportOptions;
   dragConstraints?: false | Partial<BoundingBox> | Element;
-  transition?: Transition;
-  dragTransition?: Transition;
+  transition?: Transition<Tag>;
+  dragTransition?: Transition<Tag>;
+  variants?: Variants<Tag>;
+  initial?: MotionAnimationDefinition<Tag>;
+  animate?: MotionAnimationDefinition<Tag> | LegacyAnimationControls<Tag>;
+  exit?: MotionWhileDefinition<Tag>;
+  whileHover?: MotionWhileDefinition<Tag>;
+  whileTap?: MotionWhileDefinition<Tag>;
+  whileFocus?: MotionWhileDefinition<Tag>;
+  whileInView?: MotionWhileDefinition<Tag>;
+  whileDrag?: MotionWhileDefinition<Tag>;
+  transformTemplate?: (
+    transform: Record<string, string | number>,
+    generatedTransform: string,
+  ) => string;
+  onAnimationStart?: (definition: MotionAnimationDefinition<Tag>) => void;
+  onAnimationComplete?: (definition: MotionAnimationDefinition<Tag>) => void;
   layoutDependencies?: Accessor<unknown>[];
 };
 

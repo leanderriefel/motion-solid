@@ -4,6 +4,7 @@ import type {
   MotionValue,
   ValueTransition,
 } from "motion-dom";
+import { frame } from "motion-dom";
 import type { Transition } from "../types";
 import type { Axis, AxisDelta, Box, Delta, Point } from "motion-utils";
 import { startMotionValueAnimation } from "../animation/motion-value";
@@ -87,18 +88,9 @@ const shouldAnimatePositionOnly = (
   );
 };
 
-const userAgentContains = (value: string): boolean =>
-  typeof navigator !== "undefined" &&
-  Boolean(navigator.userAgent?.toLowerCase().includes(value));
-
-const roundPoint =
-  userAgentContains("applewebkit/") && !userAgentContains("chrome/")
-    ? Math.round
-    : (value: number) => value;
-
 const roundAxis = (axis: Axis): void => {
-  axis.min = roundPoint(axis.min);
-  axis.max = roundPoint(axis.max);
+  axis.min = Math.round(axis.min);
+  axis.max = Math.round(axis.max);
 };
 
 const roundBox = (box: Box): void => {
@@ -305,6 +297,17 @@ class ProjectionNodeImpl {
 
   unmount(): void {
     const hasLayoutId = Boolean(this.options.layoutId);
+    const hasLayout = Boolean(this.options.layout) || hasLayoutId;
+
+    // Notify parent to take a snapshot BEFORE we unmount
+    // This allows the parent to animate from old layout (with this child)
+    // to new layout (without this child), including flex gap changes
+    if (
+      this.parent &&
+      (this.parent.options.layout || this.parent.options.layoutId)
+    ) {
+      this.parent.willUpdate();
+    }
 
     if (hasLayoutId) {
       this.willUpdate();
@@ -321,6 +324,11 @@ class ProjectionNodeImpl {
     this.isMounted = false;
 
     this.manager.scheduleUpdateProjection();
+
+    // Schedule a check after unmount to trigger sibling/parent animations
+    if (hasLayout) {
+      this.scheduleCheckAfterUnmount();
+    }
   }
 
   setOptions(options: ProjectionNodeOptions): void {
@@ -1448,11 +1456,19 @@ class ProjectionManager {
     if (this.projectionUpdateScheduled) return;
     this.projectionUpdateScheduled = true;
 
-    const schedule =
-      typeof requestAnimationFrame === "function"
-        ? requestAnimationFrame
-        : (cb: FrameRequestCallback) =>
-            setTimeout(() => cb(performance.now()), 16);
+    if (
+      typeof requestAnimationFrame === "function" &&
+      typeof frame.preRender === "function"
+    ) {
+      frame.preRender(() => {
+        this.projectionUpdateScheduled = false;
+        this.updateProjection(false);
+      });
+      return;
+    }
+
+    const schedule = (cb: FrameRequestCallback) =>
+      setTimeout(() => cb(performance.now()), 16);
 
     schedule(() => {
       this.projectionUpdateScheduled = false;
