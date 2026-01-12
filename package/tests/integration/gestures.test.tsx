@@ -149,7 +149,7 @@ describe("gestures", () => {
       );
       await vi.advanceTimersByTimeAsync(50);
 
-      document.dispatchEvent(
+      element.dispatchEvent(
         createPointerEvent("pointerup", { clientX: 50, clientY: 50 }),
       );
       await vi.advanceTimersByTimeAsync(50);
@@ -458,7 +458,7 @@ describe("gestures", () => {
       );
       await vi.advanceTimersByTimeAsync(50);
 
-      document.dispatchEvent(
+      element.dispatchEvent(
         createPointerEvent("pointerup", { clientX: 50, clientY: 50 }),
       );
       await vi.advanceTimersByTimeAsync(50);
@@ -487,6 +487,33 @@ describe("gestures", () => {
       await vi.advanceTimersByTimeAsync(50);
 
       expect(onTapStart).toHaveBeenCalled();
+    });
+
+    it("treats global tap as success on pointerup", async () => {
+      const onTap = vi.fn();
+      const onTapCancel = vi.fn();
+
+      render(() => (
+        <motion.div
+          data-testid="target"
+          globalTapTarget
+          onTap={onTap}
+          onTapCancel={onTapCancel}
+        />
+      ));
+
+      document.dispatchEvent(
+        createPointerEvent("pointerdown", { clientX: 500, clientY: 500 }),
+      );
+      await vi.advanceTimersByTimeAsync(50);
+
+      document.dispatchEvent(
+        createPointerEvent("pointerup", { clientX: 800, clientY: 800 }),
+      );
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(onTap).toHaveBeenCalled();
+      expect(onTapCancel).not.toHaveBeenCalled();
     });
   });
 

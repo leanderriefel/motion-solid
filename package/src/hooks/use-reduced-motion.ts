@@ -39,9 +39,26 @@ export const useReducedMotion = (): Accessor<boolean> => {
 
   const handler = (e: MediaQueryListEvent) =>
     setPrefersReducedMotion(e.matches);
-  mq.addEventListener("change", handler);
 
-  onCleanup(() => mq.removeEventListener("change", handler));
+  const addListener = () => {
+    if (mq.addEventListener) {
+      mq.addEventListener("change", handler);
+    } else {
+      mq.addListener(handler);
+    }
+  };
+
+  const removeListener = () => {
+    if (mq.removeEventListener) {
+      mq.removeEventListener("change", handler);
+    } else {
+      mq.removeListener(handler);
+    }
+  };
+
+  addListener();
+
+  onCleanup(removeListener);
 
   return prefersReducedMotion;
 };

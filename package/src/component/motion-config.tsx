@@ -60,9 +60,27 @@ const useSystemReducedMotion = (): Accessor<boolean> => {
     systemPrefersReducedMotionSignal = [get, set];
 
     const handler = (e: MediaQueryListEvent) => set(e.matches);
-    mq.addEventListener("change", handler);
+
+    const addListener = () => {
+      if (mq.addEventListener) {
+        mq.addEventListener("change", handler);
+      } else {
+        mq.addListener(handler);
+      }
+    };
+
+    const removeListener = () => {
+      if (mq.removeEventListener) {
+        mq.removeEventListener("change", handler);
+      } else {
+        mq.removeListener(handler);
+      }
+    };
+
+    addListener();
+
     mediaQueryCleanup = () => {
-      mq.removeEventListener("change", handler);
+      removeListener();
       systemPrefersReducedMotionSignal = null;
       mediaQueryCleanup = null;
     };

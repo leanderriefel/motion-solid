@@ -22,6 +22,19 @@ const createTapInfo = (event: { clientX: number; clientY: number }) => ({
   point: { x: event.clientX, y: event.clientY },
 });
 
+const isPrimaryPointer = (event: PointerEvent): boolean => {
+  if (event.pointerType === "mouse") {
+    return typeof event.button !== "number" || event.button <= 0;
+  }
+
+  return event.isPrimary !== false;
+};
+
+const isNodeOrChild = (parent: Element, child: EventTarget | null): boolean => {
+  if (!child || !(child instanceof Node)) return false;
+  return parent === child || parent.contains(child);
+};
+
 interface Point {
   x: number;
   y: number;
@@ -138,17 +151,28 @@ export const useGestures = (args: GestureOptions) => {
       options.onPanSessionStart ||
       options.onPanEnd;
 
+    const useGlobalTapTarget = options.globalTapTarget === true;
+
     // Determine where to listen for tap events
-    const tapTarget = options.globalTapTarget ? document : htmlElement;
+    const tapTarget = useGlobalTapTarget ? window : htmlElement;
 
     const onPointerDown = (event: PointerEvent) => {
-      isTapping = true;
-      tapSource = "pointer";
-      setState("activeGestures", "tap", true);
-      options.onTapStart?.(event, createTapInfo(event));
+      if (!isPrimaryPointer(event)) return;
+
+      const isOriginInside = isNodeOrChild(element, event.target);
+      const shouldStartTap =
+        hasTapHandlers && (useGlobalTapTarget || isOriginInside);
+      const shouldStartPan = hasPanHandlers && isOriginInside;
+
+      if (shouldStartTap) {
+        isTapping = true;
+        tapSource = "pointer";
+        setState("activeGestures", "tap", true);
+        options.onTapStart?.(event, createTapInfo(event));
+      }
 
       // Initialize pan session if we have pan handlers
-      if (hasPanHandlers) {
+      if (shouldStartPan) {
         panSessionStarted = true;
         isPanning = false;
         panStartPoint = { x: event.clientX, y: event.clientY };
@@ -208,6 +232,8 @@ export const useGestures = (args: GestureOptions) => {
     };
 
     const onPointerUp = (event: PointerEvent) => {
+      if (!isPrimaryPointer(event)) return;
+
       // End pan gesture if active
       if (panSessionStarted) {
         const point: Point = { x: event.clientX, y: event.clientY };
@@ -237,15 +263,10 @@ export const useGestures = (args: GestureOptions) => {
       tapSource = null;
       setState("activeGestures", "tap", false);
 
-      // Check if pointer is still over the element for onTap vs onTapCancel
-      const rect = element.getBoundingClientRect();
-      const isInside =
-        event.clientX >= rect.left &&
-        event.clientX <= rect.right &&
-        event.clientY >= rect.top &&
-        event.clientY <= rect.bottom;
+      const shouldTriggerTap =
+        useGlobalTapTarget || isNodeOrChild(element, event.target);
 
-      if (isInside) {
+      if (shouldTriggerTap) {
         options.onTap?.(event, createTapInfo(event));
       } else {
         options.onTapCancel?.(event, createTapInfo(event));
@@ -253,6 +274,8 @@ export const useGestures = (args: GestureOptions) => {
     };
 
     const onPointerCancel = (event: PointerEvent) => {
+      if (!isPrimaryPointer(event)) return;
+
       // End pan gesture on cancel
       if (panSessionStarted) {
         const point: Point = { x: event.clientX, y: event.clientY };
@@ -347,41 +370,66 @@ export const useGestures = (args: GestureOptions) => {
 
     const threshold = resolveThreshold(options.viewport?.amount);
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        const isInView = entries.some((entry) =>
-          threshold > 0
-            ? entry.intersectionRatio >= threshold
-            : entry.isIntersecting,
-        );
-        setState("activeGestures", "inView", isInView);
+    let io: IntersectionObserver | null = null;
 
-        const entry = entries[0];
-        if (entry) {
-          if (isInView && !wasInView) {
-            options.onViewportEnter?.(entry);
+    if (typeof IntersectionObserver === "function") {
+      io = new IntersectionObserver(
+        (entries) => {
+          const isInView = entries.some((entry) =>
+            threshold > 0
+              ? entry.intersectionRatio >= threshold
+              : entry.isIntersecting,
+          );
+          setState("activeGestures", "inView", isInView);
 
-            // Disconnect after first intersection if once is true
-            if (options.viewport?.once) {
-              io.disconnect();
+          const entry = entries[0];
+          if (entry) {
+            if (isInView && !wasInView) {
+              options.onViewportEnter?.(entry);
+
+              // Disconnect after first intersection if once is true
+              if (options.viewport?.once) {
+                io?.disconnect();
+              }
+            } else if (!isInView && wasInView) {
+              options.onViewportLeave?.(entry);
             }
-          } else if (!isInView && wasInView) {
-            options.onViewportLeave?.(entry);
           }
+          wasInView = isInView;
+        },
+        {
+          root: resolvedRoot,
+          rootMargin: options.viewport?.margin,
+          threshold,
+        },
+      );
+    } else {
+      setState("activeGestures", "inView", true);
+
+      if (!wasInView) {
+        wasInView = true;
+
+        if (typeof options.onViewportEnter === "function") {
+          const rect = element.getBoundingClientRect();
+          const entry = {
+            isIntersecting: true,
+            intersectionRatio: 1,
+            target: element,
+            time: performance.now(),
+            boundingClientRect: rect,
+            intersectionRect: rect,
+            rootBounds: null,
+          } as IntersectionObserverEntry;
+
+          options.onViewportEnter(entry);
         }
-        wasInView = isInView;
-      },
-      {
-        root: resolvedRoot,
-        rootMargin: options.viewport?.margin,
-        threshold,
-      },
-    );
+      }
+    }
 
     htmlElement.addEventListener("pointerenter", onPointerEnter, { signal });
     htmlElement.addEventListener("pointerleave", onPointerLeave, { signal });
 
-    // Use tapTarget for pointerdown (element or document based on globalTapTarget)
+    // Use tapTarget for pointerdown (element or window based on globalTapTarget)
     tapTarget.addEventListener("pointerdown", onPointerDown as EventListener, {
       signal,
     });
@@ -403,11 +451,11 @@ export const useGestures = (args: GestureOptions) => {
     htmlElement.addEventListener("keydown", onKeyDown, { signal });
     htmlElement.addEventListener("keyup", onKeyUp, { signal });
 
-    io.observe(element);
+    io?.observe(element);
 
     onCleanup(() => {
       abortController.abort();
-      io.disconnect();
+      io?.disconnect();
 
       if (shouldMakeFocusable) {
         // Restore original focusability (avoid leaving a `tabindex` attribute behind)

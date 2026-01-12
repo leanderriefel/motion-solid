@@ -308,6 +308,8 @@ export const useDragGesture = (args: DragGestureOptions) => {
     };
 
     const onPointerDown = (event: PointerEvent) => {
+      if (options.dragListener === false) return;
+
       // Stop propagation to prevent parent draggables from activating
       if (!propagateDrag) {
         event.stopPropagation();
@@ -530,6 +532,8 @@ export const useDragGesture = (args: DragGestureOptions) => {
     htmlElement.addEventListener("pointercancel", onPointerCancel);
 
     // Prevent default drag behavior
+    const prevTouchAction = htmlElement.style.touchAction;
+    const prevUserSelect = htmlElement.style.userSelect;
     htmlElement.style.touchAction = "none";
     htmlElement.style.userSelect = "none";
 
@@ -539,6 +543,8 @@ export const useDragGesture = (args: DragGestureOptions) => {
       htmlElement.removeEventListener("pointerup", onPointerUp);
       htmlElement.removeEventListener("pointercancel", onPointerCancel);
       unsubscribeDragControls?.();
+      htmlElement.style.touchAction = prevTouchAction;
+      htmlElement.style.userSelect = prevUserSelect;
     });
   });
 };
