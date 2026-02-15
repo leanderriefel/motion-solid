@@ -24,5 +24,3 @@ Documentation for `motion-solid`.
 ## Adding Docs
 
 Create a new `.mdx` file in `src/routes/docs/`.
-
-Contact: riefel.leander@gmail.com

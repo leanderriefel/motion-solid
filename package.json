@@ -30,6 +30,5 @@
     "oxlint": "^1.39.0",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3"
-  },
-  "author": "Leander Riefel <riefel.leander@gmail.com>"
+  }
 }
