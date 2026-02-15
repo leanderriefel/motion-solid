@@ -21,3 +21,5 @@ bun add motion-solid
 ## License
 
 MIT
+
+Contact: riefel.leander@gmail.com
