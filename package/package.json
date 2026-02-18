@@ -27,20 +27,20 @@
   "dependencies": {
     "@solid-primitives/refs": "^1.1.2",
     "@solid-primitives/transition-group": "^1.1.2",
-    "motion-dom": "^12.24.11",
-    "motion-utils": "^12.24.10"
+    "motion-dom": "^12.34.2",
+    "motion-utils": "^12.29.2"
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",
     "@testing-library/jest-dom": "^6.9.1",
     "esbuild-plugin-solid": "^0.6.0",
-    "jsdom": "^27.4.0",
-    "solid-js": "^1.9.10",
+    "jsdom": "^28.1.0",
+    "solid-js": "^1.9.11",
     "tsup": "^8.5.1",
     "tsup-preset-solid": "^2.2.0",
     "typescript": "^5.9.3",
     "vite-plugin-solid": "^2.11.10",
-    "vitest": "^4.0.17"
+    "vitest": "4.0.17"
   },
   "exports": {
     ".": {

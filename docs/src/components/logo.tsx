@@ -2,6 +2,8 @@ import { motion } from "motion-solid";
 import { ComponentProps, splitProps } from "solid-js";
 import { cn } from "~/utils/cn";
 
+type MotionSvgProps = ComponentProps<typeof motion.svg>;
+
 export const Logo = (props: ComponentProps<"svg">) => {
   const [local, rest] = splitProps(props, ["class", "style"]);
   return (
@@ -31,7 +33,7 @@ export const Logo = (props: ComponentProps<"svg">) => {
   );
 };
 
-export const AnimatedLogo = (props: ComponentProps<"svg">) => {
+export const AnimatedLogo = (props: MotionSvgProps) => {
   const [classProps, _, rest] = splitProps(
     props,
     ["class"],

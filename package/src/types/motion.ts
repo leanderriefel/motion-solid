@@ -59,9 +59,19 @@ type MotionKeyframesDefinition =
   | MotionKeyframe[]
   | Array<MotionKeyframe | null>;
 
-type KeysMatching<T, Value> = {
-  [K in keyof T]-?: T[K] extends Value ? K : never;
+type KnownKeys<T> = {
+  [K in keyof T]-?: string extends K
+    ? never
+    : number extends K
+      ? never
+      : symbol extends K
+        ? never
+        : K;
 }[keyof T];
+
+type KeysMatching<T, Value> = {
+  [K in KnownKeys<T>]-?: T[K] extends Value ? K : never;
+}[KnownKeys<T>];
 
 type CamelToKebab<S extends string> = S extends `${infer First}${infer Rest}`
   ? Rest extends Uncapitalize<Rest>
@@ -79,12 +89,12 @@ type SvgAttributeKeys =
     : never;
 
 type KebabSvgAttributeKeys = SvgAttributeKeys extends string
-  ? CamelToKebab<SvgAttributeKeys>
+  ? CamelToKebab<Exclude<SvgAttributeKeys, "type">>
   : never;
 
 type MotionCssPropertyKeys = Exclude<
-  Extract<keyof JSX.CSSProperties, string>,
-  "transition" | "direction"
+  Extract<KnownKeys<JSX.CSSProperties>, string>,
+  "transition" | "direction" | "type"
 >;
 
 type MotionTransformKeys =
@@ -110,8 +120,10 @@ type BaseTransition = Omit<ValueAnimationTransition, "type"> & {
   type?: "spring" | "tween" | false;
 };
 
+type TransitionOverrideValue = ValueTransition | BaseTransition["type"];
+
 type TransitionOverrides<Tag extends ElementTag> = Partial<
-  Record<MotionTargetKey<Tag>, ValueTransition>
+  Record<MotionTargetKey<Tag>, TransitionOverrideValue>
 > & {
   default?: ValueTransition;
   layout?: ValueTransition;
