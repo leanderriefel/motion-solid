@@ -1,73 +1,96 @@
 # Variants
 
-Variants let you name animation targets and reuse them across `initial`, `animate`, `exit`, and the `while*` props.
+Variants let you name animation targets and orchestrate them across `initial`, `animate`, `exit`, and `while*` props. They enable reusable animations and parent-child coordination.
 
-## Defining variants
+## Defining Variants
 
 ```tsx
 import { motion } from "motion-solid";
 
 const card = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
     y: 0,
     transition: { duration: 0.35 },
   },
+  exit: {
+    opacity: 0,
+    y: -20,
+    transition: { duration: 0.2 },
+  },
 };
 
-<motion.div initial="hidden" animate="visible" variants={card} />;
+<motion.div variants={card} initial="hidden" animate="visible" exit="exit" />;
 ```
 
-## Variant labels
+## Props That Accept Variants
 
-These props accept a variant label string or an array of labels:
+These props accept variant labels: `initial`, `animate`, `exit`, `whileHover`, `whileTap`, `whileFocus`, `whileInView`, `whileDrag`.
 
-- `initial`
-- `animate`
-- `exit`
-- `whileHover`
-- `whileTap`
-- `whileFocus`
-- `whileInView`
-- `whileDrag`
+### Multiple Labels
 
-When you pass an array, each label is merged in order.
+Pass an array to merge variants in order:
 
 ```tsx
-<motion.div animate={["visible", "highlight"]} variants={card} />
+const card = {
+  visible: { opacity: 1, y: 0 },
+  highlighted: { scale: 1.05, "box-shadow": "0 4px 12px rgba(0,0,0,0.1)" },
+};
+
+<motion.div variants={card} animate={["visible", "highlighted"]} />;
 ```
 
-## Function variants and `custom`
+Later variants override earlier ones for conflicting properties.
 
-A variant can be a function. Motion Solid calls it with `(custom, current, velocity)`.
+## Function Variants
+
+Variants can be functions that receive `(custom, current, velocity)`:
 
 ```tsx
 const item = {
   hidden: { opacity: 0 },
-  visible: (custom: { delay: number }) => ({
+  visible: (custom: number) => ({
     opacity: 1,
-    transition: { delay: custom.delay },
+    transition: { delay: custom * 0.1 },
   }),
 };
 
-<motion.div custom={{ delay: 0.2 }} variants={item} animate="visible" />;
+<For each={items()}>
+  {(item, i) => (
+    <motion.div
+      variants={variants}
+      custom={i()}
+      initial="hidden"
+      animate="visible"
+    />
+  )}
+</For>;
 ```
 
-Function variants can also return a variant label string, which is then resolved against the same `variants` map.
+### Function Parameters
+
+- `custom` - Value from `custom` prop or AnimatePresence
+- `current` - Current motion values
+- `velocity` - Current velocity of motion values
+
+### Returning Labels
+
+Function variants can return a label string, resolved against the same variants map:
 
 ```tsx
-const item = {
-  hidden: { opacity: 0 },
-  visible: () => "hidden",
+const menu = {
+  open: { opacity: 1 },
+  closed: { opacity: 0 },
+  toggle: (isOpen: boolean) => (isOpen ? "open" : "closed"),
 };
-```
 
-`custom` can also be provided by `AnimatePresence`, so exiting children can receive data.
+<motion.div variants={menu} animate="toggle" custom={isOpen()} />;
+```
 
 ## Orchestration
 
-You can coordinate parent and child animations via a variant `transition`:
+Parent variants can coordinate child animations:
 
 ```tsx
 const container = {
@@ -76,20 +99,33 @@ const container = {
     opacity: 1,
     transition: {
       when: "beforeChildren",
-      delayChildren: 0.1,
-      staggerChildren: 0.05,
-      staggerDirection: 1,
+      staggerChildren: 0.1,
+      delayChildren: 0.2,
     },
   },
 };
+
+const item = {
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0 },
+};
+
+<motion.ul variants={container} initial="hidden" animate="show">
+  <For each={items()}>{() => <motion.li variants={item} />}</For>
+</motion.ul>;
 ```
 
-- `when: "beforeChildren"` delays children until the parent finishes.
-- `when: "afterChildren"` waits for children before starting the parent.
-- `delayChildren` adds a base delay for each child.
-- `staggerChildren` and `staggerDirection` control stagger order.
+Orchestration options:
 
-For custom staggering, use `stagger`:
+- `when: "beforeChildren"` - Parent finishes before children start
+- `when: "afterChildren"` - Children finish before parent starts
+- `delayChildren` - Base delay before children start
+- `staggerChildren` - Delay between each child
+- `staggerDirection` - `1` (forward) or `-1` (reverse)
+
+### Advanced Staggering
+
+Use the `stagger` function for custom patterns:
 
 ```tsx
 import { stagger } from "motion-solid";
@@ -97,7 +133,9 @@ import { stagger } from "motion-solid";
 const container = {
   show: {
     transition: {
-      delayChildren: stagger(0.08, { from: "center" }),
+      delayChildren: stagger(0.08, {
+        from: "center", // or "first", "last", or index
+      }),
     },
   },
 };
@@ -105,11 +143,79 @@ const container = {
 
 ## Inheritance
 
-Variant labels resolve against the closest ancestor `variants` by default. Set `inherit={false}` to opt out.
+Children inherit variant labels from ancestors by default:
 
 ```tsx
 <motion.ul variants={list} initial="hidden" animate="show">
+  {/* Inherits "hidden" and "show" */}
   <motion.li variants={item} />
+
+  {/* Uses its own "peek" instead of inherited "show" */}
   <motion.li variants={item} animate="peek" inherit={false} />
 </motion.ul>
+```
+
+Set `inherit={false}` to opt out of parent variant resolution.
+
+## Example: Staggered List
+
+```tsx
+import { motion } from "motion-solid";
+import { For } from "solid-js";
+
+const container = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+    },
+  },
+};
+
+const item = {
+  hidden: { opacity: 0, x: -20 },
+  visible: { opacity: 1, x: 0 },
+};
+
+function StaggeredList(props: { items: string[] }) {
+  return (
+    <motion.ul variants={container} initial="hidden" animate="visible">
+      <For each={props.items}>
+        {(text) => <motion.li variants={item}>{text}</motion.li>}
+      </For>
+    </motion.ul>
+  );
+}
+```
+
+## Example: Expandable Card
+
+```tsx
+const card = {
+  collapsed: {
+    height: 60,
+    transition: { type: "spring", stiffness: 300, damping: 30 },
+  },
+  expanded: (custom: { height: number }) => ({
+    height: custom.height,
+    transition: { type: "spring", stiffness: 300, damping: 30 },
+  }),
+};
+
+function ExpandableCard(props: { content: string }) {
+  const [expanded, setExpanded] = createSignal(false);
+
+  return (
+    <motion.div
+      variants={card}
+      initial="collapsed"
+      animate={expanded() ? "expanded" : "collapsed"}
+      custom={{ height: expanded() ? 200 : 60 }}
+      onClick={() => setExpanded((e) => !e)}
+    >
+      {props.content}
+    </motion.div>
+  );
+}
 ```

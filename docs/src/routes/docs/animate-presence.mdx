@@ -1,60 +1,267 @@
 # AnimatePresence
 
-AnimatePresence enables exit animations when elements leave the tree.
+AnimatePresence enables exit animations for components leaving the tree. Without it, elements disappear instantly without animating.
 
-## Basic usage
+## Basic Usage
 
 ```tsx
 import { AnimatePresence, motion } from "motion-solid";
 import { Show } from "solid-js";
 
+function Toast() {
+  const [visible, setVisible] = createSignal(true);
+
+  return (
+    <AnimatePresence>
+      <Show when={visible()}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, x: 100 }}
+          class="toast"
+        >
+          Notification message
+        </motion.div>
+      </Show>
+    </AnimatePresence>
+  );
+}
+```
+
+Only `motion.*` elements inside AnimatePresence receive exit animations.
+
+## Modes
+
+Control how enter and exit animations coordinate:
+
+### `sync` (default)
+
+Enter and exit animations run simultaneously:
+
+```tsx
+<AnimatePresence mode="sync">{/* ... */}</AnimatePresence>
+```
+
+### `wait`
+
+Entering elements wait for all exits to complete:
+
+```tsx
+<AnimatePresence mode="wait">
+  <Show when={tab() === "a"}>
+    <motion.div exit={{ opacity: 0 }} />
+  </Show>
+  <Show when={tab() === "b"}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
+  </Show>
+</AnimatePresence>
+```
+
+Useful for tab switches or page transitions where you want clean handoff.
+
+### `popLayout`
+
+Exiting elements are taken out of the document flow while animating:
+
+```tsx
+<AnimatePresence mode="popLayout">
+  <For each={items()}>
+    {(item) => <motion.li layout exit={{ opacity: 0, scale: 0.5 }} />}
+  </For>
+</AnimatePresence>
+```
+
+This prevents layout shifts during exit animations. `popLayout` temporarily applies inline `position`, `min-width`, and `min-height` styles, then restores them after exits complete.
+
+## Props
+
+### `initial`
+
+Set `false` to skip initial animations for elements present on first render:
+
+```tsx
+// Children animate in on first render
 <AnimatePresence>
-  <Show when={open()}>
-    <motion.div exit={{ opacity: 0, y: -10 }} />
+  {/* ... */}
+</AnimatePresence>
+
+// Children appear immediately, only exit animations run
+<AnimatePresence initial={false}>
+  {/* ... */}
+</AnimatePresence>
+```
+
+### `custom`
+
+Pass data to variant functions for all children:
+
+```tsx
+const variants = {
+  exit: (direction: number) => ({
+    x: direction > 0 ? -100 : 100,
+    opacity: 0,
+  }),
+};
+
+const [direction, setDirection] = createSignal(1);
+
+<AnimatePresence custom={direction()} mode="wait">
+  <Show when={page() === 1}>
+    <motion.div variants={variants} exit="exit" />
   </Show>
 </AnimatePresence>;
 ```
 
-Exit animations only run for `motion.*` elements inside AnimatePresence.
+### `onExitComplete`
 
-## Modes
-
-- `sync` (default): enter and exit run together.
-- `wait`: entering waits for all exits to finish.
-- `popLayout`: exiting elements are taken out of layout flow while they animate.
+Callback when all exiting elements finish:
 
 ```tsx
-<AnimatePresence mode="wait">...</AnimatePresence>
+<AnimatePresence onExitComplete={() => console.log("all done")}>
+  {/* ... */}
+</AnimatePresence>
 ```
 
-## Props
+### `propagate`
 
-- `initial`: set `false` to disable initial animations for children present on first render.
-- `custom`: data passed to variant functions via `custom`.
-- `onExitComplete`: called when all exiting nodes have finished.
-- `mode`: `"sync" | "wait" | "popLayout"`.
-- `propagate`: when `true`, exiting from a parent AnimatePresence also triggers child exits. When `false` (default), nested AnimatePresence trees don't run child exits from parent removal.
-- `root`: root element for `popLayout` positioning (useful with shadow roots).
+When `true`, parent removal triggers child exit animations. Default `false`:
+
+```tsx
+// Child exits don't run when parent exits
+<AnimatePresence>
+  <Show when={showParent()}>
+    <motion.div exit={{ opacity: 0 }}>
+      <AnimatePresence>
+        <motion.div exit={{ scale: 0 }} /> {/* won't run */}
+      </AnimatePresence>
+    </motion.div>
+  </Show>
+</AnimatePresence>
+
+// Child exits run when parent exits
+<AnimatePresence propagate>
+  <Show when={showParent()}>
+    <motion.div exit={{ opacity: 0 }}>
+      <AnimatePresence>
+        <motion.div exit={{ scale: 0 }} /> {/* will run */}
+      </AnimatePresence>
+    </motion.div>
+  </Show>
+</AnimatePresence>
+```
+
+### `root`
+
+Root element for `popLayout` positioning. Useful with shadow DOM or portals.
 
 ## Hooks
 
-`usePresence` lets you delay removal manually:
+### `usePresence`
+
+Get presence state and a `safeToRemove` callback for manual control:
 
 ```tsx
-import { createEffect } from "solid-js";
 import { usePresence } from "motion-solid";
 
-const [isPresent, safeToRemove] = usePresence();
+function CustomExit() {
+  const [isPresent, safeToRemove] = usePresence();
 
-createEffect(() => {
-  if (!isPresent()) {
-    doAsyncCleanup().finally(() => safeToRemove?.());
-  }
-});
+  createEffect(() => {
+    if (!isPresent()) {
+      // Do async work before removal
+      fetchData().finally(() => safeToRemove?.());
+    }
+  });
+
+  return <div>{isPresent() ? "Here" : "Leaving..."}</div>;
+}
 ```
 
-`useIsPresent` returns just the presence accessor, and `usePresenceData` returns the `custom` payload.
+`isPresent` is an accessor that returns:
 
-## Solid-specific behavior
+- `true` - element is present
+- `false` - element is exiting
 
-Solid disposes reactive effects when a component is removed. AnimatePresence keeps the DOM node in place to play exit animations, so the exiting subtree is no longer reactive.
+### `useIsPresent`
+
+Just the presence accessor, without the callback:
+
+```tsx
+import { useIsPresent } from "motion-solid";
+
+const isPresent = useIsPresent();
+
+// Use in computed values
+const opacity = () => (isPresent() ? 1 : 0.5);
+```
+
+### `usePresenceData`
+
+Access the `custom` payload passed to AnimatePresence:
+
+```tsx
+import { usePresenceData } from "motion-solid";
+
+const custom = usePresenceData<{ id: string }>();
+```
+
+## Solid-Specific Behavior
+
+Solid disposes reactive effects when a component is removed. AnimatePresence keeps the DOM node in place for exit animations, but the exiting subtree is no longer reactive.
+
+This means:
+
+- Signals inside exiting components won't update
+- Effects won't re-run
+- Only the exit animation plays
+
+Plan accordingly: compute what you need before the exit starts.
+
+## Example: Slide Transitions
+
+```tsx
+import { AnimatePresence, motion } from "motion-solid";
+import { createSignal } from "solid-js";
+
+const variants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? 300 : -300,
+    opacity: 0,
+  }),
+  center: { x: 0, opacity: 1 },
+  exit: (direction: number) => ({
+    x: direction < 0 ? 300 : -300,
+    opacity: 0,
+  }),
+};
+
+function Slides() {
+  const [page, setPage] = createSignal(0);
+  const [direction, setDirection] = createSignal(1);
+
+  const paginate = (dir: number) => {
+    setDirection(dir);
+    setPage((p) => p + dir);
+  };
+
+  return (
+    <>
+      <AnimatePresence custom={direction()} mode="wait">
+        <motion.div
+          key={page()}
+          variants={variants}
+          custom={direction()}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ duration: 0.3 }}
+        >
+          Page {page()}
+        </motion.div>
+      </AnimatePresence>
+      <button onClick={() => paginate(-1)}>Prev</button>
+      <button onClick={() => paginate(1)}>Next</button>
+    </>
+  );
+}
+```

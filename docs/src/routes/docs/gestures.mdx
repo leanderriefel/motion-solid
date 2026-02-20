@@ -1,61 +1,154 @@
 # Gestures
 
-Motion components support hover, tap, focus, viewport, and pan gestures.
+Motion components support hover, tap, focus, and viewport-triggered animations with corresponding event callbacks.
 
-## Hover and tap
+## Hover
+
+Animate while the pointer is over an element:
 
 ```tsx
 <motion.button
-  whileHover={{ scale: 1.05 }}
-  whileTap={{ scale: 0.98 }}
-  onTap={() => console.log("tap")}
-/>
+  whileHover={{ scale: 1.05, "box-shadow": "0 4px 12px rgba(0,0,0,0.15)" }}
+  onHoverStart={() => console.log("hover start")}
+  onHoverEnd={() => console.log("hover end")}
+>
+  Hover me
+</motion.button>
 ```
 
-Tap callbacks:
+Hover animations smoothly blend back to the current state when the pointer leaves.
 
-- `onTapStart` fires on pointer down.
-- `onTap` fires on pointer up inside the element.
-- `onTapCancel` fires when the pointer leaves or is canceled.
+## Tap
 
-If you need to capture pointer down at the document level, set `globalTapTarget={true}`.
+Animate while pressing (pointer down):
+
+```tsx
+<motion.button whileTap={{ scale: 0.95 }} onTap={() => console.log("tapped!")}>
+  Tap me
+</motion.button>
+```
+
+Tap callbacks: `onTapStart` (pointer down), `onTap` (pointer up inside), `onTapCancel` (pointer leaves or canceled).
+
+By default, tap detection uses the element itself. Set `globalTapTarget` to capture pointer events at the document level.
 
 ## Focus
 
+Animate while an element has focus:
+
 ```tsx
-<motion.input whileFocus={{ scale: 1.02 }} />
+<motion.input
+  whileFocus={{ scale: 1.02, "box-shadow": "0 0 0 2px blue" }}
+  onFocus={() => console.log("focused")}
+  onBlur={() => console.log("blurred")}
+/>
 ```
+
+Works with any focusable element: `input`, `textarea`, `button`, and elements with `tabindex`.
 
 ## Viewport
 
-`whileInView` uses IntersectionObserver and supports Solid-friendly viewport options:
+Animate when an element enters or leaves the viewport:
 
 ```tsx
 <motion.div
-  initial={{ opacity: 0, y: 16 }}
+  initial={{ opacity: 0, y: 50 }}
   whileInView={{ opacity: 1, y: 0 }}
   viewport={{ once: true, amount: 0.5 }}
-  onViewportEnter={(entry) => console.log("enter", entry)}
-  onViewportLeave={(entry) => console.log("leave", entry)}
+  onViewportEnter={(entry) => console.log("entered", entry)}
+  onViewportLeave={(entry) => console.log("left", entry)}
 />
 ```
 
-`viewport` options:
+Viewport options:
 
-- `root`: Element or Document to use as the root.
-- `once`: run only once.
-- `margin`: root margin string.
-- `amount`: `"some" | "all" | number` for threshold.
+- `once` - Only trigger once
+- `amount` - Threshold for triggering (`"some"`, `"all"`, or number 0-1)
+- `margin` - Root margin (e.g., `"100px"`)
+- `root` - Custom root element for IntersectionObserver
+
+```tsx
+// Trigger when 50% visible
+<motion.div whileInView={{ opacity: 1 }} viewport={{ amount: 0.5 }} />
+
+// Trigger with offset margin
+<motion.div whileInView={{ opacity: 1 }} viewport={{ margin: "-100px" }} />
+```
 
 ## Pan
 
-Pan events report the current point, delta, offset, and velocity.
+Track pointer movement across an element:
 
 ```tsx
 <motion.div
-  onPanSessionStart={(event, info) => console.log("session", info)}
-  onPanStart={(event, info) => console.log("start", info)}
-  onPan={(event, info) => console.log("move", info)}
-  onPanEnd={(event, info) => console.log("end", info)}
+  onPanSessionStart={(e, info) => console.log("session start", info)}
+  onPanStart={(e, info) => console.log("pan start", info)}
+  onPan={(e, info) => console.log("panning", info)}
+  onPanEnd={(e, info) => console.log("pan end", info)}
 />
+```
+
+Pan info object contains: `point` (current position), `delta` (movement since last frame), `offset` (total movement from start), `velocity` (current velocity).
+
+### Example: Swipe Detection
+
+```tsx
+function Swipeable() {
+  const [offset, setOffset] = createSignal(0);
+
+  const handlePanEnd = (e, info) => {
+    if (Math.abs(info.offset.x) > 100) {
+      setOffset(info.offset.x > 0 ? 200 : -200);
+    } else {
+      setOffset(0);
+    }
+  };
+
+  return (
+    <motion.div
+      animate={{ x: offset() }}
+      onPanEnd={handlePanEnd}
+      style={{ touchAction: "pan-y" }}
+    />
+  );
+}
+```
+
+## Gesture Precedence
+
+When multiple gestures are active, they layer in this order: Drag (highest), Pan, Tap, Hover (lowest).
+
+## Example: Interactive Card
+
+```tsx
+function InteractiveCard(props: { title: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -5, "box-shadow": "0 8px 24px rgba(0,0,0,0.12)" }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+    >
+      <h3>{props.title}</h3>
+    </motion.div>
+  );
+}
+```
+
+## Example: Scroll Reveal
+
+```tsx
+function ScrollReveal(props: { children: JSX.Element }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.3 }}
+      transition={{ duration: 0.5 }}
+    >
+      {props.children}
+    </motion.div>
+  );
+}
 ```

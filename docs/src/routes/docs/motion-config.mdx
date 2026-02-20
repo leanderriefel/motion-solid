@@ -1,21 +1,45 @@
 # MotionConfig
 
-MotionConfig lets you set defaults for transitions and reduced motion behavior.
+MotionConfig sets global defaults for transitions and reduced motion behavior. Wrap your app or a subtree to apply configuration.
 
-## Default transitions
+## Default Transitions
+
+Set a default transition for all motion components:
 
 ```tsx
 import { MotionConfig } from "motion-solid";
 
-<MotionConfig transition={{ type: "spring", stiffness: 300, damping: 30 }}>
-  <App />
-</MotionConfig>;
+function App() {
+  return (
+    <MotionConfig transition={{ type: "spring", stiffness: 300, damping: 30 }}>
+      <Layout>
+        {/* All animations use this spring by default */}
+        <motion.div animate={{ x: 100 }} />
+        <motion.button whileHover={{ scale: 1.05 }} />
+      </Layout>
+    </MotionConfig>
+  );
+}
 ```
 
-Every motion component inside the provider will use this transition unless it
-provides its own `transition` prop.
+Individual components can still override:
 
-## Reduced motion
+```tsx
+<MotionConfig transition={{ type: "spring" }}>
+  {/* Uses spring */}
+  <motion.div animate={{ x: 100 }} />
+
+  {/* Overrides with tween */}
+  <motion.div
+    animate={{ x: 100 }}
+    transition={{ type: "tween", duration: 0.3 }}
+  />
+</MotionConfig>
+```
+
+## Reduced Motion
+
+Respect user preferences for reduced motion:
 
 ```tsx
 <MotionConfig reducedMotion="user">
@@ -23,16 +47,114 @@ provides its own `transition` prop.
 </MotionConfig>
 ```
 
-`reducedMotion` accepts:
+Options:
 
-- `"user"`: respect `prefers-reduced-motion`.
-- `"always"`: force reduced motion.
-- `"never"`: never reduce motion (default).
+- `"user"` - Respect `prefers-reduced-motion` media query
+- `"always"` - Force reduced motion
+- `"never"` - Never reduce motion (default)
 
-When reduced motion is active, transform animations (x, y, scale, rotate, etc)
-use a `duration: 0` transition. Layout animations are not automatically reduced yet.
+### What Gets Reduced
+
+When reduced motion is active:
+
+- Transform animations (x, y, scale, rotate, etc.) use `duration: 0`
+- Opacity animations still run
+- Layout animations are not automatically reduced
+
+```tsx
+// With reduced motion, this animates opacity instantly
+<motion.div
+  initial={{ opacity: 0, x: -100 }}
+  animate={{ opacity: 1, x: 0 }}
+/>
+
+// But this still animates opacity
+<motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+/>
+```
+
+## Nested Config
+
+MotionConfig can be nested. Inner configs override outer:
+
+```tsx
+<MotionConfig transition={{ type: "spring" }}>
+  {/* Uses spring */}
+  <motion.div animate={{ x: 100 }} />
+
+  <MotionConfig transition={{ type: "tween", duration: 0.3 }}>
+    {/* Uses tween */}
+    <motion.div animate={{ x: 100 }} />
+  </MotionConfig>
+</MotionConfig>
+```
 
 ## Hooks
 
-`useMotionConfig` returns the current config context, and `useReducedMotion`
-provides direct access to the user's system preference.
+### `useMotionConfig`
+
+Access the current config context:
+
+```tsx
+import { useMotionConfig } from "motion-solid";
+
+function CustomMotion() {
+  const config = useMotionConfig();
+
+  // config.transition - current default transition
+  // config.reducedMotion - current reduced motion setting
+}
+```
+
+### `useReducedMotion`
+
+Direct access to the user's system preference:
+
+```tsx
+import { useReducedMotion } from "motion-solid";
+
+function AdaptiveAnimation() {
+  const prefersReducedMotion = useReducedMotion();
+
+  return (
+    <motion.div
+      animate={{ x: prefersReducedMotion() ? 0 : 100 }}
+      transition={{ duration: prefersReducedMotion() ? 0 : 0.5 }}
+    />
+  );
+}
+```
+
+`useReducedMotion` returns the actual `prefers-reduced-motion` value, regardless of MotionConfig settings.
+
+## Example: Accessible Animations
+
+```tsx
+function App() {
+  return (
+    <MotionConfig reducedMotion="user">
+      <main>
+        {/* Animations respect user preference */}
+        <Hero />
+        <Features />
+      </main>
+    </MotionConfig>
+  );
+}
+
+function FeatureCard(props) {
+  const reduced = useReducedMotion();
+
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: reduced() ? 0 : 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+    >
+      {props.children}
+    </motion.article>
+  );
+}
+```

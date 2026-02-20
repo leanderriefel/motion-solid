@@ -1,45 +1,32 @@
 # API Reference
 
-This is the public surface exported from `motion-solid`.
+Public surface exported from `motion-solid`.
 
 ## Components
 
-- `motion`: proxy that exposes `motion.div`, `motion.svg`, and all other HTML/SVG tags.
-- `AnimatePresence`: enables exit animations. See [AnimatePresence](/docs/animate-presence).
-- `MotionConfig`: global defaults for transitions and reduced motion. See [MotionConfig](/docs/motion-config).
-
-## Contexts
-
-- `MotionStateContext` and `useMotionState`: access the internal motion state (advanced).
-- `MotionConfigContext` and `useMotionConfig`: access motion configuration.
-- `PresenceContext`: internal presence context used by AnimatePresence.
+- `motion` - Proxy exposing `motion.div`, `motion.svg`, and all HTML/SVG tags
+- `AnimatePresence` - Enables exit animations
+- `MotionConfig` - Global defaults for transitions and reduced motion
 
 ## Hooks
 
-- `usePresence`: presence state plus a `safeToRemove` callback.
-- `useIsPresent`: presence state only.
-- `usePresenceData`: reads the `custom` payload from AnimatePresence.
-- `useReducedMotion`: access `prefers-reduced-motion` as a Solid accessor.
+- `usePresence` - Presence state plus `safeToRemove` callback for manual exit control
+- `useIsPresent` - Just the presence accessor
+- `usePresenceData` - Access the `custom` payload from AnimatePresence
+- `useReducedMotion` - System preference for reduced motion as a Solid accessor
+- `useMotionConfig` - Current MotionConfig context
 
 ## Utilities
 
-- `createMotionComponent`: create a motion component for a specific tag.
-- `createMotionState`: build a MotionState object (advanced).
-- `useAnimationState`: low-level animation controller hook.
-- `useGestures`: low-level gesture hook used by the motion component.
-- `createDragControls`: programmatic drag controller.
-- `stagger` and `isStaggerFunction`: helpers for orchestrating variants.
-- `motionKeys`: list of props consumed by motion components.
-- `animationTypes` and `buildAnimationTypeMotionValues`: animation helpers.
-- `isSVGElement` and `isHTMLElement`: element tag checks.
+- `createDragControls` - Programmatic drag controller
+- `stagger` - Helper for orchestrating variants (e.g., `stagger(0.1, { from: "center" })`)
 
 ## Types
 
-Common types include `MotionProps`, `MotionOptions`, `MotionState`, `MotionValues`,
-`MotionGoals`, `MotionGesturesState`, `MotionVariantsState`, `AnimatePresenceProps`,
-and `MotionConfigProps`. Motion Solid also re-exports Motion types like `Variant`,
-`Variants`, and `Transition` from `motion-dom`.
+Common types: `MotionProps`, `AnimatePresenceProps`, `MotionConfigProps`.
+
+Motion Solid re-exports types from `motion-dom`: `Variant`, `Variants`, `Transition`, etc.
 
 ## Notes
 
-Low-level APIs are provided for advanced use cases and may change during the beta.
+CSS custom properties (`--*`) are supported in `initial`, `animate`, and `exit` targets.

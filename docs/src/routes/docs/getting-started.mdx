@@ -1,50 +1,134 @@
 # Getting Started
 
+motion-solid is a [SolidJS](https://solidjs.com) animation library built on [Motion](https://motion.dev). It provides declarative animations, gestures, drag, and layout animations with a Solid-native API.
+
+## Features
+
+- **Declarative animations** - Define animations with `initial`, `animate`, and `exit` props
+- **Variants** - Name and orchestrate complex animation sequences
+- **Gestures** - Hover, tap, focus, and viewport-triggered animations
+- **Drag** - Built-in draggable elements with constraints and momentum
+- **Layout animations** - Smoothly animate elements when they move or resize
+- **Exit animations** - Animate elements out when they leave the tree
+- **SSR-ready** - Server-side rendering with correct initial styles
+
 ## Installation
 
 ```bash
 # npm
 npm install motion-solid
+
 # yarn
 yarn add motion-solid
+
 # pnpm
 pnpm add motion-solid
+
 # bun
 bun add motion-solid
 ```
 
-## Basic usage
+## Quick Start
+
+Import the `motion` proxy and use `motion.div`, `motion.button`, etc:
 
 ```tsx
 import { motion } from "motion-solid";
 
-<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} />;
+function App() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      Hello, motion!
+    </motion.div>
+  );
+}
 ```
 
-## Exit animations
+## Key Concepts
+
+### Animation Props
+
+- `initial` - Starting state (or `false` to skip)
+- `animate` - Target state to animate to
+- `exit` - State to animate to when leaving (requires AnimatePresence)
+- `transition` - How to animate (spring, tween, keyframes)
+
+### Style Keys
+
+Use kebab-case for transform properties to match Solid conventions:
+
+```tsx
+<motion.div animate={{ "scale-x": 1.2, "rotate-y": 45 }} />
+```
+
+Supported transform keys include: `x`, `y`, `z`, `scale`, `scale-x`, `scale-y`, `rotate`, `rotate-x`, `rotate-y`, `rotate-z`, `skew-x`, `skew-y`, `transform-perspective`, `origin-x`, `origin-y`, `origin-z`.
+
+### Reactivity
+
+Animation values can be reactive:
+
+```tsx
+const [isOpen, setIsOpen] = createSignal(false);
+
+<motion.div
+  animate={{ height: isOpen() ? 200 : 0 }}
+  transition={{ type: "spring" }}
+/>;
+```
+
+## Exit Animations
+
+Wrap with `AnimatePresence` to enable exit animations:
 
 ```tsx
 import { AnimatePresence, motion } from "motion-solid";
 import { Show } from "solid-js";
 
-<AnimatePresence>
-  <Show when={open()}>
-    <motion.div exit={{ opacity: 0 }} />
-  </Show>
-</AnimatePresence>;
+function Modal() {
+  const [open, setOpen] = createSignal(true);
+
+  return (
+    <AnimatePresence>
+      <Show when={open()}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+        >
+          Modal content
+        </motion.div>
+      </Show>
+    </AnimatePresence>
+  );
+}
 ```
 
-## Server-side rendering
+## Server-Side Rendering
 
-Motion components render with `initial` styles on the server, or with `animate`
-styles when `initial` is `false` or `undefined`.
+Motion components render deterministically on the server. They use `initial` styles when provided, or `animate` styles if `initial` is `false` or undefined.
 
-## Next steps
+```tsx
+// Server renders with translateX(100px)
+<motion.div initial={false} animate={{ x: 100 }} />
 
-- [Motion Component](/docs/motion-component)
-- [Variants](/docs/variants)
-- [Gestures](/docs/gestures)
-- [Drag](/docs/drag)
-- [Layout](/docs/layout)
-- [MotionConfig](/docs/motion-config)
-- [Demos](/docs/demos)
+// Server renders with opacity: 0; transform: scale(0);
+<motion.div
+  initial={{ opacity: 0, scale: 0 }}
+  animate={{ opacity: 1, scale: 1 }}
+/>
+```
+
+## Next Steps
+
+- [Motion Component](/docs/motion-component) - All props and options
+- [Variants](/docs/variants) - Orchestrate complex animations
+- [Gestures](/docs/gestures) - Hover, tap, focus interactions
+- [Drag](/docs/drag) - Draggable elements
+- [Layout](/docs/layout) - Animate layout changes
+- [AnimatePresence](/docs/animate-presence) - Exit animations
+- [MotionConfig](/docs/motion-config) - Global configuration
+- [Demos](/docs/demos) - Interactive examples

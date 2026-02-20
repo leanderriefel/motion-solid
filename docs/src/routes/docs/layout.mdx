@@ -1,37 +1,72 @@
 # Layout
 
-Layout animations smoothly transition elements between layout changes.
+Layout animations automatically transition elements when their position or size changes. This works for reordering, resizing, and element repositioning.
 
-## Basic layout
+## Basic Layout
 
-```tsx
-<motion.div layout />
-```
-
-## Layout types
-
-- `layout={true}` animates position and size.
-- `layout="position"` animates only position.
-- `layout="size"` animates only size.
-- `layout="preserve-aspect"` keeps the element's aspect ratio when possible.
-
-## Shared layout transitions
-
-Use `layoutId` to animate between two elements that represent the same entity.
+Add `layout` to animate position and size changes:
 
 ```tsx
-<motion.div layoutId="card" />
+import { motion } from "motion-solid";
+
+// Animates when position or size changes
+<motion.div layout />;
 ```
 
-Set `layoutCrossfade={false}` to disable opacity crossfades for shared layout transitions.
+## Layout Types
 
-## Solid-specific layout dependencies
+Control what gets animated:
 
-Solid updates the DOM synchronously, so layout animations need explicit dependencies
-for changes that are not standard props like `class` or `style`.
+- `layout` (default) - Position and size
+- `layout="position"` - Position only
+- `layout="size"` - Size only
+- `layout="preserve-aspect"` - Position, size, maintaining aspect ratio
 
-If `layoutDependencies` is not provided, motion-solid tracks `class`, `classList`,
-`style`, `textContent`, and `innerHTML` automatically.
+```tsx
+// Only animate position changes
+<motion.div layout="position" />
+
+// Only animate size changes
+<motion.div layout="size" />
+```
+
+## Shared Layout Transitions
+
+Use `layoutId` to animate between two elements that represent the same entity:
+
+```tsx
+import { motion } from "motion-solid";
+import { Show } from "solid-js";
+
+function Card({ expanded, onToggle }) {
+  return (
+    <Show
+      when={expanded()}
+      fallback={
+        <motion.div layoutId="card" onClick={onToggle} class="card-small" />
+      }
+    >
+      <motion.div layoutId="card" onClick={onToggle} class="card-large" />
+    </Show>
+  );
+}
+```
+
+When `expanded` changes, the element smoothly morphs between the two positions and sizes.
+
+Set `layoutCrossfade={false}` to disable opacity crossfades.
+
+## Solid-Specific: Layout Dependencies
+
+Solid updates the DOM synchronously, so layout animations need explicit dependencies for changes outside standard props.
+
+### Automatic Tracking
+
+motion-solid automatically tracks: `class`, `classList`, `style`, `textContent`, `innerHTML`.
+
+### Manual Dependencies
+
+For other changes, provide `layoutDependencies`:
 
 ```tsx
 const [isOn, setIsOn] = createSignal(false);
@@ -40,17 +75,95 @@ const [isOn, setIsOn] = createSignal(false);
   class={`flex ${isOn() ? "justify-start" : "justify-end"}`}
   onClick={() => setIsOn((v) => !v)}
 >
+  {/* Child position changes when parent class changes */}
   <motion.div layout layoutDependencies={[isOn]} class="size-8 rounded-full" />
 </button>;
 ```
 
-Here, `layoutDependencies={[isOn]}` is needed because the child's position changes
-when the parent's `class` changes, but the child itself has no tracked props
-changing.
+Add dependencies when: a parent's prop change affects child position, derived state influences layout, or non-standard props trigger layout shifts.
 
-## Scroll and roots
+## Scroll Containers
 
-- `layoutScroll` marks an element as a scroll container for layout measurements.
-- `layoutRoot` makes an element the root of its own layout tree.
+Mark scroll containers for accurate layout measurements:
 
-Projection transforms sanitize invalid tree-scale values (for example `0`, `NaN`, `Infinity`) before composing CSS transforms, so layout animations don't emit non-finite transform strings.
+```tsx
+<div class="scroll-container" style="overflow: auto">
+  <motion.div layout layoutScroll>
+    {/* Layout measurements account for scroll */}
+  </motion.div>
+</div>
+```
+
+- `layoutScroll` - Marks an element as a scroll container
+- `layoutRoot` - Creates an independent layout tree
+
+## Example: Reorderable List
+
+```tsx
+import { motion, AnimatePresence } from "motion-solid";
+import { For, createSignal } from "solid-js";
+
+function ReorderableList() {
+  const [items, setItems] = createSignal(["A", "B", "C", "D"]);
+
+  const moveUp = (index: number) => {
+    if (index === 0) return;
+    setItems((items) => {
+      const newItems = [...items];
+      [newItems[index - 1], newItems[index]] = [
+        newItems[index],
+        newItems[index - 1],
+      ];
+      return newItems;
+    });
+  };
+
+  return (
+    <ul>
+      <For each={items()}>
+        {(item, index) => (
+          <motion.li
+            layout
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {item}
+            <button onClick={() => moveUp(index())}>Move up</button>
+          </motion.li>
+        )}
+      </For>
+    </ul>
+  );
+}
+```
+
+## Example: Tab Indicator
+
+```tsx
+function Tabs() {
+  const [active, setActive] = createSignal(0);
+  const tabs = ["Overview", "Details", "Settings"];
+
+  return (
+    <div class="tabs">
+      <For each={tabs}>
+        {(tab, index) => (
+          <button onClick={() => setActive(index())}>
+            {tab}
+            <Show when={active() === index()}>
+              <motion.div layoutId="underline" class="underline" />
+            </Show>
+          </button>
+        )}
+      </For>
+    </div>
+  );
+}
+```
+
+## Notes
+
+- Projection transforms sanitize invalid values (`0`, `NaN`, `Infinity`) before composing CSS transforms
+- Exiting elements in shared `layoutId` transitions are marked not-present before handoff
+- Layout animations work best with `type: "spring"` transitions

@@ -26,7 +26,6 @@ const docsNav = [
     items: [
       { href: "/docs/getting-started", label: "Getting Started" },
       { href: "/docs/demos", label: "Demos" },
-      { href: "/docs/caveats", label: "Caveats" },
     ],
   },
   {

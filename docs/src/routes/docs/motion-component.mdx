@@ -1,108 +1,238 @@
 # Motion Component
 
-The `motion` proxy exposes a `motion.*` component for every HTML and SVG element.
-Motion components accept all native props plus motion-specific props.
-
-## Basic usage
+The `motion` proxy exposes a component for every HTML and SVG element. Motion components accept all native props plus animation-specific props.
 
 ```tsx
 import { motion } from "motion-solid";
 
-<motion.div
-  class="circle blue"
-  initial={{ opacity: 0, scale: 0 }}
-  animate={{ opacity: 1, scale: 1 }}
->
-  I'm a motion.div
-</motion.div>;
+// HTML elements
+<motion.div />
+<motion.button />
+<motion.section />
+
+// SVG elements
+<motion.svg />
+<motion.path />
+<motion.circle />
 ```
 
-## Core props
+## Basic Example
+
+```tsx
+<motion.div
+  class="card"
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.4, ease: "ease-out" }}
+>
+  Fade in from below
+</motion.div>
+```
+
+## Animation Props
 
 ### `initial`
 
-Initial state of the component. Can be:
+The starting state. Can be an animation target, a variant label, or `false` to skip the initial animation.
 
-- An animation target
-- A variant label (see [Variants](/docs/variants))
-- `false` to skip the initial animation
+```tsx
+// Animation target
+<motion.div initial={{ opacity: 0, scale: 0.8 }} />
+
+// Variant label
+<motion.div initial="hidden" variants={variants} />
+
+// Skip initial animation
+<motion.div initial={false} animate={{ x: 100 }} />
+```
 
 ### `animate`
 
-Target to animate to on mount and update. Can be:
+Target to animate to on mount and when props change. Can be a target object, variant label, or array of labels.
 
-- An animation target
-- A variant label or array of labels
+```tsx
+// Animation target
+<motion.div animate={{ opacity: 1, x: 50 }} />
+
+// Variant label
+<motion.div animate="visible" variants={variants} />
+
+// Multiple variants (merged in order)
+<motion.div animate={["visible", "highlight"]} variants={variants} />
+
+// CSS custom properties
+<motion.div animate={{ "--progress": 0.5, "--color": "#ff0000" }} />
+```
 
 ### `exit`
 
-Target to animate to on exit. Can be an animation target or a variant label.
-This only runs inside [AnimatePresence](/docs/animate-presence).
+Target to animate to when the component leaves. Requires [AnimatePresence](/docs/animate-presence).
+
+```tsx
+<AnimatePresence>
+  <Show when={visible()}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, y: -20 }}
+    />
+  </Show>
+</AnimatePresence>
+```
 
 ### `transition`
 
-Default transition to use when a target does not specify one.
-`transitionEnd` values are applied after animations complete.
+Controls how values animate. Can be set per-prop or as a default.
+
+```tsx
+// Default for all values
+<motion.div
+  animate={{ x: 100, opacity: 1 }}
+  transition={{ type: "spring", stiffness: 200 }}
+/>
+
+// Per-prop overrides
+<motion.div
+  animate={{ x: 100, opacity: 1 }}
+  transition={{
+    x: { type: "spring" },
+    opacity: { duration: 0.2 },
+  }}
+/>
+
+// Using transitionEnd for final values
+<motion.div
+  animate={{ opacity: 1 }}
+  transition={{ transitionEnd: { display: "none" } }}
+/>
+```
+
+Transition types:
+
+- `"spring"` - Physics-based with `stiffness`, `damping`, `mass`
+- `"tween"` - Duration-based with `duration`, `ease`
+- `"keyframes"` - Step through an array of values
+- `"inertia"` - Decelerate from initial velocity
 
 ### `variants`
 
-Map of variant names to animation targets. See [Variants](/docs/variants).
+Map of named animation targets. See [Variants](/docs/variants).
+
+```tsx
+const variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+<motion.div variants={variants} initial="hidden" animate="visible" />;
+```
 
 ### `custom`
 
-Custom data passed to variant functions. This can also be supplied by
-[AnimatePresence](/docs/animate-presence).
+Data passed to variant functions. Also provided by [AnimatePresence](/docs/animate-presence).
+
+```tsx
+const variants = {
+  visible: (delay: number) => ({
+    opacity: 1,
+    transition: { delay },
+  }),
+};
+
+<motion.div variants={variants} custom={0.2} animate="visible" />;
+```
 
 ### `inherit`
 
 Set to `false` to prevent inheriting variants from ancestors.
 
-### `style`
+```tsx
+<motion.ul variants={list} animate="show">
+  <motion.li variants={item} /> {/* inherits "show" */}
+  <motion.li inherit={false} /> {/* does not inherit */}
+</motion.ul>
+```
 
-Regular Solid style object merged with Motion's rendered styles.
+## Style
 
-### `transformTemplate`
+Regular Solid style object, merged with animated values. Use kebab-case for CSS and transform properties (`scale-x`, `rotate-y`, etc).
 
-Function that lets you control the final `transform` string.
+```tsx
+<motion.div style={{ "background-color": "blue" }} animate={{ x: 100 }} />
+```
+
+## Lifecycle Callbacks
 
 ### `onUpdate`
 
-Callback invoked with the latest resolved values on every render.
-
-### `onAnimationStart` and `onAnimationComplete`
-
-Callbacks fired when the `animate` target starts or finishes.
-
-## Gestures and drag
-
-Motion supports `whileHover`, `whileTap`, `whileFocus`, `whileInView`, and
-`whileDrag` along with their corresponding event callbacks. See
-[Gestures](/docs/gestures) and [Drag](/docs/drag).
-
-## Layout
-
-Set `layout` or `layoutId` to enable layout animations, and use
-`layoutDependencies` for Solid-specific reactivity. See [Layout](/docs/layout).
-
-## Server-side rendering
-
-On the server, motion components render with the styles from the `initial` prop
-if provided, or the `animate` prop if `initial` is `undefined` or `false`.
+Called on every render with the latest values:
 
 ```tsx
-// Server will output `translateX(100px)`
-<motion.div initial={false} animate={{ x: 100 }} />
+<motion.div animate={{ x: 100 }} onUpdate={(latest) => console.log(latest.x)} />
 ```
 
+### `onAnimationStart` / `onAnimationComplete`
+
+Fired when the `animate` target starts or finishes:
+
 ```tsx
-// Server will output `opacity: 0; transform: scale(0);`
 <motion.div
-  initial={{ opacity: 0, scale: 0 }}
-  animate={{ opacity: 1, scale: 1 }}
+  animate={{ opacity: 1 }}
+  onAnimationStart={() => console.log("started")}
+  onAnimationComplete={() => console.log("done")}
 />
 ```
 
-## Planned
+## Gestures and Drag
 
-- Custom components (`motion(Component)`) are not supported yet.
-- MotionValue support in the `style` prop is planned.
+Motion supports gesture animations and callbacks:
+
+- `whileHover` - Animation while hovering
+- `whileTap` - Animation while pressing
+- `whileFocus` - Animation while focused
+- `whileInView` - Animation when in viewport
+- `whileDrag` - Animation while dragging
+
+See [Gestures](/docs/gestures) and [Drag](/docs/drag) for details.
+
+```tsx
+<motion.button
+  whileHover={{ scale: 1.05 }}
+  whileTap={{ scale: 0.95 }}
+  onTap={() => console.log("clicked")}
+/>
+```
+
+## Layout
+
+Enable layout animations with `layout` or `layoutId`:
+
+```tsx
+// Animate position and size changes
+<motion.div layout />
+
+// Shared element transitions
+<motion.div layoutId="sidebar" />
+```
+
+See [Layout](/docs/layout) for details.
+
+## Server-Side Rendering
+
+On the server, motion components render with deterministic styles:
+
+- Uses `initial` styles if provided
+- Uses `animate` styles if `initial` is `false` or undefined
+
+```tsx
+// Server renders with opacity: 0
+<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
+
+// Server renders with opacity: 1
+<motion.div initial={false} animate={{ opacity: 1 }} />
+```
+
+## Limitations
+
+- Custom components via `motion(Component)` are not supported yet
+- MotionValue in `style` prop is planned

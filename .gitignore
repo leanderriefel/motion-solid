@@ -49,3 +49,4 @@ lerna-debug.log*
 *.sln
 *.sw?
 .vercel
+.opencode

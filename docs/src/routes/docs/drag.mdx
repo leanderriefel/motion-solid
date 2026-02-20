@@ -1,8 +1,8 @@
 # Drag
 
-Drag is built into motion elements and works with `whileDrag` animations.
+Drag functionality is built into motion elements. Combine with `whileDrag` for visual feedback during drag operations.
 
-## Basic drag
+## Basic Drag
 
 ```tsx
 <motion.div drag />
@@ -11,48 +11,86 @@ Drag is built into motion elements and works with `whileDrag` animations.
 Axis locking:
 
 ```tsx
-<motion.div drag="x" />
-<motion.div drag="y" />
+<motion.div drag="x" />  {/* Horizontal only */}
+<motion.div drag="y" />  {/* Vertical only */}
 ```
 
 ## Constraints
 
-You can constrain drag to a bounding box or an element.
+Limit drag range with a bounding box or element reference.
+
+### Element Constraints
 
 ```tsx
-let constraints!: HTMLDivElement;
+let container!: HTMLDivElement;
 
-<div ref={constraints} class="relative">
-  <motion.div drag dragConstraints={constraints} />
+<div ref={container} class="relative">
+  <motion.div drag dragConstraints={container} />
 </div>;
 ```
+
+### Object Constraints
 
 ```tsx
 <motion.div
   drag
-  dragConstraints={{ left: -20, right: 20, top: -10, bottom: 10 }}
+  dragConstraints={{
+    left: -100,
+    right: 100,
+    top: -50,
+    bottom: 50,
+  }}
 />
 ```
 
 ## Options
 
-- `dragElastic`: control how far the element can stretch past constraints.
-- `dragMomentum`: set `false` to disable inertia.
-- `dragDirectionLock`: lock to the initial drag axis.
-- `dragPropagation`: allow nested draggables to activate.
-- `dragSnapToOrigin`: snap back to the start on release.
-- `dragTransition`: transition for the release animation.
-- `dragListener`: set `false` to disable pointer listeners (use controls).
+- `dragElastic` - How far past constraints (0-1), or per-edge object
+- `dragMomentum` - Enable inertia on release (default: true)
+- `dragDirectionLock` - Lock to initial drag axis after threshold
+- `dragPropagation` - Allow nested drags to activate
+- `dragSnapToOrigin` - Snap back to start on release
+- `dragTransition` - Transition for release animation
+- `dragListener` - Enable pointer listeners (default: true)
 
-## Drag controls
+### Elastic
+
+```tsx
+// 0.5 = can stretch 50% past constraints
+<motion.div drag dragConstraints={{ left: 0, right: 200 }} dragElastic={0.5} />
+```
+
+### Snap to Origin
+
+```tsx
+<motion.div drag dragSnapToOrigin />
+```
+
+## Drag Controls
+
+Control drag programmatically with `createDragControls`:
 
 ```tsx
 import { createDragControls } from "motion-solid";
 
-const controls = createDragControls();
+function DraggableHandle() {
+  const controls = createDragControls();
 
-<motion.div drag dragControls={controls} dragListener={false} />
-<button onPointerDown={(event) => controls.start(event)}>Drag</button>
+  return (
+    <>
+      <motion.div
+        drag
+        dragControls={controls}
+        dragListener={false}
+        class="draggable-box"
+      >
+        <div onPointerDown={(e) => controls.start(e)} class="drag-handle">
+          Drag here
+        </div>
+      </motion.div>
+    </>
+  );
+}
 ```
 
 ## Callbacks
@@ -60,10 +98,91 @@ const controls = createDragControls();
 ```tsx
 <motion.div
   drag
-  onDragStart={(event, info) => console.log("start", info)}
-  onDrag={(event, info) => console.log("drag", info)}
-  onDragEnd={(event, info) => console.log("end", info)}
-  onDirectionLock={(axis) => console.log("lock", axis)}
-  onDragTransitionEnd={() => console.log("transition done")}
+  onDragStart={(e, info) => console.log("start", info.point)}
+  onDrag={(e, info) => console.log("drag", info.offset)}
+  onDragEnd={(e, info) => console.log("end", info.velocity)}
+  onDirectionLock={(axis) => console.log("locked to", axis)}
+  onDragTransitionEnd={() => console.log("momentum settled")}
 />
 ```
+
+Drag info: `point` (current position), `delta` (movement since last frame), `offset` (total from start), `velocity`.
+
+## While Drag
+
+Combine with `whileDrag` for visual feedback:
+
+```tsx
+<motion.div
+  drag
+  dragConstraints={{ left: 0, right: 300 }}
+  whileDrag={{ scale: 1.1, "box-shadow": "0 8px 24px rgba(0,0,0,0.2)" }}
+/>
+```
+
+## Example: Slider
+
+```tsx
+function Slider() {
+  const [value, setValue] = createSignal(50);
+  let track!: HTMLDivElement;
+
+  const handleDrag = (e, info) => {
+    const rect = track.getBoundingClientRect();
+    const percent = Math.max(
+      0,
+      Math.min(100, ((info.point.x - rect.left) / rect.width) * 100),
+    );
+    setValue(percent);
+  };
+
+  return (
+    <div ref={track} class="slider-track">
+      <motion.div
+        drag="x"
+        dragConstraints={track}
+        dragElastic={0}
+        onDrag={handleDrag}
+        class="slider-thumb"
+      />
+      <div class="slider-fill" style={{ width: `${value()}%` }} />
+    </div>
+  );
+}
+```
+
+## Example: Bottom Sheet
+
+```tsx
+function BottomSheet(props: { open: Accessor<boolean>; onClose: () => void }) {
+  const handleDragEnd = (e, info) => {
+    if (info.offset.y > 100 || info.velocity.y > 500) {
+      props.onClose();
+    }
+  };
+
+  return (
+    <Show when={props.open()}>
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.5 }}
+        onDragEnd={handleDragEnd}
+        class="bottom-sheet"
+      >
+        <div class="handle" />
+        {props.children}
+      </motion.div>
+    </Show>
+  );
+}
+```
+
+## Notes
+
+- Drag uses pointer events for cross-device support
+- Touch devices: set `touch-action: none` on draggable elements to prevent scrolling
+- For nested draggables, use `dragPropagation` to allow inner elements to activate
