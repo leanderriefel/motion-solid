@@ -131,11 +131,47 @@ export const resolveVariantToTarget = (args: {
 }): MotionTargetAndTransition | null => {
   const { variant, options, state } = args;
 
+  const seenLabels = new Set<string>();
+
+  const resolveLabel = (label: string): MotionTargetAndTransition | null => {
+    let nextLabel = label;
+
+    while (true) {
+      if (seenLabels.has(nextLabel)) return null;
+      seenLabels.add(nextLabel);
+
+      const localVariants = options.variants as Variants | undefined;
+      if (!localVariants) return null;
+
+      const resolvedVariant = localVariants[nextLabel];
+      if (!resolvedVariant) return null;
+
+      if (typeof resolvedVariant === "function") {
+        const current = buildResolvedValues(state);
+        const velocity = buildResolvedVelocities(state);
+        const resolved = resolvedVariant(options.custom, current, velocity);
+
+        if (typeof resolved === "string") {
+          nextLabel = resolved;
+          continue;
+        }
+
+        return normalizeTarget(resolved);
+      }
+
+      return normalizeTarget(resolvedVariant);
+    }
+  };
+
   if (typeof variant === "function") {
     const current = buildResolvedValues(state);
     const velocity = buildResolvedVelocities(state);
     const resolved = variant(options.custom, current, velocity);
-    if (typeof resolved === "string") return null;
+
+    if (typeof resolved === "string") {
+      return resolveLabel(resolved);
+    }
+
     return normalizeTarget(resolved);
   }
 

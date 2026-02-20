@@ -33,7 +33,7 @@ Exit animations only run for `motion.*` elements inside AnimatePresence.
 - `custom`: data passed to variant functions via `custom`.
 - `onExitComplete`: called when all exiting nodes have finished.
 - `mode`: `"sync" | "wait" | "popLayout"`.
-- `propagate`: when `true`, exiting from a parent AnimatePresence also triggers child exits.
+- `propagate`: when `true`, exiting from a parent AnimatePresence also triggers child exits. When `false` (default), nested AnimatePresence trees don't run child exits from parent removal.
 - `root`: root element for `popLayout` positioning (useful with shadow roots).
 
 ## Hooks

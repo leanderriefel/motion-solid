@@ -22,6 +22,11 @@ const formatNumber = (
   return value;
 };
 
+const sanitizeTreeScale = (value: number): number => {
+  if (!Number.isFinite(value) || value === 0) return 1;
+  return value;
+};
+
 export function buildProjectionTransform(
   delta: Delta,
   treeScale: Point,
@@ -29,15 +34,18 @@ export function buildProjectionTransform(
 ): string {
   let transform = "";
 
-  const xTranslate = delta.x.translate / treeScale.x;
-  const yTranslate = delta.y.translate / treeScale.y;
+  const safeTreeScaleX = sanitizeTreeScale(treeScale.x);
+  const safeTreeScaleY = sanitizeTreeScale(treeScale.y);
+
+  const xTranslate = delta.x.translate / safeTreeScaleX;
+  const yTranslate = delta.y.translate / safeTreeScaleY;
   const zTranslate = readValue(latestTransform, "z");
   if (xTranslate || yTranslate || zTranslate) {
     transform = `translate3d(${xTranslate}px, ${yTranslate}px, ${zTranslate}px) `;
   }
 
-  if (treeScale.x !== 1 || treeScale.y !== 1) {
-    transform += `scale(${1 / treeScale.x}, ${1 / treeScale.y}) `;
+  if (safeTreeScaleX !== 1 || safeTreeScaleY !== 1) {
+    transform += `scale(${1 / safeTreeScaleX}, ${1 / safeTreeScaleY}) `;
   }
 
   if (latestTransform) {
@@ -62,8 +70,8 @@ export function buildProjectionTransform(
     if (skewY) transform += `skewY(${formatNumber(skewY, "deg")}) `;
   }
 
-  const elementScaleX = delta.x.scale * treeScale.x;
-  const elementScaleY = delta.y.scale * treeScale.y;
+  const elementScaleX = delta.x.scale * safeTreeScaleX;
+  const elementScaleY = delta.y.scale * safeTreeScaleY;
   if (elementScaleX !== 1 || elementScaleY !== 1) {
     transform += `scale(${elementScaleX}, ${elementScaleY})`;
   }

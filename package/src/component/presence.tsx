@@ -80,6 +80,11 @@ export interface PresenceContextValue {
    * animations until this becomes false.
    */
   isEntranceBlocked?: Accessor<boolean>;
+
+  /**
+   * Whether parent-driven unmounts should propagate exit handoff to descendants.
+   */
+  propagate?: Accessor<boolean>;
 }
 
 export const PresenceContext = createContext<PresenceContextValue | null>(null);
@@ -132,6 +137,17 @@ type AnimatePresenceContentProps = {
 
 type MotionExitMarker = {
   __motionIsAnimatingExit?: boolean;
+  __popLayoutCleanup?: VoidFunction;
+  __motionPresenceId?: string;
+  __motionForceExitTimeout?: ReturnType<typeof setTimeout>;
+  __motionShouldExit?: boolean;
+};
+
+type PopLayoutRootState = {
+  exitCount: number;
+  originalPosition: string;
+  originalMinWidth: string;
+  originalMinHeight: string;
 };
 
 /**
@@ -229,8 +245,8 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
     return current;
   };
 
-  // Track active popLayout exit count per root element to know when to clean up
-  const rootExitCounts = new Map<HTMLElement, number>();
+  // Track root mutations for popLayout so inline styles can be restored exactly.
+  const popLayoutRootStates = new Map<HTMLElement, PopLayoutRootState>();
 
   const applyPopLayout = (el: Element) => {
     if (typeof getComputedStyle !== "function") return;
@@ -245,9 +261,6 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
     if (!(rootElement instanceof HTMLElement)) return;
 
     const rootStyle = getComputedStyle(rootElement);
-    if (rootStyle.position === "static") {
-      rootElement.style.position = "relative";
-    }
 
     const target = el as HTMLElement | SVGElement;
 
@@ -262,14 +275,24 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
     const borderTop = parseFloat(rootStyle.borderTopWidth) || 0;
     const borderLeft = parseFloat(rootStyle.borderLeftWidth) || 0;
 
-    // Track how many exits are active for this root
-    const currentCount = rootExitCounts.get(rootElement) || 0;
-    if (currentCount === 0) {
-      // First exit for this root - preserve its dimensions
+    const rootState = popLayoutRootStates.get(rootElement);
+    if (rootState) {
+      rootState.exitCount += 1;
+    } else {
+      popLayoutRootStates.set(rootElement, {
+        exitCount: 1,
+        originalPosition: rootElement.style.position,
+        originalMinWidth: rootElement.style.minWidth,
+        originalMinHeight: rootElement.style.minHeight,
+      });
+
+      if (rootStyle.position === "static") {
+        rootElement.style.position = "relative";
+      }
+
       rootElement.style.minWidth = `${rootRect.width}px`;
       rootElement.style.minHeight = `${rootRect.height}px`;
     }
-    rootExitCounts.set(rootElement, currentCount + 1);
 
     // Calculate position relative to the positioned parent
     const top =
@@ -287,24 +310,28 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
     target.style.pointerEvents = "none";
 
     // Store cleanup function on the element for later
-    (el as any).__popLayoutCleanup = () => {
-      const count = rootExitCounts.get(rootElement) || 0;
-      if (count <= 1) {
-        // Last exit completed - restore parent dimensions
-        rootElement.style.minWidth = "";
-        rootElement.style.minHeight = "";
-        rootExitCounts.delete(rootElement);
-      } else {
-        rootExitCounts.set(rootElement, count - 1);
+    (el as MotionExitMarker).__popLayoutCleanup = () => {
+      const state = popLayoutRootStates.get(rootElement);
+      if (!state) return;
+
+      if (state.exitCount <= 1) {
+        rootElement.style.position = state.originalPosition;
+        rootElement.style.minWidth = state.originalMinWidth;
+        rootElement.style.minHeight = state.originalMinHeight;
+        popLayoutRootStates.delete(rootElement);
+        return;
       }
+
+      state.exitCount -= 1;
     };
   };
 
   const cleanupPopLayout = (el: Element) => {
-    const cleanup = (el as any).__popLayoutCleanup;
+    const marker = el as MotionExitMarker;
+    const cleanup = marker.__popLayoutCleanup;
     if (typeof cleanup === "function") {
       cleanup();
-      delete (el as any).__popLayoutCleanup;
+      delete marker.__popLayoutCleanup;
     }
   };
 
@@ -353,12 +380,36 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
       const mode = props.mode();
 
       for (const el of exitingElements) {
+        if (props.pendingExits.has(el)) continue;
+
         if (mode === "popLayout") applyPopLayout(el);
 
+        const marker = el as MotionExitMarker;
+        marker.__motionShouldExit = true;
+
+        const clearForceExitTimeout = () => {
+          const timeout = marker.__motionForceExitTimeout;
+          if (timeout === undefined) return;
+          clearTimeout(timeout);
+          delete marker.__motionForceExitTimeout;
+        };
+
         props.pendingExits.set(el, () => {
+          clearForceExitTimeout();
+          delete marker.__motionShouldExit;
+          if (mode === "popLayout") cleanupPopLayout(el);
           scheduleLayoutAnimationsForUnmount(el);
           finishRemoved([el]);
         });
+
+        marker.__motionForceExitTimeout = setTimeout(() => {
+          if (!props.pendingExits.has(el)) return;
+          const finish = props.pendingExits.get(el)!;
+          props.pendingExits.delete(el);
+          delete marker.__motionShouldExit;
+          props.updateExitCount();
+          finish();
+        }, 10_000);
 
         // Safety check: if after a tick the element hasn't started an animation, remove it.
         // This handles non-motion elements.
@@ -367,10 +418,9 @@ const AnimatePresenceContent: FlowComponent<AnimatePresenceContentProps> = (
           if (marker.__motionIsAnimatingExit) return;
           if (!props.pendingExits.has(el)) return;
 
-          if (mode === "popLayout") cleanupPopLayout(el);
-
           const finish = props.pendingExits.get(el)!;
           props.pendingExits.delete(el);
+          delete marker.__motionShouldExit;
           props.updateExitCount();
           finish();
         }, 0);
@@ -390,6 +440,7 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
   const root = () => props.root;
 
   const [isPresentInParent, safeToRemove] = usePresence();
+  const isPresent = () => (props.propagate ? isPresentInParent() : true);
 
   // We need to track exiting elements to know when to finish them.
   // element -> finishRemoved callback
@@ -401,19 +452,27 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
   const [isEntranceBlocked, setIsEntranceBlocked] = createSignal(false);
 
   const onExitComplete = (id: string, el?: Element) => {
-    // If it's an element-based completion (handoff)
-    if (el && pendingExits.has(el)) {
-      // Call popLayout cleanup if it exists
-      const cleanup = (el as any).__popLayoutCleanup;
-      if (typeof cleanup === "function") {
-        cleanup();
-        delete (el as any).__popLayoutCleanup;
-      }
+    const completePendingExit = (target: Element) => {
+      const finish = pendingExits.get(target);
+      if (!finish) return;
 
-      const finish = pendingExits.get(el)!;
-      pendingExits.delete(el);
+      pendingExits.delete(target);
       updateExitCount();
       finish();
+    };
+
+    // If it's an element-based completion (handoff)
+    if (el && pendingExits.has(el)) {
+      completePendingExit(el);
+    } else {
+      const matchingElement = Array.from(pendingExits.keys()).find((entry) => {
+        const marker = entry as MotionExitMarker;
+        return marker.__motionPresenceId === id;
+      });
+
+      if (matchingElement) {
+        completePendingExit(matchingElement);
+      }
     }
 
     if (pendingExits.size === 0) {
@@ -426,11 +485,12 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
   };
 
   const context: PresenceContextValue = {
-    isPresent: isPresentInParent, // Pass through parent presence (or true if root)
+    isPresent,
     initial: () => initial(),
     custom,
     onExitComplete,
     isEntranceBlocked,
+    propagate: () => props.propagate === true,
   };
 
   return (

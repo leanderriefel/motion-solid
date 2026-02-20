@@ -70,6 +70,11 @@ type TransformTemplate = (
 
 type MotionValueOwner = NonNullable<MotionValue<unknown>["owner"]>;
 type MotionValueOwnerProps = ReturnType<MotionValueOwner["getProps"]>;
+type MotionExitHandoffMarker = Element & {
+  __motionShouldExit?: boolean;
+  __motionIsAnimatingExit?: boolean;
+  __motionPresenceId?: string;
+};
 
 export interface AnimationStateOptions {
   state: MotionState;
@@ -379,8 +384,17 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
         // Only run the handoff if AnimatePresence actually kept the element in the DOM.
         if (!(el instanceof Element) || !el.isConnected) return;
 
+        const marker = el as MotionExitHandoffMarker;
+        const shouldPropagateExit = presence.propagate?.() ?? false;
+        const shouldHandoff =
+          Boolean(marker.__motionShouldExit) ||
+          !presence.isPresent() ||
+          shouldPropagateExit;
+        if (!shouldHandoff) return;
+
         // Tell AnimatePresence to wait for us.
-        (el as any).__motionIsAnimatingExit = true;
+        marker.__motionIsAnimatingExit = true;
+        marker.__motionPresenceId = presenceId;
 
         // Minimal render scheduler (doesn't depend on Solid reactivity).
         let handoffFrame: number | null = null;
@@ -431,7 +445,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           ) {
             cancelAnimationFrame(handoffFrame);
           }
-          delete (el as any).__motionIsAnimatingExit;
+          delete marker.__motionIsAnimatingExit;
+          delete marker.__motionPresenceId;
+          delete marker.__motionShouldExit;
         };
 
         // Ensure we render at least once in handoff mode.
@@ -763,13 +779,19 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     };
     const isPresent = presence?.isPresent() ?? true;
     const isExiting = presence ? !isPresent : false;
+    const projectionNode = layoutNode;
+
+    if (projectionNode) {
+      projectionNode.isPresent = isPresent;
+    }
 
     // Check if entrance animations are blocked (mode="wait" with pending exits)
     const entranceBlocked = presence?.isEntranceBlocked?.() ?? false;
 
     if (!wasExiting && isExiting) {
-      const node = layoutNode;
+      const node = projectionNode;
       if (node?.options.layoutId) {
+        node.isPresent = false;
         node.relegate();
       }
     }

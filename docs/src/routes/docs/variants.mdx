@@ -54,6 +54,15 @@ const item = {
 <motion.div custom={{ delay: 0.2 }} variants={item} animate="visible" />;
 ```
 
+Function variants can also return a variant label string, which is then resolved against the same `variants` map.
+
+```tsx
+const item = {
+  hidden: { opacity: 0 },
+  visible: () => "hidden",
+};
+```
+
 `custom` can also be provided by `AnimatePresence`, so exiting children can receive data.
 
 ## Orchestration

@@ -52,3 +52,5 @@ changing.
 
 - `layoutScroll` marks an element as a scroll container for layout measurements.
 - `layoutRoot` makes an element the root of its own layout tree.
+
+Projection transforms sanitize invalid tree-scale values (for example `0`, `NaN`, `Infinity`) before composing CSS transforms, so layout animations don't emit non-finite transform strings.

@@ -10,7 +10,16 @@ Please note that this library is still in early beta and the API is subject to c
 
 `motion-solid` is currently only half-maintained. I currently have a lot of stress with university and private stuff, so updates will be very slow and there will likely be long periods without updates.
 
-I will still respond to issues and pull requests. The library should generally work fine, but there will still be issues around exit animations, TypeScript types, and layout animations being slightly off.
+I will still respond to issues and pull requests. The library should generally work fine, but there can still be rough edges while the API settles.
+
+Recent fixes in `0.3.x` include:
+
+- TypeScript target typing now accepts CSS custom properties (`--*`) in `initial`/`animate`/`exit`.
+- `AnimatePresence` `mode="popLayout"` now restores root inline layout styles after exits complete.
+- Shared `layoutId` handoff now avoids promoting exiting nodes during lead relegate.
+- Function variants that return variant labels are now resolved at runtime (matching the public Variant type contract).
+- Nested `AnimatePresence` with `propagate={false}` no longer triggers child exit handoff during parent removal.
+- Layout projection transform building now guards zero/non-finite tree scales to avoid `Infinity`/`NaN` CSS output.
 
 If you want to seriously maintain this and help make it fully fledged, please open an issue or DM me on X: [@leanderriefel](https://x.com/leanderriefel).
 

@@ -65,11 +65,21 @@ test.describe("phase2 animate-presence", () => {
   test("nested propagate=false outer hide also removes nested tree", async ({
     page,
   }) => {
+    await clearEvents(page);
     await runAction(page, "setNested", true);
     await runAction(page, "setPropagate", false);
     await runAction(page, "hideOuter");
 
     await expect(page.getByTestId("presence-outer")).toHaveCount(0);
+
+    await page.waitForTimeout(350);
+    const events = await readEvents(page);
+    expect(
+      events.filter(
+        (event) =>
+          event.type === "innerExitComplete" && event.node === "nested-inner",
+      ),
+    ).toHaveLength(0);
   });
 
   test("rapid toggles converge with one final item", async ({ page }) => {

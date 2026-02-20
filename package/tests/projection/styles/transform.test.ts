@@ -145,4 +145,31 @@ describe("buildProjectionTransform", () => {
     });
     expect(result).toMatch(/^perspective\(500px\)/);
   });
+
+  it("does not emit non-finite values for zero treeScale", () => {
+    const delta = createDelta();
+    delta.x.translate = 20;
+    delta.y.translate = 10;
+    delta.x.scale = 0.5;
+    delta.y.scale = 2;
+
+    const result = buildProjectionTransform(delta, { x: 0, y: 0 });
+
+    expect(result).not.toContain("Infinity");
+    expect(result).not.toContain("NaN");
+  });
+
+  it("does not emit non-finite values for non-finite treeScale", () => {
+    const delta = createDelta();
+    delta.x.translate = 20;
+    delta.y.translate = 10;
+
+    const result = buildProjectionTransform(delta, {
+      x: Number.NaN,
+      y: Number.POSITIVE_INFINITY,
+    });
+
+    expect(result).not.toContain("Infinity");
+    expect(result).not.toContain("NaN");
+  });
 });

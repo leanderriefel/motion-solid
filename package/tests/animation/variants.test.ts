@@ -4,7 +4,9 @@ import {
   isTargetAndTransition,
   mergeTargets,
   isTransition,
+  resolveVariantToTarget,
 } from "../../src/animation/variants";
+import type { MotionOptions, MotionState, Variants } from "../../src/types";
 
 describe("isVariantLabels", () => {
   it("returns true for string", () => {
@@ -163,5 +165,58 @@ describe("isTransition", () => {
     expect(isTransition("spring")).toBe(false);
     expect(isTransition(100)).toBe(false);
     expect(isTransition(undefined)).toBe(false);
+  });
+});
+
+describe("resolveVariantToTarget", () => {
+  const createState = (): MotionState => ({
+    element: null,
+    values: {},
+    goals: {},
+    resolvedValues: {},
+    activeGestures: {
+      hover: false,
+      tap: false,
+      focus: false,
+      drag: false,
+      inView: false,
+    },
+    activeVariants: {},
+    options: {},
+    parent: null,
+  });
+
+  it("resolves function variants that return a label", () => {
+    const variants: Variants = {
+      hidden: { opacity: 0 },
+      visible: () => "hidden",
+    };
+
+    const options: MotionOptions = {
+      variants,
+      custom: { direction: 1 },
+    };
+
+    const result = resolveVariantToTarget({
+      variant: variants.visible!,
+      options,
+      state: createState(),
+    });
+
+    expect(result).toEqual({ opacity: 0 });
+  });
+
+  it("returns null when function variant returns unknown label", () => {
+    const variants: Variants = {
+      visible: () => "missing",
+    };
+
+    const result = resolveVariantToTarget({
+      variant: variants.visible!,
+      options: { variants },
+      state: createState(),
+    });
+
+    expect(result).toBeNull();
   });
 });
