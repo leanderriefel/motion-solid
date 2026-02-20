@@ -12,6 +12,7 @@
     "build:docs": "bun --filter @motion-solid/docs build",
     "start": "bun --filter @motion-solid/docs start",
     "test": "bun --filter motion-solid test",
+    "test:browser": "bun --filter motion-solid test:browser",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",

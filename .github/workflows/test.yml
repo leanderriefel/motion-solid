@@ -32,3 +32,9 @@ jobs:
 
       - name: Test
         run: bun --filter motion-solid test
+
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: Browser test (chromium)
+        run: bun --filter motion-solid test:browser -- --project=chromium

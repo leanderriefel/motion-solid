@@ -73,58 +73,6 @@ describe("AnimatePresence", () => {
       // Note: actual behavior depends on implementation
     });
 
-    // NOTE: Exit completion callbacks depend on motion-dom's internal Promise tracking
-    // which doesn't work correctly with jsdom's mocked WAAPI
-    it.skip("calls onExitComplete when exit animation finishes", async () => {
-      const onExitComplete = vi.fn();
-      const [show, setShow] = createSignal(true);
-
-      render(() => (
-        <AnimatePresence onExitComplete={onExitComplete}>
-          {show() && (
-            <motion.div
-              data-testid="child"
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-            >
-              Child
-            </motion.div>
-          )}
-        </AnimatePresence>
-      ));
-
-      setShow(false);
-      await vi.advanceTimersByTimeAsync(500);
-
-      expect(onExitComplete).toHaveBeenCalled();
-    });
-
-    // NOTE: Depends on exit animation completion
-    it.skip("removes element from DOM after exit completes", async () => {
-      const [show, setShow] = createSignal(true);
-
-      const { container } = render(() => (
-        <AnimatePresence>
-          {show() && (
-            <motion.div
-              data-testid="child"
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-            >
-              Child
-            </motion.div>
-          )}
-        </AnimatePresence>
-      ));
-
-      expect(screen.getByTestId("child")).toBeTruthy();
-
-      setShow(false);
-      await vi.advanceTimersByTimeAsync(500);
-
-      expect(container.querySelector('[data-testid="child"]')).toBeNull();
-    });
-
     it("handles exit without exit prop (instant removal)", async () => {
       const onExitComplete = vi.fn();
       const [show, setShow] = createSignal(true);
@@ -402,66 +350,7 @@ describe("AnimatePresence", () => {
     });
   });
 
-  describe("propagate prop", () => {
-    // NOTE: Depends on exit animation completion
-    it.skip("triggers exit in nested AnimatePresence when parent exits", async () => {
-      const [showOuter, setShowOuter] = createSignal(true);
-      const innerExitComplete = vi.fn();
-
-      render(() => (
-        <AnimatePresence>
-          <Show when={showOuter()}>
-            <motion.div data-testid="outer" exit={{ opacity: 0 }}>
-              <AnimatePresence propagate onExitComplete={innerExitComplete}>
-                <motion.div data-testid="inner" exit={{ opacity: 0 }}>
-                  Inner
-                </motion.div>
-              </AnimatePresence>
-            </motion.div>
-          </Show>
-        </AnimatePresence>
-      ));
-
-      setShowOuter(false);
-      await vi.advanceTimersByTimeAsync(500);
-
-      // Inner exit should complete when outer exits
-      expect(innerExitComplete).toHaveBeenCalled();
-    });
-  });
-
   describe("edge cases", () => {
-    // NOTE: Depends on animation completion timing
-    it.skip("handles rapid add/remove cycles", async () => {
-      const [show, setShow] = createSignal(true);
-
-      render(() => (
-        <AnimatePresence>
-          <Show when={show()}>
-            <motion.div
-              data-testid="child"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-            >
-              Child
-            </motion.div>
-          </Show>
-        </AnimatePresence>
-      ));
-
-      for (let i = 0; i < 5; i++) {
-        setShow(false);
-        await vi.advanceTimersByTimeAsync(20);
-        setShow(true);
-        await vi.advanceTimersByTimeAsync(20);
-      }
-
-      await vi.advanceTimersByTimeAsync(500);
-      expect(screen.getByTestId("child")).toBeTruthy();
-    });
-
     it("handles list reordering", async () => {
       const [items, setItems] = createSignal([1, 2, 3]);
 

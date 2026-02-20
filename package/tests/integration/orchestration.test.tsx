@@ -164,51 +164,6 @@ describe("orchestration", () => {
       // Now child should have started
     });
 
-    // NOTE: This test depends on timing and onAnimationStart callbacks
-    it.skip("combines delayChildren with staggerChildren", async () => {
-      const childStarts: number[] = [];
-
-      const Child = (props: { index: number }) => (
-        <motion.div
-          data-testid={`child-${props.index}`}
-          onAnimationStart={() => {
-            childStarts.push(props.index);
-          }}
-          variants={{
-            hidden: { opacity: 0 },
-            visible: { opacity: 1 },
-          }}
-        />
-      );
-
-      render(() => (
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={{
-            hidden: {},
-            visible: {
-              transition: {
-                delayChildren: 0.1,
-                staggerChildren: 0.05,
-              },
-            },
-          }}
-        >
-          <Child index={0} />
-          <Child index={1} />
-          <Child index={2} />
-        </motion.div>
-      ));
-
-      await vi.advanceTimersByTimeAsync(50);
-      // No children should have started yet (delay not passed)
-      expect(childStarts).toHaveLength(0);
-
-      await vi.advanceTimersByTimeAsync(500);
-      // All children should have started
-    });
-
     it("supports stagger function for delayChildren", async () => {
       render(() => (
         <motion.div
@@ -406,34 +361,6 @@ describe("orchestration", () => {
       ));
 
       await vi.advanceTimersByTimeAsync(500);
-    });
-
-    // NOTE: Depends on onAnimationComplete callback which doesn't work in jsdom
-    it.skip("handles no children gracefully", async () => {
-      const parentComplete = vi.fn();
-
-      render(() => (
-        <motion.div
-          data-testid="parent"
-          initial="hidden"
-          animate="visible"
-          onAnimationComplete={parentComplete}
-          variants={{
-            hidden: { opacity: 0 },
-            visible: {
-              opacity: 1,
-              transition: {
-                when: "afterChildren",
-              },
-            },
-          }}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(500);
-
-      // Parent should complete even with no children
-      expect(parentComplete).toHaveBeenCalled();
     });
   });
 

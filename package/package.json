@@ -19,7 +19,10 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:browser": "playwright test -c tests/playwright/playwright.config.ts",
+    "test:browser:ui": "playwright test -c tests/playwright/playwright.config.ts --ui",
+    "test:browser:harness": "vite --config tests/playwright/harness/vite.config.ts"
   },
   "peerDependencies": {
     "solid-js": ">=1.0.0"
@@ -31,6 +34,7 @@
     "motion-utils": "^12.29.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@solidjs/testing-library": "^0.8.10",
     "@testing-library/jest-dom": "^6.9.1",
     "esbuild-plugin-solid": "^0.6.0",
@@ -39,6 +43,7 @@
     "tsup": "^8.5.1",
     "tsup-preset-solid": "^2.2.0",
     "typescript": "^5.9.3",
+    "vite": "^7.2.0",
     "vite-plugin-solid": "^2.11.10",
     "vitest": "4.0.17"
   },

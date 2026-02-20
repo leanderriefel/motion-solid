@@ -214,7 +214,7 @@ describe("motion component", () => {
     });
 
     // NOTE: Use kebab-case transform keys for per-axis scaling.
-    it.skip("supports scaleX and scaleY", async () => {
+    it("supports scaleX and scaleY", async () => {
       render(() => (
         <motion.div
           data-testid="target"
@@ -228,7 +228,7 @@ describe("motion component", () => {
     });
 
     // NOTE: Use kebab-case transform keys for axis-specific rotation.
-    it.skip("supports rotateX, rotateY, rotateZ", async () => {
+    it("supports rotateX, rotateY, rotateZ", async () => {
       render(() => (
         <motion.div data-testid="target" initial={{ "rotate-z": 45 }} />
       ));
@@ -786,7 +786,7 @@ describe("motion component", () => {
     });
 
     // NOTE: Array variant labels for initial may not be fully supported
-    it.skip("handles array of variant labels", async () => {
+    it("handles array of variant labels", async () => {
       render(() => (
         <motion.div
           data-testid="target"

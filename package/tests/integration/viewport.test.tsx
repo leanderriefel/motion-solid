@@ -223,32 +223,6 @@ describe("viewport gestures", () => {
       expect(observer.disconnect).toHaveBeenCalled();
     });
 
-    // NOTE: This test doesn't work correctly because our mock IO doesn't
-    // properly track disconnect state - it still fires callbacks after disconnect
-    it.skip("onViewportLeave is not called after once triggers", async () => {
-      const onLeave = vi.fn();
-
-      render(() => (
-        <motion.div
-          data-testid="target"
-          onViewportLeave={onLeave}
-          viewport={{ once: true }}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(50);
-
-      // Enter viewport (triggers once, disconnects)
-      mockIO.triggerIntersection(true, 1);
-      await vi.advanceTimersByTimeAsync(50);
-
-      // Try to leave - should not call callback as observer is disconnected
-      mockIO.triggerIntersection(false, 0);
-      await vi.advanceTimersByTimeAsync(50);
-
-      expect(onLeave).not.toHaveBeenCalled();
-    });
-
     it("whileInView styles persist after once triggers", async () => {
       render(() => (
         <motion.div

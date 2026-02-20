@@ -155,7 +155,7 @@ describe("enter/exit animations", () => {
     });
 
     // NOTE: Array variant labels for initial may not be fully supported
-    it.skip("handles array of variant labels", async () => {
+    it("handles array of variant labels", async () => {
       render(() => (
         <motion.div
           data-testid="target"
@@ -216,25 +216,6 @@ describe("enter/exit animations", () => {
       expect(onStart).toHaveBeenCalled();
     });
 
-    // NOTE: onAnimationComplete depends on motion-dom's internal Promise tracking
-    // which doesn't work correctly with jsdom's mocked WAAPI
-    it.skip("calls onAnimationComplete when animation ends", async () => {
-      const onComplete = vi.fn();
-
-      render(() => (
-        <motion.div
-          data-testid="target"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.1 }}
-          onAnimationComplete={onComplete}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(500);
-      expect(onComplete).toHaveBeenCalled();
-    });
-
     it("onAnimationStart receives target definition", async () => {
       let receivedTarget: unknown = null;
 
@@ -251,26 +232,6 @@ describe("enter/exit animations", () => {
       ));
 
       await vi.advanceTimersByTimeAsync(100);
-      expect(receivedTarget).toBeTruthy();
-    });
-
-    // NOTE: Depends on onAnimationComplete which doesn't work in jsdom
-    it.skip("onAnimationComplete receives target definition", async () => {
-      let receivedTarget: unknown = null;
-
-      render(() => (
-        <motion.div
-          data-testid="target"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.1 }}
-          onAnimationComplete={(target) => {
-            receivedTarget = target;
-          }}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(500);
       expect(receivedTarget).toBeTruthy();
     });
 
@@ -370,94 +331,7 @@ describe("enter/exit animations", () => {
     });
   });
 
-  // NOTE: transitionEnd tests depend on animation completion callbacks
-  // which don't work correctly with jsdom's mocked WAAPI
-  describe.skip("transitionEnd", () => {
-    it("applies transitionEnd values after animation", async () => {
-      render(() => (
-        <motion.div
-          data-testid="target"
-          initial={{ opacity: 0 }}
-          animate={{
-            opacity: 1,
-            transitionEnd: { display: "none" },
-          }}
-          transition={{ duration: 0.1 }}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(500);
-      const element = screen.getByTestId("target");
-      expect(element.style.display).toBe("none");
-    });
-
-    it("applies multiple transitionEnd values", async () => {
-      render(() => (
-        <motion.div
-          data-testid="target"
-          initial={{ opacity: 0 }}
-          animate={{
-            opacity: 1,
-            transitionEnd: {
-              display: "block",
-              visibility: "visible",
-            },
-          }}
-          transition={{ duration: 0.1 }}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(500);
-      const element = screen.getByTestId("target");
-      expect(element.style.display).toBe("block");
-      expect(element.style.visibility).toBe("visible");
-    });
-
-    it("transitionEnd works with variants", async () => {
-      render(() => (
-        <motion.div
-          data-testid="target"
-          initial="hidden"
-          animate="visible"
-          variants={{
-            hidden: { opacity: 0 },
-            visible: {
-              opacity: 1,
-              transitionEnd: { display: "flex" },
-            },
-          }}
-          transition={{ duration: 0.1 }}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(500);
-      const element = screen.getByTestId("target");
-      expect(element.style.display).toBe("flex");
-    });
-  });
-
   describe("transition options", () => {
-    // NOTE: Depends on onAnimationComplete which doesn't work in jsdom
-    it.skip("respects duration option", async () => {
-      const onComplete = vi.fn();
-
-      render(() => (
-        <motion.div
-          data-testid="target"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
-          onAnimationComplete={onComplete}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(100);
-      expect(onComplete).not.toHaveBeenCalled();
-
-      await vi.advanceTimersByTimeAsync(500);
-      expect(onComplete).toHaveBeenCalled();
-    });
-
     it("respects delay option", async () => {
       const onStart = vi.fn();
 
@@ -565,24 +439,6 @@ describe("enter/exit animations", () => {
       await vi.advanceTimersByTimeAsync(50);
 
       expect(screen.getByTestId("target")).toBeTruthy();
-    });
-
-    // NOTE: Depends on onAnimationComplete which doesn't work in jsdom
-    it.skip("handles zero duration animation", async () => {
-      const onComplete = vi.fn();
-
-      render(() => (
-        <motion.div
-          data-testid="target"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0 }}
-          onAnimationComplete={onComplete}
-        />
-      ));
-
-      await vi.advanceTimersByTimeAsync(100);
-      expect(onComplete).toHaveBeenCalled();
     });
   });
 });
