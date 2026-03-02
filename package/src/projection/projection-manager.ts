@@ -971,11 +971,12 @@ class ProjectionNodeImpl {
     const lead = this.getLead();
     if (!this.projectionDelta || !this.layout || !lead.target) {
       if (this.options.layoutId) {
-        const opacity =
+        const baseOpacity =
           (this.latestValues.opacity as number) ??
           (this.latestValues["opacity"] as number) ??
           1;
-        update.opacity = opacity;
+        update.opacity =
+          lead === this || this.preserveOpacity ? baseOpacity : 0;
         update.styles = {
           "pointer-events":
             lead === this
@@ -1239,6 +1240,8 @@ class ProjectionNodeImpl {
     const stack = this.getStack();
     stack?.exitAnimationComplete();
 
+    this.resumeFrom = undefined;
+    this.snapshot = undefined;
     this.resumingFrom =
       this.currentAnimation =
       this.animationValues =

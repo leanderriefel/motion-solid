@@ -86,4 +86,31 @@ describe("projection style corrections", () => {
     expect(update.styles?.["border-bottom-left-radius"]).toBe("10% 5%");
     expect(update.styles?.["border-bottom-right-radius"]).toBe("10% 5%");
   });
+
+  it("keeps non-lead layoutId members hidden when not projecting", () => {
+    const lead = createProjectionNode({
+      element: {} as HTMLElement,
+      options: { layoutId: "shared-card" },
+      latestValues: {},
+      apply: () => undefined,
+      render: () => undefined,
+      scheduleRender: () => undefined,
+    });
+
+    const follower = createProjectionNode({
+      element: {} as HTMLElement,
+      options: { layoutId: "shared-card" },
+      latestValues: {},
+      apply: () => undefined,
+      render: () => undefined,
+      scheduleRender: () => undefined,
+    });
+
+    follower.getLead = () => lead;
+    lead.target = undefined;
+
+    const update = follower.applyProjectionStyles();
+    expect(update.opacity).toBe(0);
+    expect(update.styles?.["pointer-events"]).toBe("none");
+  });
 });

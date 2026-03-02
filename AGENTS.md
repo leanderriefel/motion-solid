@@ -246,7 +246,7 @@ If docs are changed:
 - WAAPI transform usage is now blocked for all transform props (not only literal `transform`) while projection transforms are active, avoiding transform fighting in complex layout transitions.
 - Style transform shortcuts are now fed into projection latest values (including translate alias normalization), improving transform-aware layout measurement parity.
 - `layoutDependency` (singular) is supported as a shorthand alongside `layoutDependencies`, and dependency tracking now supports both Accessors and plain values.
-- Projection transform detection now recognizes additional transform keys (`rotate-z`, `scale-z`, `translate-*`, `skew`, `perspective`, `transform-perspective`, and transform strings) with identity-aware checks.
+- Projection transform detection now recognizes additional transform keys (`rotate-z`, `scale-z`, `translate-*`, `skew`, `perspective`, `transform-perspective`) with identity-aware checks.
 - Docs demos now include advanced layout stress scenarios: complex grid reflow, nested `AnimatePresence` + shared `layoutId`, and scroll/sticky projection with `layoutScroll` + `layoutRoot`.
 - Projection style-value plumbing now preserves full style fallback data (`border-radius`, `box-shadow`, etc.) while still exposing transform shortcuts for projection math, restoring scale-correction behavior during layout projection.
 - Tree projection math now applies ancestor transform values for non-shared layout transitions and accumulates ancestor scale factors into `treeScale`, improving transformed-ancestor measurement fidelity and reducing off-screen/over-scaled projection artifacts.
@@ -254,3 +254,5 @@ If docs are changed:
 - Projection composition now prefers current style-provided base transforms while projection is active, preventing stale base-transform snapshots when Solid style transforms update during a projection animation.
 - Generic `transform` strings are no longer treated as directly removable geometric transforms in projection utility checks, avoiding false transform-removal paths that produced incorrect layout measurements.
 - Complex docs demos (`Complex Layout Board`, `Nested Presence + layoutId`, `Scroll + Sticky Layout`) were stabilized by removing stale `Show` accessor captures (using keyed rendering for active detail panels), cleaning list-style artifacts, and removing fixed-height clipping in demo containers.
+- Shared `layoutId` projection completion now clears `resumeFrom` and node snapshots immediately after completion, preventing stale handoff state from retriggering crossfade/projection runs on unrelated layout updates.
+- Non-lead `layoutId` members now stay hidden when no projection target is resolved, so inactive shared elements do not flash/fly in during unrelated layout animations.

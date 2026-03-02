@@ -185,4 +185,49 @@ describe("projection scheduling", () => {
 
     element.remove();
   });
+
+  it("clears resumeFrom state after layout animation completes", () => {
+    const element = document.createElement("div");
+    const resumeFromElement = document.createElement("div");
+
+    const node = createProjectionNode({
+      element,
+      options: { layout: true },
+      latestValues: {},
+      apply: () => undefined,
+      render: () => undefined,
+      scheduleRender: () => undefined,
+    });
+
+    const resumeFromNode = createProjectionNode({
+      element: resumeFromElement,
+      options: { layout: true },
+      latestValues: {},
+      apply: () => undefined,
+      render: () => undefined,
+      scheduleRender: () => undefined,
+    });
+
+    node.resumeFrom = resumeFromNode;
+    node.resumingFrom = resumeFromNode;
+    node.snapshot = {
+      animationId: 1,
+      measuredBox: {
+        x: { min: 0, max: 10 },
+        y: { min: 0, max: 10 },
+      },
+      layoutBox: {
+        x: { min: 0, max: 10 },
+        y: { min: 0, max: 10 },
+      },
+      latestValues: {},
+      source: 1,
+    };
+
+    node.completeAnimation();
+
+    expect(node.resumeFrom).toBeUndefined();
+    expect(node.resumingFrom).toBeUndefined();
+    expect(node.snapshot).toBeUndefined();
+  });
 });
