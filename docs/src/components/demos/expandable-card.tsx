@@ -2,7 +2,7 @@ import { createSignal, Show } from "solid-js";
 import { motion, AnimatePresence } from "motion-solid";
 
 import { Animation } from "./animation";
-import { source } from "./expandable-card.source";
+import source from "./expandable-card.tsx?raw";
 
 export const ExpandableCard = () => {
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
@@ -12,53 +12,55 @@ export const ExpandableCard = () => {
       id: "1",
       title: "The SolidJS Experience",
       subtitle: "Reactive by nature",
-      color: "bg-blue-500",
+      color: "bg-primary text-primary-foreground",
     },
     {
       id: "2",
       title: "Motion Solid",
       subtitle: "Fluid animations",
-      color: "bg-purple-500",
+      color: "bg-secondary text-secondary-foreground",
     },
     {
       id: "3",
       title: "High Performance",
       subtitle: "Zero overhead",
-      color: "bg-emerald-500",
+      color: "bg-accent text-accent-foreground",
     },
     {
       id: "4",
       title: "Beautiful UI",
       subtitle: "Made easy",
-      color: "bg-orange-500",
+      color: "bg-muted text-muted-foreground",
     },
   ];
 
   return (
-    <Animation name="Expandable Card" source={source}>
-      <div class="relative w-full h-[500px] bg-slate-100 rounded-3xl p-8 overflow-hidden flex flex-wrap gap-6 justify-center content-start">
+    <Animation
+      name="Expandable Card"
+      source={source}
+      class="min-h-[500px] w-full relative"
+    >
+      <div class="w-full flex flex-wrap gap-4 justify-center content-start">
         {items.map((item) => (
           <motion.div
             layoutId={`card-${item.id}`}
             onClick={() => setSelectedId(item.id)}
-            class={`w-[200px] h-[250px] ${item.color} rounded-2xl cursor-pointer p-6 shadow-md hover:shadow-xl transition-shadow flex flex-col justify-end text-white relative overflow-hidden`}
+            class={`w-[200px] h-[220px] ${item.color} rounded-2xl cursor-pointer p-6 shadow-md hover:shadow-xl transition-shadow flex flex-col justify-end relative overflow-hidden`}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            <motion.h2
+            <motion.div
               layoutId={`title-${item.id}`}
               class="text-xl font-bold m-0 z-10 relative"
             >
               {item.title}
-            </motion.h2>
-            <motion.p
+            </motion.div>
+            <motion.div
               layoutId={`subtitle-${item.id}`}
-              class="text-white/80 text-sm m-0 mt-1 z-10 relative"
+              class="opacity-80 text-sm m-0 mt-1 z-10 relative"
             >
               {item.subtitle}
-            </motion.p>
-            {/* Background pattern */}
-            <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-overlay"></div>
+            </motion.div>
           </motion.div>
         ))}
 
@@ -67,35 +69,35 @@ export const ExpandableCard = () => {
             {(id) => {
               const selectedItem = items.find((i) => i.id === id());
               return (
-                <div class="absolute inset-0 z-50 flex items-center justify-center p-8 pointer-events-none">
+                <div class="absolute inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
                   {/* Backdrop */}
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     onClick={() => setSelectedId(null)}
-                    class="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto"
+                    class="absolute inset-0 bg-black/20 backdrop-blur-sm pointer-events-auto"
                   />
 
                   {/* Expanded Card */}
                   <motion.div
                     layoutId={`card-${id()}`}
-                    class={`w-full max-w-lg ${selectedItem?.color} rounded-3xl shadow-2xl overflow-hidden relative pointer-events-auto flex flex-col`}
+                    class={`w-full max-w-sm sm:max-w-md ${selectedItem?.color} rounded-3xl shadow-2xl overflow-hidden relative pointer-events-auto flex flex-col`}
                     style={{ height: "450px" }}
                   >
                     <div class="p-8 pb-4 relative z-10">
-                      <motion.h2
+                      <motion.div
                         layoutId={`title-${id()}`}
-                        class="text-3xl font-bold text-white m-0"
+                        class="text-3xl font-bold m-0"
                       >
                         {selectedItem?.title}
-                      </motion.h2>
-                      <motion.p
+                      </motion.div>
+                      <motion.div
                         layoutId={`subtitle-${id()}`}
-                        class="text-white/80 text-lg m-0 mt-2"
+                        class="opacity-80 text-lg m-0 mt-2"
                       >
                         {selectedItem?.subtitle}
-                      </motion.p>
+                      </motion.div>
                     </div>
 
                     <motion.div
@@ -106,20 +108,20 @@ export const ExpandableCard = () => {
                         y: 20,
                         transition: { duration: 0.2 },
                       }}
-                      class="flex-1 p-8 pt-4 text-white/90 z-10 relative leading-relaxed"
+                      class="flex-1 px-8 pt-4 pb-8 z-10 relative leading-relaxed overflow-y-auto opacity-90"
                     >
-                      <p>
+                      <div>
                         This is an example of a shared layout animation. By
                         giving two separate components the same{" "}
                         <code>layoutId</code>, Motion automatically animates the
                         transition between them when one mounts and the other
                         unmounts.
-                      </p>
-                      <p class="mt-4">
+                      </div>
+                      <div class="mt-4">
                         The background color, border radius, and position all
                         smoothly interpolate. Notice how the text also
                         seamlessly glides into its new position!
-                      </p>
+                      </div>
                     </motion.div>
 
                     <motion.button
@@ -135,7 +137,7 @@ export const ExpandableCard = () => {
                         transition: { duration: 0.1 },
                       }}
                       onClick={() => setSelectedId(null)}
-                      class="absolute top-6 right-6 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white z-20 backdrop-blur-md"
+                      class="absolute top-6 right-6 w-8 h-8 rounded-full bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20 flex items-center justify-center z-20 backdrop-blur-md transition-colors"
                     >
                       <svg
                         width="14"
@@ -152,8 +154,6 @@ export const ExpandableCard = () => {
                         />
                       </svg>
                     </motion.button>
-
-                    <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-overlay pointer-events-none"></div>
                   </motion.div>
                 </div>
               );

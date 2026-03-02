@@ -2,16 +2,24 @@ import { createSignal, For, Show } from "solid-js";
 import { motion, AnimatePresence } from "motion-solid";
 
 import { Animation } from "./animation";
-import { source } from "./filterable-grid.source";
+import source from "./filterable-grid.tsx?raw";
 
 export const FilterableGrid = () => {
   const allItems = [
-    { id: "A", category: "work", color: "bg-blue-400" },
-    { id: "B", category: "play", color: "bg-pink-400" },
-    { id: "C", category: "work", color: "bg-indigo-400" },
-    { id: "D", category: "study", color: "bg-emerald-400" },
-    { id: "E", category: "play", color: "bg-orange-400" },
-    { id: "F", category: "study", color: "bg-teal-400" },
+    { id: "A", category: "work", color: "bg-primary text-primary-foreground" },
+    {
+      id: "B",
+      category: "play",
+      color: "bg-secondary text-secondary-foreground",
+    },
+    { id: "C", category: "work", color: "bg-primary text-primary-foreground" },
+    { id: "D", category: "study", color: "bg-accent text-accent-foreground" },
+    {
+      id: "E",
+      category: "play",
+      color: "bg-secondary text-secondary-foreground",
+    },
+    { id: "F", category: "study", color: "bg-accent text-accent-foreground" },
   ];
 
   const categories = ["all", "work", "play", "study"];
@@ -23,23 +31,27 @@ export const FilterableGrid = () => {
       : allItems.filter((item) => item.category === filter());
 
   return (
-    <Animation name="Filterable Grid" source={source}>
-      <div class="w-full h-[500px] flex flex-col bg-slate-50 p-6 rounded-2xl relative shadow-inner overflow-hidden">
-        <div class="flex space-x-2 mb-8 justify-center z-20">
+    <Animation
+      name="Filterable Grid"
+      source={source}
+      class="min-h-[400px] w-full p-4 relative overflow-visible"
+    >
+      <div class="w-full flex flex-col relative h-full">
+        <div class="flex flex-wrap gap-2 mb-8 justify-center z-20 sticky top-0 bg-card/80 backdrop-blur py-2">
           <For each={categories}>
             {(category) => (
               <button
                 class={`px-4 py-2 rounded-full font-medium text-sm transition-colors relative ${
                   filter() === category
-                    ? "text-white"
-                    : "text-slate-600 hover:bg-slate-200"
+                    ? "text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
                 }`}
                 onClick={() => setFilter(category)}
               >
                 <Show when={filter() === category}>
                   <motion.div
                     layoutId="active-pill"
-                    class="absolute inset-0 bg-slate-900 rounded-full z-0"
+                    class="absolute inset-0 bg-primary rounded-full z-0"
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   />
                 </Show>
@@ -49,7 +61,7 @@ export const FilterableGrid = () => {
           </For>
         </div>
 
-        <div class="flex-1 w-full max-w-lg mx-auto relative overflow-y-auto overflow-x-hidden p-4">
+        <div class="flex-1 w-full max-w-lg mx-auto relative overflow-hidden">
           <motion.div layout class="grid grid-cols-2 gap-4">
             <AnimatePresence>
               <For each={filteredItems()}>
@@ -60,7 +72,7 @@ export const FilterableGrid = () => {
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.8, opacity: 0 }}
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    class={`h-32 ${item.color} rounded-2xl flex items-center justify-center text-white text-3xl font-bold shadow-sm`}
+                    class={`h-24 ${item.color} rounded-2xl flex items-center justify-center text-3xl font-bold shadow-sm`}
                   >
                     {item.id}
                   </motion.div>

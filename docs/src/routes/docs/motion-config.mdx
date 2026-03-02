@@ -132,6 +132,9 @@ function AdaptiveAnimation() {
 ## Example: Accessible Animations
 
 ```tsx
+import { MotionConfig, motion, useReducedMotion } from "motion-solid";
+import type { JSX } from "solid-js";
+
 function App() {
   return (
     <MotionConfig reducedMotion="user">
@@ -144,7 +147,7 @@ function App() {
   );
 }
 
-function FeatureCard(props) {
+function FeatureCard(props: { children: JSX.Element }) {
   const reduced = useReducedMotion();
 
   return (

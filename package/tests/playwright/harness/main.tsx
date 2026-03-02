@@ -128,7 +128,7 @@ const harnessApi: HarnessApi = {
     return {
       scenario: scenario(),
       options: options(),
-      ...(controller?.getState() ?? {}),
+      ...controller?.getState(),
     };
   },
   getEvents() {
