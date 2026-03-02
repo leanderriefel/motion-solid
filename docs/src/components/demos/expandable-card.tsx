@@ -41,36 +41,37 @@ export const ExpandableCard = () => {
       class="min-h-[500px] w-full"
     >
       <div class="w-full flex flex-wrap gap-4 justify-center content-start p-4">
-        {items.map((item) => (
-          <motion.div
-            layoutId={`card-${item.id}`}
-            layout
-            onClick={() => setSelectedId(item.id)}
-            class={`w-[180px] h-[200px] ${item.color} rounded-2xl cursor-pointer p-5 shadow-md hover:shadow-xl transition-shadow flex flex-col justify-end relative overflow-hidden`}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
+        <For each={items}>
+          {(item) => (
             <motion.div
-              layoutId={`title-${item.id}`}
-              layout="position"
-              class="text-lg font-bold m-0 z-10 relative"
+              layoutId={`card-${item.id}`}
+              layout
+              layoutDependencies={[item.id]}
+              onClick={() => setSelectedId(item.id)}
+              class={`w-[180px] h-[200px] ${item.color} rounded-2xl cursor-pointer p-5 shadow-md hover:shadow-xl transition-shadow flex flex-col justify-end relative overflow-hidden`}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              {item.title}
+              <motion.div
+                layoutId={`title-${item.id}`}
+                class="text-lg font-bold m-0 z-10"
+              >
+                {item.title}
+              </motion.div>
+              <motion.div
+                layoutId={`subtitle-${item.id}`}
+                class="opacity-80 text-xs m-0 mt-1 z-10"
+              >
+                {item.subtitle}
+              </motion.div>
             </motion.div>
-            <motion.div
-              layoutId={`subtitle-${item.id}`}
-              layout="position"
-              class="opacity-80 text-xs m-0 mt-1 z-10 relative"
-            >
-              {item.subtitle}
-            </motion.div>
-          </motion.div>
-        ))}
+          )}
+        </For>
 
         <AnimatePresence>
-          <Show when={selectedId()}>
+          <Show when={selectedId()} keyed>
             {(id) => {
-              const selectedItem = items.find((i) => i.id === id());
+              const selectedItem = items.find((i) => i.id === id);
               return (
                 <div class="absolute inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
                   <motion.div
@@ -82,22 +83,21 @@ export const ExpandableCard = () => {
                   />
 
                   <motion.div
-                    layoutId={`card-${id()}`}
+                    layoutId={`card-${id}`}
                     layout
+                    layoutDependencies={[id]}
                     class={`w-full max-w-sm ${selectedItem?.color} rounded-3xl shadow-2xl overflow-hidden relative pointer-events-auto flex flex-col`}
                     style={{ height: "450px" }}
                   >
                     <div class="p-8 pb-4 relative z-10">
                       <motion.div
-                        layoutId={`title-${id()}`}
-                        layout="position"
+                        layoutId={`title-${id}`}
                         class="text-3xl font-bold m-0"
                       >
                         {selectedItem?.title}
                       </motion.div>
                       <motion.div
-                        layoutId={`subtitle-${id()}`}
-                        layout="position"
+                        layoutId={`subtitle-${id}`}
                         class="opacity-80 text-lg m-0 mt-2"
                       >
                         {selectedItem?.subtitle}
