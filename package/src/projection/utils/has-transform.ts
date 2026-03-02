@@ -75,14 +75,7 @@ export const has2DTranslate = (values: ResolvedValues): boolean => {
 };
 
 export const hasTransform = (values: ResolvedValues): boolean => {
-  const transformValue = readValue(values, "transform");
-  const hasTransformString =
-    typeof transformValue === "string" &&
-    transformValue.trim() !== "" &&
-    transformValue.trim() !== "none";
-
   return (
-    hasTransformString ||
     hasScale(values) ||
     has2DTranslate(values) ||
     hasNonIdentityValue(values, "z", "translateZ") ||

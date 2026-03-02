@@ -490,7 +490,15 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       return processStyleProp(rawStyle);
     });
 
-    const getStyleValues = () => processedStyleData().projectionValues;
+    const styleValues = createMemo<Record<string, string | number>>(() => {
+      const data = processedStyleData();
+      return {
+        ...data.style,
+        ...data.projectionValues,
+      };
+    });
+
+    const getStyleValues = () => styleValues();
 
     // Calculate additional delay from parent orchestration
     const getParentOrchestrationDelay = (): number => {

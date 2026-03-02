@@ -49,6 +49,11 @@ export function applyBoxDelta(box: Box, { x, y }: Delta): void {
 
 const TREE_SCALE_SNAP_MIN = 0.999999999999;
 const TREE_SCALE_SNAP_MAX = 1.0000000000001;
+const sanitizeScale = (value: number | undefined): number => {
+  if (value === undefined) return 1;
+  if (!Number.isFinite(value) || value === 0) return 1;
+  return value;
+};
 
 export function applyTreeDeltas(
   box: Box,
@@ -87,7 +92,17 @@ export function applyTreeDeltas(
       applyBoxDelta(box, delta);
     }
 
-    if (isSharedTransition && hasTransform(node.latestValues)) {
+    if (hasTransform(node.latestValues)) {
+      const scale = readNumber(node.latestValues, "scale");
+      const scaleX = sanitizeScale(
+        readNumber(node.latestValues, "scale-x", "scaleX") ?? scale,
+      );
+      const scaleY = sanitizeScale(
+        readNumber(node.latestValues, "scale-y", "scaleY") ?? scale,
+      );
+
+      treeScale.x *= scaleX;
+      treeScale.y *= scaleY;
       transformBox(box, node.latestValues);
     }
   }

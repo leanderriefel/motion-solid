@@ -179,4 +179,6 @@ function Tabs() {
 - Projection transforms sanitize invalid values (`0`, `NaN`, `Infinity`) before composing CSS transforms
 - Exiting elements in shared `layoutId` transitions are marked not-present before handoff
 - Layout animations work best with `type: "spring"` transitions
+- Scale correction now keeps style-provided `border-radius`/`box-shadow` fallbacks aligned during projection scaling
+- Transformed ancestor scales are now folded into tree projection correction for more stable nested measurements
 - For high-complexity cases (nested presence, shared `layoutId`, scroll roots, and grid reflow), see `/docs/demos` examples: **Complex Layout Board**, **Nested Presence + Shared layoutId**, and **Scroll + Sticky Layout**

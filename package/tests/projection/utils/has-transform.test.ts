@@ -112,18 +112,14 @@ describe("hasTransform", () => {
     expect(hasTransform({ transformPerspective: 800 })).toBe(true);
   });
 
-  it("returns true for explicit transform strings", () => {
-    expect(hasTransform({ transform: "translateX(10px)" })).toBe(true);
-  });
-
   it("returns false for non-transform properties", () => {
     expect(hasTransform({ opacity: 0.5 })).toBe(false);
     expect(hasTransform({ color: "red" })).toBe(false);
+    expect(hasTransform({ transform: "translateX(10px)" })).toBe(false);
   });
 
   it("returns false for identity transforms", () => {
     expect(hasTransform({ scale: 1, x: 0, y: 0 })).toBe(false);
     expect(hasTransform({ rotate: 0, skew: 0 })).toBe(false);
-    expect(hasTransform({ transform: "none" })).toBe(false);
   });
 });

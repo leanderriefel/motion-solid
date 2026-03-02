@@ -190,6 +190,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   const renderToDom = () => {
     const element = state.element;
     if (!element) return;
+    const styleValues = getStyleValues?.();
+    const styleTransform =
+      typeof styleValues?.transform === "string" ? styleValues.transform : null;
 
     // Reset render state for fresh computation
     renderState.style = {};
@@ -241,7 +244,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       // If Motion isn't generating a transform, fall back to the snapshotted base transform.
       // Never read computed styles here (see comment above).
       if (baseTransform === undefined)
-        baseTransform = projectionBaseTransform ?? "";
+        baseTransform = styleTransform ?? projectionBaseTransform ?? "";
 
       const combinedTransform =
         baseTransform === "" || baseTransform === "none"
@@ -278,8 +281,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     }
 
     prevProjectionOpacity = projectionOpacity;
-
-    const styleValues = getStyleValues?.();
     const projectionOverrides: Record<string, string | number> = {};
 
     if (projectionStyles) {

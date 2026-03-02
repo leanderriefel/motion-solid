@@ -4,6 +4,7 @@ import {
   applyPointDelta,
   applyAxisDelta,
   applyBoxDelta,
+  applyTreeDeltas,
   translateAxis,
   transformAxis,
   transformBox,
@@ -11,6 +12,7 @@ import {
 import {
   createBox,
   createDelta,
+  createPoint,
 } from "../../../src/projection/geometry/models";
 
 describe("scalePoint", () => {
@@ -192,5 +194,63 @@ describe("transformBox", () => {
 
     expect(box.x.min).toBe(-50);
     expect(box.x.max).toBe(150);
+  });
+});
+
+describe("applyTreeDeltas", () => {
+  it("applies ancestor transforms for non-shared transitions", () => {
+    const box = createBox();
+    box.x = { min: 0, max: 100 };
+    box.y = { min: 0, max: 100 };
+
+    const treeScale = createPoint();
+
+    applyTreeDeltas(
+      box,
+      treeScale,
+      [
+        {
+          options: {},
+          latestValues: { scale: 2, x: 50, y: 10 },
+        },
+      ],
+      false,
+    );
+
+    expect(treeScale.x).toBe(2);
+    expect(treeScale.y).toBe(2);
+    expect(box.x.min).toBe(0);
+    expect(box.x.max).toBe(200);
+    expect(box.y.min).toBe(-40);
+    expect(box.y.max).toBe(160);
+  });
+
+  it("combines projection delta scale with ancestor scale values", () => {
+    const box = createBox();
+    box.x = { min: 0, max: 100 };
+    box.y = { min: 0, max: 100 };
+
+    const treeScale = createPoint();
+    const projectionDelta = createDelta();
+    projectionDelta.x.scale = 1.5;
+    projectionDelta.y.scale = 0.5;
+    projectionDelta.x.originPoint = 50;
+    projectionDelta.y.originPoint = 50;
+
+    applyTreeDeltas(
+      box,
+      treeScale,
+      [
+        {
+          projectionDelta,
+          options: {},
+          latestValues: { scale: 2 },
+        },
+      ],
+      false,
+    );
+
+    expect(treeScale.x).toBe(3);
+    expect(treeScale.y).toBe(1);
   });
 });

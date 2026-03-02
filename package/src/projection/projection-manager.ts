@@ -729,7 +729,9 @@ class ProjectionNodeImpl {
       forceRecalculation ||
       (isShared && this.isSharedProjectionDirty) ||
       this.isProjectionDirty ||
+      this.isTransformDirty ||
       this.parent?.isProjectionDirty ||
+      this.parent?.isTransformDirty ||
       this.manager.updateBlockedByResize
     );
 
@@ -805,7 +807,11 @@ class ProjectionNodeImpl {
       canSkip = false;
     }
 
-    if (isShared && (this.isSharedProjectionDirty || this.isTransformDirty)) {
+    if (this.isTransformDirty || this.parent?.isTransformDirty) {
+      canSkip = false;
+    }
+
+    if (isShared && this.isSharedProjectionDirty) {
       canSkip = false;
     }
 

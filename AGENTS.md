@@ -248,3 +248,8 @@ If docs are changed:
 - `layoutDependency` (singular) is supported as a shorthand alongside `layoutDependencies`, and dependency tracking now supports both Accessors and plain values.
 - Projection transform detection now recognizes additional transform keys (`rotate-z`, `scale-z`, `translate-*`, `skew`, `perspective`, `transform-perspective`, and transform strings) with identity-aware checks.
 - Docs demos now include advanced layout stress scenarios: complex grid reflow, nested `AnimatePresence` + shared `layoutId`, and scroll/sticky projection with `layoutScroll` + `layoutRoot`.
+- Projection style-value plumbing now preserves full style fallback data (`border-radius`, `box-shadow`, etc.) while still exposing transform shortcuts for projection math, restoring scale-correction behavior during layout projection.
+- Tree projection math now applies ancestor transform values for non-shared layout transitions and accumulates ancestor scale factors into `treeScale`, improving transformed-ancestor measurement fidelity and reducing off-screen/over-scaled projection artifacts.
+- Transform-dirty invalidation now forces projection recalculation for non-shared nodes as well as shared nodes, so ancestor transform changes propagate reliably to descendants.
+- Projection composition now prefers current style-provided base transforms while projection is active, preventing stale base-transform snapshots when Solid style transforms update during a projection animation.
+- Generic `transform` strings are no longer treated as directly removable geometric transforms in projection utility checks, avoiding false transform-removal paths that produced incorrect layout measurements.
