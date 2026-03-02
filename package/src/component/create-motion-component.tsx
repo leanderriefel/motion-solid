@@ -21,7 +21,7 @@ import type {
 import { createMotionState } from "../state";
 import { useAnimationState } from "../animation";
 import { useGestures, useDragGesture } from "../gestures";
-import { projectionManager } from "../projection/projection-manager";
+import { projectionManager } from "../projection/layout-engine-v2";
 import { MotionStateContext, useMotionState } from "./context";
 import { useMotionConfig } from "./motion-config";
 import { motionKeys } from "./motion-keys";

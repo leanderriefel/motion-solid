@@ -5,7 +5,7 @@ import * as motionValueModule from "../../src/animation/motion-value";
 import {
   createProjectionNode,
   projectionManager,
-} from "../../src/projection/projection-manager";
+} from "../../src/projection/layout-engine-v2";
 
 describe("projection scheduling", () => {
   beforeEach(() => {
@@ -117,7 +117,6 @@ describe("projection scheduling", () => {
       render: () => undefined,
       scheduleRender: () => undefined,
     });
-
     projectionManager.register(node);
     projectionManager.unregister(node);
 
@@ -229,5 +228,73 @@ describe("projection scheduling", () => {
     expect(node.resumeFrom).toBeUndefined();
     expect(node.resumingFrom).toBeUndefined();
     expect(node.snapshot).toBeUndefined();
+  });
+
+  it("captures a fresh snapshot when retargeting an active layout animation", () => {
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+
+    const node = createProjectionNode({
+      element,
+      options: { layout: true },
+      latestValues: {},
+      apply: () => undefined,
+      render: () => undefined,
+      scheduleRender: () => undefined,
+    });
+
+    projectionManager.register(node);
+
+    const staleSnapshot = {
+      animationId: 1,
+      measuredBox: {
+        x: { min: 0, max: 10 },
+        y: { min: 0, max: 10 },
+      },
+      layoutBox: {
+        x: { min: 0, max: 10 },
+        y: { min: 0, max: 10 },
+      },
+      latestValues: {},
+      source: 1,
+    };
+
+    node.snapshot = staleSnapshot;
+    node.currentAnimation = {
+      stop: vi.fn(),
+      finished: Promise.resolve(),
+    } as unknown as AnimationPlaybackControlsWithThen;
+
+    const managerState = projectionManager as {
+      isUpdating: boolean;
+      updateManuallyBlocked: boolean;
+      updateBlockedByResize: boolean;
+    };
+    managerState.isUpdating = false;
+    managerState.updateManuallyBlocked = false;
+    managerState.updateBlockedByResize = false;
+    node.isLayoutDirty = false;
+
+    vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
+      left: 100,
+      right: 140,
+      top: 50,
+      bottom: 90,
+      width: 40,
+      height: 40,
+      x: 100,
+      y: 50,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    node.willUpdate();
+
+    expect(node.snapshot?.measuredBox.x.min).toBe(100);
+    expect(node.snapshot?.measuredBox.x.max).toBe(140);
+    expect(node.snapshot?.measuredBox.y.min).toBe(50);
+    expect(node.snapshot?.measuredBox.y.max).toBe(90);
+
+    managerState.isUpdating = false;
+    element.remove();
   });
 });

@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
 import { createSignal, Show } from "solid-js";
 import { motion, AnimatePresence } from "../../src";
-import { projectionManager } from "../../src/projection/projection-manager";
+import { projectionManager } from "../../src/projection/layout-engine-v2";
 import { buildProjectionTransform } from "../../src/projection/styles/transform";
 import { calcBoxDelta } from "../../src/projection/geometry/delta-calc";
 import { createDelta } from "../../src/projection/geometry/models";

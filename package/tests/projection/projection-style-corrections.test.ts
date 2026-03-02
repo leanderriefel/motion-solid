@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProjectionNode } from "../../src/projection/projection-manager";
+import { createProjectionNode } from "../../src/projection/layout-engine-v2";
 import { createBox, createDelta } from "../../src/projection/geometry/models";
 import type { Measurements } from "../../src/projection/node/types";
 

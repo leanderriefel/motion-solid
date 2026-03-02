@@ -387,11 +387,23 @@ class ProjectionNodeImpl {
       ? transformTemplate(this.latestValues, "")
       : undefined;
 
-    this.updateSnapshot();
+    const isInterruptingLayoutAnimation = Boolean(
+      this.currentAnimation || this.pendingAnimation,
+    );
+
+    if (isInterruptingLayoutAnimation) {
+      const sampledProgress = this.motionValue?.get();
+      if (sampledProgress !== undefined) {
+        this.mixTargetDelta?.(sampledProgress);
+      }
+    }
+
+    this.updateSnapshot(isInterruptingLayoutAnimation);
   }
 
-  updateSnapshot(): void {
-    if (this.snapshot || !this.instance) return;
+  updateSnapshot(force = false): void {
+    if (!force && this.snapshot) return;
+    if (!this.instance) return;
 
     this.snapshot = this.measure();
 
@@ -1769,12 +1781,8 @@ class ProjectionManager {
 
   clearAllSnapshots(): void {
     this.nodes.forEach((node) => {
-      // Keep active handoff snapshots for in-flight shared transitions only.
-      if (
-        !node.resumingFrom &&
-        !node.currentAnimation &&
-        !node.pendingAnimation
-      ) {
+      // Keep active handoff snapshots for nodes actively resuming from layoutId.
+      if (!node.resumingFrom) {
         node.clearSnapshot();
       }
     });

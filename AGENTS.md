@@ -150,8 +150,7 @@ Docs (`@motion-solid/docs`) commands:
 
 ### 6) Layout projection subsystem
 
-- Projection manager: `package/src/projection/projection-manager.ts`.
-- Core projection implementation: `package/src/projection/layout-engine-v2.ts` (`projection-manager.ts` re-exports this engine for API stability).
+- Projection engine/manager: `package/src/projection/layout-engine-v2.ts`.
 - Handles:
   - snapshot/measure/update cycles
   - tree rebuild and parent path tracking
@@ -181,7 +180,7 @@ Docs (`@motion-solid/docs`) commands:
 - Variant logic: `package/src/animation/variants.ts`
 - Render/transform normalization: `package/src/animation/render.ts`
 - Presence behavior: `package/src/component/presence.tsx`
-- Layout projection: `package/src/projection/projection-manager.ts`
+- Layout projection: `package/src/projection/layout-engine-v2.ts`
 - Public exports: `package/src/index.ts`, `package/src/component/index.tsx`
 
 ## Testing policy
@@ -259,3 +258,5 @@ If docs are changed:
 - Non-lead `layoutId` members now stay hidden when no projection target is resolved, so inactive shared elements do not flash/fly in during unrelated layout animations.
 - Layout projection internals were rebuilt into an explicit phased engine (`snapshot` -> `measure` -> `resolve` -> `projection`) with node-owned layout-resolution logic (`resolveLayoutAnimation()`), reducing hidden cross-phase state coupling.
 - Shared handoff state now runs through explicit stale-state expiry (`expireStaleSharedState`) during layout and projection passes, preventing stale `layoutId` snapshots from resurfacing on unrelated layout updates.
+- Interrupting an in-flight layout animation now force-refreshes snapshots from the current visual state before retargeting, so retargeted layout animations continue from the interrupted position instead of restarting from stale origins.
+- Legacy projection manager compatibility re-export was removed; all internal consumers now use `package/src/projection/layout-engine-v2.ts` directly.

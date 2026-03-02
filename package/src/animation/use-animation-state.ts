@@ -59,7 +59,7 @@ import type { MotionConfigContextValue } from "../component/motion-config";
 import {
   createProjectionNode,
   projectionManager,
-} from "../projection/projection-manager";
+} from "../projection/layout-engine-v2";
 import type { ProjectionUpdate } from "../projection/node/types";
 import { MotionElement } from "./motion-element";
 
