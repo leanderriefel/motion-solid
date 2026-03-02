@@ -151,6 +151,7 @@ Docs (`@motion-solid/docs`) commands:
 ### 6) Layout projection subsystem
 
 - Projection manager: `package/src/projection/projection-manager.ts`.
+- Core projection implementation: `package/src/projection/layout-engine-v2.ts` (`projection-manager.ts` re-exports this engine for API stability).
 - Handles:
   - snapshot/measure/update cycles
   - tree rebuild and parent path tracking
@@ -256,3 +257,5 @@ If docs are changed:
 - Complex docs demos (`Complex Layout Board`, `Nested Presence + layoutId`, `Scroll + Sticky Layout`) were stabilized by removing stale `Show` accessor captures (using keyed rendering for active detail panels), cleaning list-style artifacts, and removing fixed-height clipping in demo containers.
 - Shared `layoutId` projection completion now clears `resumeFrom` and node snapshots immediately after completion, preventing stale handoff state from retriggering crossfade/projection runs on unrelated layout updates.
 - Non-lead `layoutId` members now stay hidden when no projection target is resolved, so inactive shared elements do not flash/fly in during unrelated layout animations.
+- Layout projection internals were rebuilt into an explicit phased engine (`snapshot` -> `measure` -> `resolve` -> `projection`) with node-owned layout-resolution logic (`resolveLayoutAnimation()`), reducing hidden cross-phase state coupling.
+- Shared handoff state now runs through explicit stale-state expiry (`expireStaleSharedState`) during layout and projection passes, preventing stale `layoutId` snapshots from resurfacing on unrelated layout updates.

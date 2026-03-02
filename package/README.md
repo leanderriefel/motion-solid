@@ -33,6 +33,7 @@ bun add motion-solid
 - `layoutScroll` and `layoutRoot` can be combined for sticky/fixed/scroll-container scenarios.
 - Layout projection now keeps border-radius/box-shadow scale-correction fallback values from style props and handles transformed ancestor scale compensation more reliably.
 - Shared `layoutId` handoff state is now cleaned up immediately after completion so unrelated layout updates don't resurrect stale shared-element transitions.
+- The layout engine now runs in explicit phases (`snapshot` -> `measure` -> `resolve` -> `projection`) with stale shared-state expiry to avoid hidden cross-update leakage.
 - The docs include advanced stress demos (nested `AnimatePresence`, shared `layoutId`, grid reflow, and scroll+sticky projection) at:
   - https://motion-solid.leanderriefel.com/docs/demos
 

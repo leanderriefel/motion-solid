@@ -182,4 +182,5 @@ function Tabs() {
 - Scale correction now keeps style-provided `border-radius`/`box-shadow` fallbacks aligned during projection scaling
 - Transformed ancestor scales are now folded into tree projection correction for more stable nested measurements
 - Shared `layoutId` handoff state is cleared after completion, preventing stale shared-element flashes during unrelated layout updates
+- Layout projection now runs through explicit internal phases (`snapshot` -> `measure` -> `resolve` -> `projection`) with stale shared-state expiry checks for shared handoffs
 - For high-complexity cases (nested presence, shared `layoutId`, scroll roots, and grid reflow), see `/docs/demos` examples: **Complex Layout Board**, **Nested Presence + Shared layoutId**, and **Scroll + Sticky Layout**
