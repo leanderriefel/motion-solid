@@ -67,7 +67,7 @@ export const FilterableGrid = () => {
             layoutDependency={filter}
             class="grid grid-cols-2 gap-4"
           >
-            <AnimatePresence>
+            <AnimatePresence mode="popLayout">
               <For each={filteredItems()}>
                 {(item) => (
                   <motion.div

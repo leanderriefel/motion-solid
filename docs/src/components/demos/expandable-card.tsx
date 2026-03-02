@@ -54,14 +54,14 @@ export const ExpandableCard = () => {
             >
               <motion.div
                 layoutId={`title-${item.id}`}
-                layout="position"
+                layout
                 class="text-lg font-bold m-0 z-10"
               >
                 {item.title}
               </motion.div>
               <motion.div
                 layoutId={`subtitle-${item.id}`}
-                layout="position"
+                layout
                 class="opacity-80 text-xs m-0 mt-1 z-10"
               >
                 {item.subtitle}
@@ -94,14 +94,14 @@ export const ExpandableCard = () => {
                     <div class="p-8 pb-4 relative z-10">
                       <motion.div
                         layoutId={`title-${id}`}
-                        layout="position"
+                        layout
                         class="text-3xl font-bold m-0 z-10"
                       >
                         {selectedItem?.title}
                       </motion.div>
                       <motion.div
                         layoutId={`subtitle-${id}`}
-                        layout="position"
+                        layout
                         class="opacity-80 text-lg m-0 mt-2"
                       >
                         {selectedItem?.subtitle}
