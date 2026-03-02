@@ -106,12 +106,7 @@ export const ComplexLayoutBoard = () => {
   };
 
   return (
-    <Animation
-      name="Complex Layout Board"
-      source={source}
-      class="h-[620px]"
-      scrollable
-    >
+    <Animation name="Complex Layout Board" source={source} scrollable>
       <div class="w-full space-y-3 pt-3">
         <motion.div layout class="flex flex-wrap gap-2">
           <button
@@ -139,7 +134,7 @@ export const ComplexLayoutBoard = () => {
 
         <motion.div
           layout
-          layoutDependency={cards}
+          layoutDependencies={[cards, expandedId, activeId]}
           class="grid grid-cols-1 gap-2 sm:grid-cols-2"
           transition={{
             layout: { type: "spring", stiffness: 380, damping: 34 },
@@ -224,35 +219,32 @@ export const ComplexLayoutBoard = () => {
         </motion.div>
 
         <AnimatePresence mode="wait">
-          <Show when={activeCard()}>
-            {(cardAccessor) => {
-              const card = cardAccessor();
-              return (
-                <motion.div
-                  key={card.id}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.22 }}
-                  class="rounded-xl border bg-foreground/5 p-3"
+          <Show when={activeCard()} keyed>
+            {(card) => (
+              <motion.div
+                key={card.id}
+                layout
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.22 }}
+                class="rounded-xl border bg-foreground/5 p-3"
+              >
+                <motion.p
+                  layout="position"
+                  class="text-xs text-muted-foreground"
                 >
-                  <motion.p
-                    layout="position"
-                    class="text-xs text-muted-foreground"
-                  >
-                    Active card
-                  </motion.p>
-                  <motion.p layout="position" class="mt-1 text-sm font-medium">
-                    {card.title}
-                  </motion.p>
-                  <motion.p layout="position" class="mt-1 text-xs">
-                    Lane: {card.lane} · Height mode:{" "}
-                    {card.tall ? "tall" : "compact"}
-                  </motion.p>
-                </motion.div>
-              );
-            }}
+                  Active card
+                </motion.p>
+                <motion.p layout="position" class="mt-1 text-sm font-medium">
+                  {card.title}
+                </motion.p>
+                <motion.p layout="position" class="mt-1 text-xs">
+                  Lane: {card.lane} · Height mode:{" "}
+                  {card.tall ? "tall" : "compact"}
+                </motion.p>
+              </motion.div>
+            )}
           </Show>
         </AnimatePresence>
       </div>

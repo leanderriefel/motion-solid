@@ -51,12 +51,7 @@ export const LayoutScrollSticky = () => {
   };
 
   return (
-    <Animation
-      name="Scroll + Sticky Layout"
-      source={source}
-      class="h-[620px]"
-      scrollable
-    >
+    <Animation name="Scroll + Sticky Layout" source={source} scrollable>
       <div class="w-full space-y-3 pt-3">
         <motion.div layout class="flex flex-wrap gap-2">
           <button
@@ -87,14 +82,11 @@ export const LayoutScrollSticky = () => {
 
         <motion.div
           layout
-          layoutDependency={items}
+          layoutDependencies={[items, pinnedIds]}
           layoutScroll
           class="h-[380px] overflow-y-auto rounded-xl border bg-foreground/5"
         >
-          <motion.div
-            layoutRoot
-            class="sticky top-0 z-10 border-b bg-background/95 p-2 backdrop-blur"
-          >
+          <motion.div class="sticky top-0 z-10 border-b bg-background/95 p-2 backdrop-blur">
             <motion.p layout="position" class="text-xs font-medium">
               Pinned queue (click any card to move it)
             </motion.p>

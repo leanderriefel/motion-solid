@@ -253,3 +253,4 @@ If docs are changed:
 - Transform-dirty invalidation now forces projection recalculation for non-shared nodes as well as shared nodes, so ancestor transform changes propagate reliably to descendants.
 - Projection composition now prefers current style-provided base transforms while projection is active, preventing stale base-transform snapshots when Solid style transforms update during a projection animation.
 - Generic `transform` strings are no longer treated as directly removable geometric transforms in projection utility checks, avoiding false transform-removal paths that produced incorrect layout measurements.
+- Complex docs demos (`Complex Layout Board`, `Nested Presence + layoutId`, `Scroll + Sticky Layout`) were stabilized by removing stale `Show` accessor captures (using keyed rendering for active detail panels), cleaning list-style artifacts, and removing fixed-height clipping in demo containers.
