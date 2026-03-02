@@ -66,7 +66,7 @@ motion-solid automatically tracks: `class`, `classList`, `style`, `textContent`,
 
 ### Manual Dependencies
 
-For other changes, provide `layoutDependencies`:
+For other changes, provide `layoutDependencies` (Accessors and/or plain values):
 
 ```tsx
 const [isOn, setIsOn] = createSignal(false);
@@ -78,6 +78,18 @@ const [isOn, setIsOn] = createSignal(false);
   {/* Child position changes when parent class changes */}
   <motion.div layout layoutDependencies={[isOn]} class="size-8 rounded-full" />
 </button>;
+```
+
+For single dependencies, you can use the shorthand `layoutDependency`:
+
+```tsx
+const [isExpanded, setIsExpanded] = createSignal(false);
+
+<motion.section
+  layout
+  layoutDependency={isExpanded}
+  style={{ width: isExpanded() ? "28rem" : "20rem" }}
+/>;
 ```
 
 Add dependencies when: a parent's prop change affects child position, derived state influences layout, or non-standard props trigger layout shifts.
@@ -167,3 +179,4 @@ function Tabs() {
 - Projection transforms sanitize invalid values (`0`, `NaN`, `Infinity`) before composing CSS transforms
 - Exiting elements in shared `layoutId` transitions are marked not-present before handoff
 - Layout animations work best with `type: "spring"` transitions
+- For high-complexity cases (nested presence, shared `layoutId`, scroll roots, and grid reflow), see `/docs/demos` examples: **Complex Layout Board**, **Nested Presence + Shared layoutId**, and **Scroll + Sticky Layout**

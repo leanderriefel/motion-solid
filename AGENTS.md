@@ -237,3 +237,14 @@ If docs are changed:
 - Function variant resolvers that return variant labels now resolve those labels against local `variants` instead of being discarded.
 - Nested `AnimatePresence` now gates parent-driven child exit handoff behind `propagate`, so `propagate={false}` does not trigger nested child exits on parent removal.
 - Projection transform building now sanitizes zero/non-finite tree scales before translate and inverse-scale math to avoid `Infinity`/`NaN` transform output.
+
+## Recent updates (2026-03-02)
+
+- Projection unmount handling now flushes active layout update cycles after child removal instead of prematurely failing checks, which preserves parent/sibling layout animations during complex exits.
+- Projection manager unregister now removes `nodeByElement` mappings using the captured instance before unmount clears it, preventing stale element-node lookups.
+- Layout projection animation completion is now guarded by per-start commit IDs so stale `finished` callbacks from replaced animations cannot complete newer runs.
+- WAAPI transform usage is now blocked for all transform props (not only literal `transform`) while projection transforms are active, avoiding transform fighting in complex layout transitions.
+- Style transform shortcuts are now fed into projection latest values (including translate alias normalization), improving transform-aware layout measurement parity.
+- `layoutDependency` (singular) is supported as a shorthand alongside `layoutDependencies`, and dependency tracking now supports both Accessors and plain values.
+- Projection transform detection now recognizes additional transform keys (`rotate-z`, `scale-z`, `translate-*`, `skew`, `perspective`, `transform-perspective`, and transform strings) with identity-aware checks.
+- Docs demos now include advanced layout stress scenarios: complex grid reflow, nested `AnimatePresence` + shared `layoutId`, and scroll/sticky projection with `layoutScroll` + `layoutRoot`.

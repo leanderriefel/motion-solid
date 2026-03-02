@@ -1,4 +1,4 @@
-import type { Component, ComponentProps } from "solid-js";
+import type { Accessor, Component, ComponentProps } from "solid-js";
 import {
   createComputed,
   createMemo,
@@ -71,6 +71,17 @@ const styleTransformShortcuts = new Set([
   "transform-perspective",
 ]);
 
+const projectionTransformAliases: Record<string, "x" | "y" | "z"> = {
+  "translate-x": "x",
+  "translate-y": "y",
+  "translate-z": "z",
+};
+
+type ProcessedStyleData = {
+  style: Record<string, string | number>;
+  projectionValues: Record<string, string | number>;
+};
+
 const normalizeStyleKey = (key: string): string => {
   if (key.startsWith("--")) return key;
   return key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
@@ -78,19 +89,23 @@ const normalizeStyleKey = (key: string): string => {
 
 /**
  * Process style prop to handle transform shortcuts.
- * Returns the processed style object.
+ * Returns renderable styles and projection-friendly transform values.
  *
  * @param style - The raw style prop
  */
 const processStyleProp = (
   style: Record<string, string | number> | string | undefined,
-): Record<string, string | number> => {
+): ProcessedStyleData => {
   if (!style || typeof style === "string") {
-    return {};
+    return {
+      style: {},
+      projectionValues: {},
+    };
   }
 
   const processedStyle: Record<string, string | number> = {};
   const transformValues: Record<string, string | number> = {};
+  const projectionValues: Record<string, string | number> = {};
   let hasTransformShortcuts = false;
 
   for (const key in style) {
@@ -103,11 +118,20 @@ const processStyleProp = (
     if (styleTransformShortcuts.has(normalizedKey)) {
       hasTransformShortcuts = true;
       transformValues[normalizedKey] = value;
+      projectionValues[normalizedKey] = value;
+
+      const alias = projectionTransformAliases[normalizedKey];
+      if (alias && projectionValues[alias] === undefined) {
+        projectionValues[alias] = value;
+      }
       continue;
     }
 
     // Pass through to processed style
     processedStyle[normalizedKey] = value;
+    if (normalizedKey === "transform") {
+      projectionValues.transform = value;
+    }
   }
 
   // If we have transform shortcuts, build the transform string
@@ -128,7 +152,14 @@ const processStyleProp = (
     }
   }
 
-  return processedStyle;
+  if (processedStyle.transform !== undefined) {
+    projectionValues.transform = processedStyle.transform;
+  }
+
+  return {
+    style: processedStyle,
+    projectionValues,
+  };
 };
 
 const getInitialStyles = (
@@ -450,18 +481,16 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     // Process style prop for transform shortcuts.
     // Keep raw values available so projection can restore overrides.
-    const processedStyleData = createMemo<Record<string, string | number>>(
-      () => {
-        const rawStyle = styleProps.style as
-          | Record<string, string | number>
-          | string
-          | undefined;
-        // Never exclude - let Solid render the raw values, renderToDom will correct when needed
-        return processStyleProp(rawStyle);
-      },
-    );
+    const processedStyleData = createMemo<ProcessedStyleData>(() => {
+      const rawStyle = styleProps.style as
+        | Record<string, string | number>
+        | string
+        | undefined;
+      // Never exclude - let Solid render the raw values, renderToDom will correct when needed
+      return processStyleProp(rawStyle);
+    });
 
-    const getStyleValues = () => processedStyleData();
+    const getStyleValues = () => processedStyleData().projectionValues;
 
     // Calculate additional delay from parent orchestration
     const getParentOrchestrationDelay = (): number => {
@@ -500,7 +529,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     const mergedStyles = createMemo(() => {
       const initial = initialStyles();
-      const processedStyle = processedStyleData();
+      const processedStyle = processedStyleData().style;
       return { ...processedStyle, ...initial };
     });
 
@@ -516,8 +545,9 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       }
 
       if (
-        !motionOptions.layoutDependencies ||
-        motionOptions.layoutDependencies.length === 0
+        motionOptions.layoutDependency === undefined &&
+        (!motionOptions.layoutDependencies ||
+          motionOptions.layoutDependencies.length === 0)
       ) {
         void motionOptions.layoutRoot;
         void motionOptions.layoutScroll;
@@ -528,12 +558,22 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         void (elementProps as Record<string, unknown>).textContent;
         void (elementProps as Record<string, unknown>).innerHTML;
       } else {
+        const trackDependency = (dependency: unknown) => {
+          if (typeof dependency === "function") {
+            (dependency as Accessor<unknown>)();
+            return;
+          }
+          void dependency;
+        };
+
+        if (motionOptions.layoutDependency !== undefined) {
+          trackDependency(motionOptions.layoutDependency);
+        }
+
         const dependencies = motionOptions.layoutDependencies;
         if (dependencies) {
           for (const dependency of dependencies) {
-            if (typeof dependency === "function") {
-              dependency();
-            }
+            trackDependency(dependency);
           }
         }
       }

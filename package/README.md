@@ -26,6 +26,14 @@ pnpm add motion-solid
 bun add motion-solid
 ```
 
+## Layout animation notes
+
+- Use `layout` for size/position projection transitions and `layoutId` for shared element handoff.
+- For Solid reactivity-driven shifts, use `layoutDependency` (single) or `layoutDependencies` (multiple) to explicitly trigger layout measurement when needed.
+- `layoutScroll` and `layoutRoot` can be combined for sticky/fixed/scroll-container scenarios.
+- The docs include advanced stress demos (nested `AnimatePresence`, shared `layoutId`, grid reflow, and scroll+sticky projection) at:
+  - https://motion-solid.leanderriefel.com/docs/demos
+
 ## License
 
 MIT

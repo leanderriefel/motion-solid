@@ -1,4 +1,4 @@
-import type { Accessor, JSX } from "solid-js";
+import type { JSX } from "solid-js";
 import type {
   AnyResolvedKeyframe,
   MotionValue,
@@ -248,7 +248,16 @@ export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   ) => string;
   onAnimationStart?: (definition: MotionAnimationDefinition<Tag>) => void;
   onAnimationComplete?: (definition: MotionAnimationDefinition<Tag>) => void;
-  layoutDependencies?: Accessor<unknown>[];
+  /**
+   * Track a single dependency that should trigger a layout measurement.
+   * Accepts either an Accessor (recommended) or a plain value.
+   */
+  layoutDependency?: unknown;
+  /**
+   * Track multiple dependencies that should trigger a layout measurement.
+   * Accepts Accessors (recommended) and/or plain values.
+   */
+  layoutDependencies?: unknown[];
 };
 
 export interface MotionState {

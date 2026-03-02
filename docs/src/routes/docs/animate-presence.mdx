@@ -150,6 +150,31 @@ When `true`, parent removal triggers child exit animations. Default `false`:
 </AnimatePresence>
 ```
 
+## Complex Shared-Layout Coordination
+
+For route-like transitions, combine `AnimatePresence` mode control with shared `layoutId` and nested presence blocks:
+
+```tsx
+<AnimatePresence mode="popLayout" initial={false}>
+  <Show when={activeThread()}>
+    <motion.section layoutId={`thread-${activeThread()!.id}`} layout>
+      <AnimatePresence propagate>
+        <Show when={showMeta()}>
+          <motion.div
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          />
+        </Show>
+      </AnimatePresence>
+    </motion.section>
+  </Show>
+</AnimatePresence>
+```
+
+See `/docs/demos` → **Nested Presence + Shared layoutId** for a full stress demo with rapid switching.
+
 ### `root`
 
 Root element for `popLayout` positioning. Useful with shadow DOM or portals.

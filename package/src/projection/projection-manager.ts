@@ -650,7 +650,7 @@ class ProjectionNodeImpl {
 
   scheduleCheckAfterUnmount(): void {
     queueMicrotask(() => {
-      if (this.isLayoutDirty) {
+      if (this.manager.isUpdating || this.isLayoutDirty) {
         this.manager.flushUpdates();
       } else {
         this.manager.checkUpdateFailed();
@@ -1162,6 +1162,7 @@ class ProjectionNodeImpl {
 
   startAnimation(transition: ValueTransition): void {
     this.options.onLayoutAnimationStart?.();
+    const animationCommitId = ++this.animationCommitId;
 
     this.currentAnimation?.stop();
     this.resumingFrom?.currentAnimation?.stop();
@@ -1189,18 +1190,23 @@ class ProjectionNodeImpl {
         this.motionValue.set(0);
       }
 
-      this.currentAnimation =
+      const animation =
         startMotionValueAnimation({
           name: "layout",
           motionValue: this.motionValue,
           keyframes: animationTarget,
           transition,
         }) ?? undefined;
+      this.currentAnimation = animation;
 
-      if (this.currentAnimation) {
-        this.currentAnimation.finished.then(() => this.completeAnimation());
+      if (animation) {
+        animation.finished.then(() => {
+          if (this.animationCommitId !== animationCommitId) return;
+          if (this.currentAnimation !== animation) return;
+          this.completeAnimation(animationCommitId);
+        });
       } else {
-        this.completeAnimation();
+        this.completeAnimation(animationCommitId);
       }
 
       if (this.resumingFrom) {
@@ -1211,7 +1217,14 @@ class ProjectionNodeImpl {
     });
   }
 
-  completeAnimation(): void {
+  completeAnimation(animationCommitId?: number): void {
+    if (
+      animationCommitId !== undefined &&
+      animationCommitId !== this.animationCommitId
+    ) {
+      return;
+    }
+
     if (this.resumingFrom) {
       this.resumingFrom.currentAnimation = undefined;
       this.resumingFrom.preserveOpacity = undefined;
@@ -1234,7 +1247,7 @@ class ProjectionNodeImpl {
       this.currentAnimation.stop();
     }
 
-    this.completeAnimation();
+    this.completeAnimation(this.animationCommitId);
   }
 
   promote({
@@ -1353,9 +1366,10 @@ class ProjectionManager {
   }
 
   unregister(node: ProjectionNodeImpl): void {
+    const instance = node.instance;
     node.unmount();
     this.nodes.delete(node);
-    if (node.instance) this.nodeByElement.delete(node.instance);
+    if (instance) this.nodeByElement.delete(instance);
   }
 
   updateNodeOptions(

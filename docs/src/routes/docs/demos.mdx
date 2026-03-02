@@ -8,6 +8,9 @@ import { LayoutPositionAnimation } from "~/components/demos/layout-position-anim
 import { LayoutUnderlineAnimation } from "~/components/demos/layout-underline-animation";
 import { ScrollAnimation } from "~/components/demos/scroll-animation";
 import { AnimatingLayoutBar } from "~/components/demos/animating-layout-bar";
+import { ComplexLayoutBoard } from "~/components/demos/complex-layout-board";
+import { NestedPresenceLayoutId } from "~/components/demos/nested-presence-layoutid";
+import { LayoutScrollSticky } from "~/components/demos/layout-scroll-sticky";
 
 # Demos
 
@@ -68,6 +71,24 @@ Shared `layoutId` for tab indicator underline.
 Layout animation demonstrating bar resizing.
 
 <AnimatingLayoutBar />
+
+## Complex Layout Board
+
+Grid reflow, nested presence sections, dynamic card insertion/removal, and layout dependency stress.
+
+<ComplexLayoutBoard />
+
+## Nested Presence + Shared layoutId
+
+Combines shared element transitions with nested `AnimatePresence` in `sync`, `wait`, and `popLayout` modes.
+
+<NestedPresenceLayoutId />
+
+## Scroll + Sticky Layout
+
+Demonstrates `layoutScroll`, `layoutRoot`, sticky pinned regions, and shared layout transitions in one flow.
+
+<LayoutScrollSticky />
 
 ## Exit Animation
 
