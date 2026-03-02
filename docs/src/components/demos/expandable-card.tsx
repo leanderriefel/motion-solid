@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { motion, AnimatePresence } from "motion-solid";
 
 import { Animation } from "./animation";
@@ -38,26 +38,29 @@ export const ExpandableCard = () => {
     <Animation
       name="Expandable Card"
       source={source}
-      class="min-h-[500px] w-full relative"
+      class="min-h-[500px] w-full"
     >
-      <div class="w-full flex flex-wrap gap-4 justify-center content-start">
+      <div class="w-full flex flex-wrap gap-4 justify-center content-start p-4">
         {items.map((item) => (
           <motion.div
             layoutId={`card-${item.id}`}
+            layout
             onClick={() => setSelectedId(item.id)}
-            class={`w-[200px] h-[220px] ${item.color} rounded-2xl cursor-pointer p-6 shadow-md hover:shadow-xl transition-shadow flex flex-col justify-end relative overflow-hidden`}
+            class={`w-[180px] h-[200px] ${item.color} rounded-2xl cursor-pointer p-5 shadow-md hover:shadow-xl transition-shadow flex flex-col justify-end relative overflow-hidden`}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
             <motion.div
               layoutId={`title-${item.id}`}
-              class="text-xl font-bold m-0 z-10 relative"
+              layout="position"
+              class="text-lg font-bold m-0 z-10 relative"
             >
               {item.title}
             </motion.div>
             <motion.div
               layoutId={`subtitle-${item.id}`}
-              class="opacity-80 text-sm m-0 mt-1 z-10 relative"
+              layout="position"
+              class="opacity-80 text-xs m-0 mt-1 z-10 relative"
             >
               {item.subtitle}
             </motion.div>
@@ -70,7 +73,6 @@ export const ExpandableCard = () => {
               const selectedItem = items.find((i) => i.id === id());
               return (
                 <div class="absolute inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-                  {/* Backdrop */}
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -79,21 +81,23 @@ export const ExpandableCard = () => {
                     class="absolute inset-0 bg-black/20 backdrop-blur-sm pointer-events-auto"
                   />
 
-                  {/* Expanded Card */}
                   <motion.div
                     layoutId={`card-${id()}`}
-                    class={`w-full max-w-sm sm:max-w-md ${selectedItem?.color} rounded-3xl shadow-2xl overflow-hidden relative pointer-events-auto flex flex-col`}
+                    layout
+                    class={`w-full max-w-sm ${selectedItem?.color} rounded-3xl shadow-2xl overflow-hidden relative pointer-events-auto flex flex-col`}
                     style={{ height: "450px" }}
                   >
                     <div class="p-8 pb-4 relative z-10">
                       <motion.div
                         layoutId={`title-${id()}`}
+                        layout="position"
                         class="text-3xl font-bold m-0"
                       >
                         {selectedItem?.title}
                       </motion.div>
                       <motion.div
                         layoutId={`subtitle-${id()}`}
+                        layout="position"
                         class="opacity-80 text-lg m-0 mt-2"
                       >
                         {selectedItem?.subtitle}

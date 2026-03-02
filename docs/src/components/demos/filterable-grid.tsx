@@ -34,10 +34,10 @@ export const FilterableGrid = () => {
     <Animation
       name="Filterable Grid"
       source={source}
-      class="min-h-[400px] w-full p-4 relative overflow-visible"
+      class="min-h-[400px] w-full p-4"
     >
       <div class="w-full flex flex-col relative h-full">
-        <div class="flex flex-wrap gap-2 mb-8 justify-center z-20 sticky top-0 bg-card/80 backdrop-blur py-2">
+        <div class="flex flex-wrap gap-2 mb-8 justify-center z-20">
           <For each={categories}>
             {(category) => (
               <button
@@ -61,13 +61,18 @@ export const FilterableGrid = () => {
           </For>
         </div>
 
-        <div class="flex-1 w-full max-w-lg mx-auto relative overflow-hidden">
-          <motion.div layout class="grid grid-cols-2 gap-4">
+        <div class="flex-1 w-full max-w-lg mx-auto">
+          <motion.div
+            layout
+            layoutDependency={filter}
+            class="grid grid-cols-2 gap-4"
+          >
             <AnimatePresence>
               <For each={filteredItems()}>
                 {(item) => (
                   <motion.div
                     layout
+                    layoutDependency={filter}
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.8, opacity: 0 }}

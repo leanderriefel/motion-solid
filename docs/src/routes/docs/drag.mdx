@@ -24,9 +24,9 @@ Limit drag range with a bounding box or element reference.
 ```tsx
 let container!: HTMLDivElement;
 
-<div ref={(el) => (container = el)} class="relative">
+<div ref={container} class="relative">
   <motion.div drag dragConstraints={container} />
-</div>
+</div>;
 ```
 
 ### Object Constraints
@@ -123,17 +123,11 @@ Combine with `whileDrag` for visual feedback:
 ## Example: Slider
 
 ```tsx
-import { motion } from "motion-solid";
-import { createSignal } from "solid-js";
-
 function Slider() {
   const [value, setValue] = createSignal(50);
   let track!: HTMLDivElement;
 
-  const handleDrag = (
-    _e: PointerEvent,
-    info: { point: { x: number } },
-  ) => {
+  const handleDrag = (e, info) => {
     const rect = track.getBoundingClientRect();
     const percent = Math.max(
       0,
@@ -143,7 +137,7 @@ function Slider() {
   };
 
   return (
-    <div ref={(el) => (track = el)} class="slider-track">
+    <div ref={track} class="slider-track">
       <motion.div
         drag="x"
         dragConstraints={track}
@@ -160,43 +154,29 @@ function Slider() {
 ## Example: Bottom Sheet
 
 ```tsx
-import { AnimatePresence, motion } from "motion-solid";
-import type { Accessor } from "solid-js";
-import type { JSX } from "solid-js";
-import { Show } from "solid-js";
-
-function BottomSheet(props: {
-  open: Accessor<boolean>;
-  onClose: () => void;
-  children: JSX.Element;
-}) {
-  const handleDragEnd = (
-    _e: PointerEvent,
-    info: { offset: { y: number }; velocity: { y: number } },
-  ) => {
+function BottomSheet(props: { open: Accessor<boolean>; onClose: () => void }) {
+  const handleDragEnd = (e, info) => {
     if (info.offset.y > 100 || info.velocity.y > 500) {
       props.onClose();
     }
   };
 
   return (
-    <AnimatePresence>
-      <Show when={props.open()}>
-        <motion.div
-          initial={{ y: "100%" }}
-          animate={{ y: 0 }}
-          exit={{ y: "100%" }}
-          drag="y"
-          dragConstraints={{ top: 0, bottom: 0 }}
-          dragElastic={{ top: 0, bottom: 0.5 }}
-          onDragEnd={handleDragEnd}
-          class="bottom-sheet"
-        >
-          <div class="handle" />
-          {props.children}
-        </motion.div>
-      </Show>
-    </AnimatePresence>
+    <Show when={props.open()}>
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.5 }}
+        onDragEnd={handleDragEnd}
+        class="bottom-sheet"
+      >
+        <div class="handle" />
+        {props.children}
+      </motion.div>
+    </Show>
   );
 }
 ```

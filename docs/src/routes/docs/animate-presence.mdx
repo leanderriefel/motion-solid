@@ -6,7 +6,7 @@ AnimatePresence enables exit animations for components leaving the tree. Without
 
 ```tsx
 import { AnimatePresence, motion } from "motion-solid";
-import { createSignal, Show } from "solid-js";
+import { Show } from "solid-js";
 
 function Toast() {
   const [visible, setVisible] = createSignal(true);
@@ -48,10 +48,10 @@ Entering elements wait for all exits to complete:
 
 ```tsx
 <AnimatePresence mode="wait">
-  <Show when={tab() === "a"} fallback={null}>
+  <Show when={tab() === "a"}>
     <motion.div exit={{ opacity: 0 }} />
   </Show>
-  <Show when={tab() === "b"} fallback={null}>
+  <Show when={tab() === "b"}>
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
   </Show>
 </AnimatePresence>
@@ -246,7 +246,7 @@ Plan accordingly: compute what you need before the exit starts.
 
 ```tsx
 import { AnimatePresence, motion } from "motion-solid";
-import { createSignal, Key } from "solid-js";
+import { createSignal } from "solid-js";
 
 const variants = {
   enter: (direction: number) => ({
@@ -272,23 +272,20 @@ function Slides() {
   return (
     <>
       <AnimatePresence custom={direction()} mode="wait">
-        <Key each={[page()]}>
-          {(p) => (
-            <motion.div
-              variants={variants}
-              custom={direction()}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.3 }}
-            >
-              Page {p()}
-            </motion.div>
-          )}
-        </Key>
+        <motion.div
+          key={page()}
+          variants={variants}
+          custom={direction()}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ duration: 0.3 }}
+        >
+          Page {page()}
+        </motion.div>
       </AnimatePresence>
-      <button type="button" onClick={() => paginate(-1)}>Prev</button>
-      <button type="button" onClick={() => paginate(1)}>Next</button>
+      <button onClick={() => paginate(-1)}>Prev</button>
+      <button onClick={() => paginate(1)}>Next</button>
     </>
   );
 }

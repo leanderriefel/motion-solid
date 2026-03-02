@@ -57,10 +57,10 @@ const item = {
 };
 
 <For each={items()}>
-  {(item, index) => (
+  {(item, i) => (
     <motion.div
       variants={variants}
-      custom={index()}
+      custom={i()}
       initial="hidden"
       animate="visible"
     />
@@ -192,9 +192,6 @@ function StaggeredList(props: { items: string[] }) {
 ## Example: Expandable Card
 
 ```tsx
-import { motion } from "motion-solid";
-import { createSignal } from "solid-js";
-
 const card = {
   collapsed: {
     height: 60,

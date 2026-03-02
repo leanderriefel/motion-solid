@@ -36,22 +36,17 @@ Use `layoutId` to animate between two elements that represent the same entity:
 
 ```tsx
 import { motion } from "motion-solid";
-import type { Accessor } from "solid-js";
 import { Show } from "solid-js";
 
-function Card(props: { expanded: Accessor<boolean>; onToggle: () => void }) {
+function Card({ expanded, onToggle }) {
   return (
     <Show
-      when={props.expanded()}
+      when={expanded()}
       fallback={
-        <motion.div
-          layoutId="card"
-          onClick={props.onToggle}
-          class="card-small"
-        />
+        <motion.div layoutId="card" onClick={onToggle} class="card-small" />
       }
     >
-      <motion.div layoutId="card" onClick={props.onToggle} class="card-large" />
+      <motion.div layoutId="card" onClick={onToggle} class="card-large" />
     </Show>
   );
 }
@@ -118,15 +113,15 @@ Mark scroll containers for accurate layout measurements:
 
 ```tsx
 import { motion, AnimatePresence } from "motion-solid";
-import { createSignal, For } from "solid-js";
+import { For, createSignal } from "solid-js";
 
 function ReorderableList() {
   const [items, setItems] = createSignal(["A", "B", "C", "D"]);
 
   const moveUp = (index: number) => {
     if (index === 0) return;
-    setItems((prev) => {
-      const newItems = [...prev];
+    setItems((items) => {
+      const newItems = [...items];
       [newItems[index - 1], newItems[index]] = [
         newItems[index],
         newItems[index - 1],
@@ -136,23 +131,21 @@ function ReorderableList() {
   };
 
   return (
-    <motion.ul layout layoutDependencies={[items]} class="list-none p-0">
-      <AnimatePresence>
-        <For each={items()}>
-          {(item, index) => (
-            <motion.li
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              {item}
-              <button onClick={() => moveUp(index())}>Move up</button>
-            </motion.li>
-          )}
-        </For>
-      </AnimatePresence>
-    </motion.ul>
+    <ul>
+      <For each={items()}>
+        {(item, index) => (
+          <motion.li
+            layout
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {item}
+            <button onClick={() => moveUp(index())}>Move up</button>
+          </motion.li>
+        )}
+      </For>
+    </ul>
   );
 }
 ```
@@ -160,28 +153,23 @@ function ReorderableList() {
 ## Example: Tab Indicator
 
 ```tsx
-import { motion, AnimatePresence } from "motion-solid";
-import { createSignal, For, Show } from "solid-js";
-
 function Tabs() {
   const [active, setActive] = createSignal(0);
   const tabs = ["Overview", "Details", "Settings"];
 
   return (
-    <motion.div layout layoutDependencies={[active]} class="tabs flex gap-2">
+    <div class="tabs">
       <For each={tabs}>
         {(tab, index) => (
-          <button type="button" onClick={() => setActive(index())}>
+          <button onClick={() => setActive(index())}>
             {tab}
-            <AnimatePresence>
-              <Show when={active() === index()}>
-                <motion.div layoutId="underline" class="underline" />
-              </Show>
-            </AnimatePresence>
+            <Show when={active() === index()}>
+              <motion.div layoutId="underline" class="underline" />
+            </Show>
           </button>
         )}
       </For>
-    </motion.div>
+    </div>
   );
 }
 ```

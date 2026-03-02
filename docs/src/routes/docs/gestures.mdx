@@ -93,16 +93,10 @@ Pan info object contains: `point` (current position), `delta` (movement since la
 ### Example: Swipe Detection
 
 ```tsx
-import { motion } from "motion-solid";
-import { createSignal } from "solid-js";
-
 function Swipeable() {
   const [offset, setOffset] = createSignal(0);
 
-  const handlePanEnd = (
-    _e: PointerEvent,
-    info: { offset: { x: number }; point: { x: number } },
-  ) => {
+  const handlePanEnd = (e, info) => {
     if (Math.abs(info.offset.x) > 100) {
       setOffset(info.offset.x > 0 ? 200 : -200);
     } else {
@@ -114,7 +108,7 @@ function Swipeable() {
     <motion.div
       animate={{ x: offset() }}
       onPanEnd={handlePanEnd}
-      style={{ "touch-action": "pan-y" }}
+      style={{ touchAction: "pan-y" }}
     />
   );
 }
@@ -127,8 +121,6 @@ When multiple gestures are active, they layer in this order: Drag (highest), Pan
 ## Example: Interactive Card
 
 ```tsx
-import { motion } from "motion-solid";
-
 function InteractiveCard(props: { title: string }) {
   return (
     <motion.div
@@ -147,9 +139,6 @@ function InteractiveCard(props: { title: string }) {
 ## Example: Scroll Reveal
 
 ```tsx
-import { motion } from "motion-solid";
-import type { JSX } from "solid-js";
-
 function ScrollReveal(props: { children: JSX.Element }) {
   return (
     <motion.div
