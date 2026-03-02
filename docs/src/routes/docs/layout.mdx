@@ -184,4 +184,4 @@ function Tabs() {
 - Shared `layoutId` handoff state is cleared after completion, preventing stale shared-element flashes during unrelated layout updates
 - Layout projection now runs through explicit internal phases (`snapshot` -> `measure` -> `resolve` -> `projection`) with stale shared-state expiry checks for shared handoffs
 - Retargeting while a layout animation is in flight now snapshots from the current visual state before resolving the next target, avoiding restart-from-origin jumps
-- For high-complexity cases (nested presence, shared `layoutId`, scroll roots, and grid reflow), see `/docs/demos` examples: **Complex Layout Board**, **Nested Presence + Shared layoutId**, and **Scroll + Sticky Layout**
+- For high-complexity cases (nested presence, shared `layoutId`, scroll roots, and grid reflow), see `/docs/demos` examples: **Expandable Card** and **Filterable Grid**

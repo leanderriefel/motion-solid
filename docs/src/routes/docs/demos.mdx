@@ -8,9 +8,8 @@ import { LayoutPositionAnimation } from "~/components/demos/layout-position-anim
 import { LayoutUnderlineAnimation } from "~/components/demos/layout-underline-animation";
 import { ScrollAnimation } from "~/components/demos/scroll-animation";
 import { AnimatingLayoutBar } from "~/components/demos/animating-layout-bar";
-import { ComplexLayoutBoard } from "~/components/demos/complex-layout-board";
-import { NestedPresenceLayoutId } from "~/components/demos/nested-presence-layoutid";
-import { LayoutScrollSticky } from "~/components/demos/layout-scroll-sticky";
+import { ExpandableCard } from "~/components/demos/expandable-card";
+import { FilterableGrid } from "~/components/demos/filterable-grid";
 
 # Demos
 
@@ -72,23 +71,17 @@ Layout animation demonstrating bar resizing.
 
 <AnimatingLayoutBar />
 
-## Complex Layout Board
+## Expandable Card
 
-Grid reflow, nested presence sections, dynamic card insertion/removal, and layout dependency stress.
+A classic shared \`layoutId\` demo where tapping a card expands it into a modal. Notice how the text and background seamlessly morph between states.
 
-<ComplexLayoutBoard />
+<ExpandableCard />
 
-## Nested Presence + Shared layoutId
+## Filterable Grid
 
-Combines shared element transitions with nested `AnimatePresence` in `sync`, `wait`, and `popLayout` modes.
+Demonstrates grid reflow with \`layout\` combined with enter and exit animations using \`AnimatePresence\`.
 
-<NestedPresenceLayoutId />
-
-## Scroll + Sticky Layout
-
-Demonstrates `layoutScroll`, `layoutRoot`, sticky pinned regions, and shared layout transitions in one flow.
-
-<LayoutScrollSticky />
+<FilterableGrid />
 
 ## Exit Animation
 
