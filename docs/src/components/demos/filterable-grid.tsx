@@ -35,7 +35,6 @@ export const FilterableGrid = () => {
       name="Filterable Grid"
       source={source}
       class="min-h-[400px] w-full p-4"
-      wrapperClass="justify-start items-start"
     >
       <div class="w-full flex flex-col relative h-full">
         <div class="flex flex-wrap gap-2 mb-8 justify-center z-20">
@@ -63,8 +62,12 @@ export const FilterableGrid = () => {
         </div>
 
         <div class="flex-1 w-full max-w-lg mx-auto">
-          <div class="grid grid-cols-2 gap-4">
-            <AnimatePresence mode="popLayout">
+          <motion.div
+            layout
+            layoutDependency={filter}
+            class="grid grid-cols-2 gap-4"
+          >
+            <AnimatePresence>
               <For each={filteredItems()}>
                 {(item) => (
                   <motion.div
@@ -81,7 +84,7 @@ export const FilterableGrid = () => {
                 )}
               </For>
             </AnimatePresence>
-          </div>
+          </motion.div>
         </div>
       </div>
     </Animation>

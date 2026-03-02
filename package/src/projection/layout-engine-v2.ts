@@ -756,10 +756,7 @@ class ProjectionNodeImpl {
     if (canSkip) return;
 
     const { layout, layoutId } = this.options;
-    if (!this.layout) return;
-
-    // Skip projection for elements with only layoutId (no layout)
-    if (layoutId && !layout) return;
+    if (!this.layout || !(layout || layoutId)) return;
 
     this.resolvedRelativeTargetAt = this.manager.frameTimestamp;
 
@@ -853,11 +850,7 @@ class ProjectionNodeImpl {
     }
 
     const { layout, layoutId } = this.options;
-    if (!this.layout) return;
-
-    // Skip projection for elements with only layoutId (no layout)
-    // They should follow the shared layout transition without their own projection
-    if (layoutId && !layout) return;
+    if (!this.layout || !(layout || layoutId)) return;
 
     copyBoxInto(this.layoutCorrected, this.layout.layoutBox);
 
