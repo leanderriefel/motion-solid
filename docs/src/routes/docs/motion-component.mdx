@@ -173,7 +173,7 @@ Called on every render with the latest values:
 
 ### `onAnimationStart` / `onAnimationComplete`
 
-Fired when the `animate` target starts or finishes:
+Fired when the `animate` target starts or finishes. `onAnimationComplete` fires exactly once per completed animate cycle. If an animation is interrupted or replaced by a new reactive update before it settles, the stale cycle's callback is suppressed.
 
 ```tsx
 <motion.div

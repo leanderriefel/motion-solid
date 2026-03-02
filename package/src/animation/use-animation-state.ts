@@ -629,7 +629,11 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
   const running = new Map<
     string,
-    { type: AnimationType; controls: AnimationPlaybackControlsWithThen }
+    {
+      type: AnimationType;
+      controls: AnimationPlaybackControlsWithThen;
+      cycleId: number;
+    }
   >();
   const prevKeyframes = new Map<string, unknown>();
   const prevType = new Map<string, AnimationType>();
@@ -656,6 +660,11 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   let exitCycleId = 0;
   let wasExiting = false;
   let scheduledExitCycleId: number | null = null;
+
+  // Per-type completion cycle tracking to prevent duplicate onAnimationComplete
+  // callbacks when reactive reruns attach multiple .then() handlers on the same
+  // in-flight or already-settled animation promises.
+  const typeCycleIds: Partial<Record<AnimationType, number>> = {};
 
   createEffect(() => {
     if (didApplyInitial) return;
@@ -1090,6 +1099,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
      */
     const startAnimations = () => {
       const startedKeys: string[] = [];
+      // Track which types actually started new animations in this run,
+      // so we can schedule exactly one completion watcher per type-cycle.
+      const startedTypeKeys = new Map<AnimationType, string[]>();
 
       for (const [key, type] of nextActiveKeyToType.entries()) {
         const keyframes = nextActiveKeyToKeyframes.get(key);
@@ -1171,7 +1183,14 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
         });
 
         if (controls) {
-          running.set(key, { type, controls });
+          // Bump cycle for this type if this is the first key started in this run
+          if (!startedTypeKeys.has(type)) {
+            typeCycleIds[type] = (typeCycleIds[type] ?? 0) + 1;
+            startedTypeKeys.set(type, []);
+          }
+          const cycleId = typeCycleIds[type]!;
+          running.set(key, { type, controls, cycleId });
+          startedTypeKeys.get(type)!.push(key);
           startedKeys.push(key);
         }
 
@@ -1193,6 +1212,97 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           options.onAnimationStart(
             resolvedTargetsByType.animate as MotionAnimationDefinition,
           );
+        }
+      }
+
+      // Schedule completion watchers for types that started animations in this
+      // run. Each watcher is guarded by cycle ID so stale/replaced runs from
+      // reactive reruns cannot fire duplicate callbacks.
+      for (const [type, keys] of startedTypeKeys.entries()) {
+        const cycleId = typeCycleIds[type]!;
+        const target = activeTargetsByType[type];
+        if (!target) continue;
+
+        const typePromises = keys
+          .map((k) => running.get(k))
+          .filter(
+            (
+              v,
+            ): v is {
+              type: AnimationType;
+              controls: AnimationPlaybackControlsWithThen;
+              cycleId: number;
+            } => Boolean(v && v.type === type && v.cycleId === cycleId),
+          )
+          .map((v) => v.controls.finished);
+
+        if (typePromises.length > 0) {
+          void Promise.allSettled(typePromises).then(() => {
+            // Guard: skip if unmounted or if a newer cycle has superseded
+            if (isUnmounted) return;
+            if (typeCycleIds[type] !== cycleId) return;
+
+            // Call onAnimationComplete callback for animate type only
+            if (
+              type === "animate" &&
+              typeof options.onAnimationComplete === "function"
+            ) {
+              options.onAnimationComplete(target as MotionAnimationDefinition);
+            }
+
+            // Signal parent orchestration that this component's animation completed
+            if (type === "animate" && signalAnimationComplete) {
+              signalAnimationComplete();
+            }
+
+            // For beforeChildren: signal that children can now start
+            if (type === "animate" && childOrchestration) {
+              const when = childOrchestration.getWhen();
+              if (when === "beforeChildren") {
+                childOrchestration.signalParentComplete();
+              }
+            }
+
+            // Apply transitionEnd values for all animation types
+            const end = target.transitionEnd;
+            const shouldApplyAuto =
+              type === "animate" && autoTransitionEnd.size > 0;
+
+            if (
+              (end && typeof end === "object" && end !== null) ||
+              shouldApplyAuto
+            ) {
+              const mergedEnd: Record<string, string | number> = {};
+
+              if (end && typeof end === "object" && end !== null) {
+                for (const [k, v] of Object.entries(end)) {
+                  if (!isStringOrNumber(v)) continue;
+                  mergedEnd[k] = v;
+                }
+              }
+
+              if (shouldApplyAuto) {
+                for (const [k, v] of autoTransitionEnd.entries()) {
+                  if (mergedEnd[k] === undefined) mergedEnd[k] = v;
+                }
+              }
+
+              // Use frame.update() to batch the transitionEnd value application
+              // This ensures the "auto" value is applied at the right time in the
+              // frame loop, after all animations have rendered their final state.
+              frame.update(() => {
+                for (const [k, v] of Object.entries(mergedEnd)) {
+                  const existing = state.values[k];
+                  if (!existing) continue;
+                  if (typeof v === "number") {
+                    (existing as MotionValue<number>).set(v);
+                  } else {
+                    (existing as MotionValue<string>).set(v);
+                  }
+                }
+              });
+            }
+          });
         }
       }
     };
@@ -1222,95 +1332,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       startAnimations();
     }
 
-    // If the currently active \"animate\" definition finished, call onAnimationComplete.
-    // We approximate \"finished\" as \"all keys currently controlled by animate have finished\".\
-    // Also apply transitionEnd for all animation types, not just animate.
-    for (const type of animationTypes) {
-      const target = activeTargetsByType[type];
-      if (!target) continue;
-
-      const typeKeys = Object.keys(target).filter(
-        (k) => k !== "transition" && k !== "transitionEnd",
-      );
-
-      const typePromises = typeKeys
-        .map((k) => running.get(k))
-        .filter(
-          (
-            v,
-          ): v is {
-            type: AnimationType;
-            controls: AnimationPlaybackControlsWithThen;
-          } => Boolean(v && v.type === type),
-        )
-        .map((v) => v.controls.finished);
-
-      if (typePromises.length > 0) {
-        void Promise.allSettled(typePromises).then(() => {
-          // Call onAnimationComplete callback for animate type only
-          if (
-            type === "animate" &&
-            typeof options.onAnimationComplete === "function"
-          ) {
-            options.onAnimationComplete(target as MotionAnimationDefinition);
-          }
-
-          // Signal parent orchestration that this component's animation completed
-          if (type === "animate" && signalAnimationComplete) {
-            signalAnimationComplete();
-          }
-
-          // For beforeChildren: signal that children can now start
-          if (type === "animate" && childOrchestration) {
-            const when = childOrchestration.getWhen();
-            if (when === "beforeChildren") {
-              childOrchestration.signalParentComplete();
-            }
-          }
-
-          // Apply transitionEnd values for all animation types
-          const end = target.transitionEnd;
-          const shouldApplyAuto =
-            type === "animate" && autoTransitionEnd.size > 0;
-
-          if (
-            (end && typeof end === "object" && end !== null) ||
-            shouldApplyAuto
-          ) {
-            const mergedEnd: Record<string, string | number> = {};
-
-            if (end && typeof end === "object" && end !== null) {
-              for (const [k, v] of Object.entries(end)) {
-                if (!isStringOrNumber(v)) continue;
-                mergedEnd[k] = v;
-              }
-            }
-
-            if (shouldApplyAuto) {
-              for (const [k, v] of autoTransitionEnd.entries()) {
-                if (mergedEnd[k] === undefined) mergedEnd[k] = v;
-              }
-            }
-
-            // Use frame.update() to batch the transitionEnd value application
-            // This ensures the "auto" value is applied at the right time in the
-            // frame loop, after all animations have rendered their final state.
-            frame.update(() => {
-              for (const [k, v] of Object.entries(mergedEnd)) {
-                const existing = state.values[k];
-                if (!existing) continue;
-                if (typeof v === "number") {
-                  (existing as MotionValue<number>).set(v);
-                } else {
-                  (existing as MotionValue<string>).set(v);
-                }
-              }
-            });
-          }
-        });
-      }
-    }
-
     // Handle exit animation completion
     if (presence && presenceId && isExiting) {
       if (scheduledExitCycleId === exitCycleId) return;
@@ -1336,6 +1357,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           ): v is {
             type: AnimationType;
             controls: AnimationPlaybackControlsWithThen;
+            cycleId: number;
           } => Boolean(v && v.type === "exit"),
         )
         .map((v) => v.controls.finished);

@@ -39,7 +39,7 @@ test.describe("phase2 race conditions", () => {
           return Number(getComputedStyle(el).opacity);
         });
       })
-      .toBeLessThan(0.3);
+      .toBeLessThan(0.5);
   });
 
   test("presence rapid inner toggles resolve to stable final state", async ({

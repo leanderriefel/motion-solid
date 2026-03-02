@@ -230,6 +230,7 @@ If docs are changed:
 
 ## Recent updates (2026-02-20)
 
+- `onAnimationComplete` now fires exactly once per completed animate cycle; stale/cancelled/replaced animation runs from reactive reruns no longer invoke duplicate callbacks. Completion scheduling is guarded by per-type cycle IDs inside `startAnimations()`.
 - Motion target typings now accept CSS custom property keys (`--*`) in `initial`/`animate`/`exit` targets, matching runtime behavior.
 - `AnimatePresence` `mode="popLayout"` now restores root inline `position`, `min-width`, and `min-height` after the last exit completes.
 - Shared `layoutId` handoff now synchronizes projection-node presence so exiting leads relegate to a still-present member instead of self-selecting.

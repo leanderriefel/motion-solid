@@ -6,7 +6,7 @@ import {
   runAction,
   waitForEventCount,
 } from "../utils/harness-client";
-import { byType } from "../utils/event-assertions";
+import { byType, byTypeAndNode } from "../utils/event-assertions";
 
 test.describe("phase1 callbacks", () => {
   test.beforeEach(async ({ page }) => {
@@ -129,5 +129,84 @@ test.describe("phase1 callbacks", () => {
     expect(attrs.animate).toBe(false);
     expect(attrs.exit).toBe(false);
     expect(attrs.transition).toBe(false);
+  });
+
+  test("rapid retargeting fires animationComplete exactly once for final target", async ({
+    page,
+  }) => {
+    // Wait for the initial mount animation to complete first
+    await waitForEventCount(page, "animationComplete", 1);
+    await clearEvents(page);
+
+    // Use a short duration so animations settle quickly
+    await runAction(page, "setDuration", 0.08);
+
+    // Fire rapid target changes — the sequence runs with 35ms intervals
+    await runAction(page, "runRapidTargets", [0.2, 0.8, 0.35, 1]);
+
+    // Wait long enough for all intermediate + final animations to settle
+    await page.waitForTimeout(600);
+
+    const events = await readEvents(page);
+    const completions = byType(events, "animationComplete");
+
+    // Only the final settled animation cycle should fire completion —
+    // intermediate interrupted cycles must NOT produce callbacks
+    expect(completions.length).toBe(1);
+  });
+
+  test("rapid hide/show does not multiply completion callbacks", async ({
+    page,
+  }) => {
+    // Wait for mount completion
+    await waitForEventCount(page, "animationComplete", 1);
+    await clearEvents(page);
+
+    await runAction(page, "setDuration", 0.08);
+
+    // Rapid hide then show — the element exits and re-enters
+    await runAction(page, "hide");
+    await page.waitForTimeout(40);
+    await runAction(page, "show");
+
+    // Wait for the re-entrance animation to complete
+    await waitForEventCount(page, "animationComplete", 1);
+
+    // Give extra time to catch any stale duplicate callbacks
+    await page.waitForTimeout(300);
+
+    const events = await readEvents(page);
+    const completions = byType(events, "animationComplete");
+
+    // Should get exactly 1 animationComplete from the re-entrance,
+    // not duplicates from stale promise handlers
+    expect(completions.length).toBe(1);
+  });
+
+  test("sequential completed cycles each fire exactly one callback", async ({
+    page,
+  }) => {
+    // Wait for mount completion
+    await waitForEventCount(page, "animationComplete", 1);
+    await clearEvents(page);
+
+    await runAction(page, "setDuration", 0.08);
+
+    // Cycle 1: change opacity and wait for completion
+    await runAction(page, "setOpacity", 0.5);
+    await waitForEventCount(page, "animationComplete", 1);
+
+    // Cycle 2: change opacity again and wait for completion
+    await runAction(page, "setOpacity", 0.9);
+    await waitForEventCount(page, "animationComplete", 2);
+
+    // Give extra time to ensure no late duplicates arrive
+    await page.waitForTimeout(200);
+
+    const events = await readEvents(page);
+    const completions = byType(events, "animationComplete");
+
+    // Exactly 2 completions — one per distinct settled cycle
+    expect(completions.length).toBe(2);
   });
 });
