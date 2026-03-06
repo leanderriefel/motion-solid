@@ -3,6 +3,7 @@ import { HTMLProjectionNode, visualElementStore } from "motion-dom";
 import { createSignal, type Component, type JSX } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { LayoutGroup, motion } from "../../src";
+import { useLayoutGroupContext } from "../../src/component/layout-group-context";
 
 type ForwardRefComponentProps = {
   ref?: (element: HTMLDivElement) => void;
@@ -78,6 +79,34 @@ describe("layout runtime", () => {
 
     const element = screen.getByTestId("isolated-layout");
     expect(getProjection(element)?.options.layoutId).toBe("inner-card");
+  });
+
+  it("remeasures grouped layout nodes when forceRender is called", async () => {
+    let forceRender: VoidFunction | undefined;
+
+    const Consumer = () => {
+      const context = useLayoutGroupContext();
+      forceRender = context.forceRender;
+      return null;
+    };
+
+    render(() => (
+      <LayoutGroup id="outer">
+        <Consumer />
+        <motion.div data-testid="grouped-layout-host" layout />
+      </LayoutGroup>
+    ));
+
+    const element = screen.getByTestId("grouped-layout-host");
+    const projection = getProjection(element);
+
+    expect(projection).toBeTruthy();
+    const willUpdate = vi.spyOn(projection!, "willUpdate");
+
+    forceRender?.();
+    await Promise.resolve();
+
+    expect(willUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("only remeasures layout when layoutDependency changes", async () => {

@@ -401,10 +401,16 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     updateProjectionOptions(initialProjectionOptions);
 
     createComputed<
-      { layoutDependency: unknown; isPresent: boolean } | undefined
+      | {
+          layoutDependency: unknown;
+          isPresent: boolean;
+          forceRenderVersion: number;
+        }
+      | undefined
     >((prev) => {
       const props = resolvedMotionOptions();
       const currentIsPresent = isPresent();
+      const forceRenderVersion = layoutGroup.forceRenderVersion?.() ?? 0;
 
       local.class;
       local.classList;
@@ -417,6 +423,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         return {
           layoutDependency: props.layoutDependency,
           isPresent: currentIsPresent,
+          forceRenderVersion,
         };
       }
 
@@ -426,7 +433,8 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       const shouldMeasure =
         props.layoutDependency === undefined ||
         prev?.layoutDependency !== props.layoutDependency ||
-        prev?.isPresent !== currentIsPresent;
+        prev?.isPresent !== currentIsPresent ||
+        prev?.forceRenderVersion !== forceRenderVersion;
 
       if (shouldMeasure) {
         hasTakenAnySnapshot = true;
@@ -437,6 +445,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       return {
         layoutDependency: props.layoutDependency,
         isPresent: currentIsPresent,
+        forceRenderVersion,
       };
     });
 

@@ -21,6 +21,7 @@ const shouldInheritId = (inherit: InheritOption) =>
 export const LayoutGroup: FlowComponent<LayoutGroupProps> = (props) => {
   const parent = useLayoutGroupContext();
   const [renderVersion, setRenderVersion] = createSignal(0);
+  const ownGroup = nodeGroup();
 
   const context = createMemo<LayoutGroupContextValue>(() => {
     const inherit = props.inherit ?? true;
@@ -35,13 +36,12 @@ export const LayoutGroup: FlowComponent<LayoutGroupProps> = (props) => {
     return {
       id,
       group: shouldInheritGroup(inherit)
-        ? (parent.group ?? nodeGroup())
-        : nodeGroup(),
+        ? (parent.group ?? ownGroup)
+        : ownGroup,
       forceRender: () => setRenderVersion((version) => version + 1),
+      forceRenderVersion: renderVersion,
     };
   });
-
-  renderVersion();
 
   return (
     <LayoutGroupContext.Provider value={context()}>

@@ -1,5 +1,3 @@
-"use client";
-
 import { createNoise3D } from "simplex-noise";
 import { onCleanup, onMount } from "solid-js";
 import { motion } from "motion-solid";
