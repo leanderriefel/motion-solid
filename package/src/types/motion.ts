@@ -8,7 +8,7 @@ import type {
   VariantLabels,
 } from "motion-dom";
 import type { AnimationType } from "../animation/types";
-import type { BoundingBox } from "motion-utils";
+import type { BoundingBox, Box } from "motion-utils";
 import type { ElementTag, SVGElements } from "./elements";
 
 /**
@@ -126,7 +126,6 @@ type TransitionOverrides<Tag extends ElementTag> = Partial<
   Record<MotionTargetKey<Tag>, TransitionOverrideValue>
 > & {
   default?: ValueTransition;
-  layout?: ValueTransition;
 };
 
 export type Transition<Tag extends ElementTag = ElementTag> = BaseTransition &
@@ -227,6 +226,7 @@ export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   | "onAnimationStart"
   | "onAnimationComplete"
 > & {
+  style?: MotionStyle;
   custom?: unknown;
   dragControls?: unknown;
   viewport?: SolidViewportOptions;
@@ -248,16 +248,17 @@ export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   ) => string;
   onAnimationStart?: (definition: MotionAnimationDefinition<Tag>) => void;
   onAnimationComplete?: (definition: MotionAnimationDefinition<Tag>) => void;
-  /**
-   * Track a single dependency that should trigger a layout measurement.
-   * Accepts either an Accessor (recommended) or a plain value.
-   */
+  layout?: boolean | "position" | "size" | "preserve-aspect";
+  layoutId?: string;
   layoutDependency?: unknown;
-  /**
-   * Track multiple dependencies that should trigger a layout measurement.
-   * Accepts Accessors (recommended) and/or plain values.
-   */
-  layoutDependencies?: unknown[];
+  layoutScroll?: boolean;
+  layoutRoot?: boolean;
+  layoutCrossfade?: boolean;
+  onBeforeLayoutMeasure?: (box: Box) => void;
+  onLayoutMeasure?: (box: Box, prevBox: Box) => void;
+  onLayoutAnimationStart?: () => void;
+  onLayoutAnimationComplete?: () => void;
+  "data-framer-portal-id"?: string;
 };
 
 export interface MotionState {

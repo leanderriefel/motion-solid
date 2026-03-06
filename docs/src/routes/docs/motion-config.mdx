@@ -59,7 +59,7 @@ When reduced motion is active:
 
 - Transform animations (x, y, scale, rotate, etc.) use `duration: 0`
 - Opacity animations still run
-- Layout animations are not automatically reduced
+- Non-transform animations can still use their configured transitions
 
 ```tsx
 // With reduced motion, this animates opacity instantly

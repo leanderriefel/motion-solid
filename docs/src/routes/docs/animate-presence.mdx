@@ -61,17 +61,15 @@ Useful for tab switches or page transitions where you want clean handoff.
 
 ### `popLayout`
 
-Exiting elements are taken out of the document flow while animating:
+Exiting elements are measured, pinned with absolute positioning, and removed from layout while they animate out:
 
 ```tsx
 <AnimatePresence mode="popLayout">
-  <For each={items()}>
-    {(item) => <motion.li layout exit={{ opacity: 0, scale: 0.5 }} />}
-  </For>
+  <Show when={visible()}>
+    <motion.div layout exit={{ opacity: 0 }} />
+  </Show>
 </AnimatePresence>
 ```
-
-This prevents layout shifts during exit animations. `popLayout` temporarily applies inline `position`, `min-width`, and `min-height` styles, then restores them after exits complete.
 
 ## Props
 
@@ -122,6 +120,29 @@ Callback when all exiting elements finish:
 </AnimatePresence>
 ```
 
+### `presenceAffectsLayout`
+
+Controls whether surrounding layout is forced to refresh when exiting nodes leave:
+
+```tsx
+<AnimatePresence presenceAffectsLayout={false}>{/* ... */}</AnimatePresence>
+```
+
+### `root`, `anchorX`, `anchorY`
+
+Used by `mode="popLayout"` to control where pinned exit styles are injected and how the exiting node is anchored:
+
+```tsx
+<AnimatePresence
+  mode="popLayout"
+  root={shadowRoot}
+  anchorX="right"
+  anchorY="bottom"
+>
+  {/* ... */}
+</AnimatePresence>
+```
+
 ### `propagate`
 
 When `true`, parent removal triggers child exit animations. Default `false`:
@@ -149,35 +170,6 @@ When `true`, parent removal triggers child exit animations. Default `false`:
   </Show>
 </AnimatePresence>
 ```
-
-## Complex Shared-Layout Coordination
-
-For route-like transitions, combine `AnimatePresence` mode control with shared `layoutId` and nested presence blocks:
-
-```tsx
-<AnimatePresence mode="popLayout" initial={false}>
-  <Show when={activeThread()}>
-    <motion.section layoutId={`thread-${activeThread()!.id}`} layout>
-      <AnimatePresence propagate>
-        <Show when={showMeta()}>
-          <motion.div
-            layout
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-          />
-        </Show>
-      </AnimatePresence>
-    </motion.section>
-  </Show>
-</AnimatePresence>
-```
-
-See `/docs/demos` → **Nested Presence + Shared layoutId** for a full stress demo with rapid switching.
-
-### `root`
-
-Root element for `popLayout` positioning. Useful with shadow DOM or portals.
 
 ## Hooks
 
@@ -241,6 +233,14 @@ This means:
 - Only the exit animation plays
 
 Plan accordingly: compute what you need before the exit starts.
+
+### Divergence
+
+This is the main behavioral difference from `motion/react`:
+
+- `onExitComplete`, `propagate`, `wait`, and `popLayout` are supported
+- retained DOM nodes still complete exit/layout handoff
+- async `safeToRemove` flows that depend on a still-live exiting subtree are not React-identical in Solid because that subtree owner has already been disposed
 
 ## Example: Slide Transitions
 

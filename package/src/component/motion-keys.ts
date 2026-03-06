@@ -12,10 +12,6 @@ export const motionKeys: readonly (keyof MotionOptions)[] = [
   "onUpdate",
   "onAnimationStart",
   "onAnimationComplete",
-  "onBeforeLayoutMeasure",
-  "onLayoutMeasure",
-  "onLayoutAnimationStart",
-  "onLayoutAnimationComplete",
 
   // pan
   "onPan",
@@ -67,16 +63,6 @@ export const motionKeys: readonly (keyof MotionOptions)[] = [
   "onDirectionLock",
   "onDragTransitionEnd",
 
-  // layout
-  "layout",
-  "layoutId",
-  "layoutScroll",
-  "layoutRoot",
-  "layoutCrossfade",
-  "layoutDependency",
-  "layoutDependencies",
-  "data-framer-portal-id",
-
   // advanced
   "custom",
   "inherit",
@@ -84,4 +70,17 @@ export const motionKeys: readonly (keyof MotionOptions)[] = [
   "values",
   "transformTemplate",
   "data-framer-appear-id",
+  "data-framer-portal-id",
+
+  // layout
+  "layout",
+  "layoutId",
+  "layoutDependency",
+  "layoutScroll",
+  "layoutRoot",
+  "layoutCrossfade",
+  "onBeforeLayoutMeasure",
+  "onLayoutMeasure",
+  "onLayoutAnimationStart",
+  "onLayoutAnimationComplete",
 ];

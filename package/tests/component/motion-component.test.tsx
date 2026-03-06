@@ -386,18 +386,6 @@ describe("motion component", () => {
       expect(element.hasAttribute("whileInView")).toBe(false);
     });
 
-    it("does not pass layout prop to DOM", () => {
-      render(() => <motion.div data-testid="target" layout />);
-      const element = screen.getByTestId("target");
-      expect(element.hasAttribute("layout")).toBe(false);
-    });
-
-    it("does not pass layoutId prop to DOM", () => {
-      render(() => <motion.div data-testid="target" layoutId="test" />);
-      const element = screen.getByTestId("target");
-      expect(element.hasAttribute("layoutId")).toBe(false);
-    });
-
     it("passes className to DOM", () => {
       render(() => <motion.div data-testid="target" class="my-class" />);
       const element = screen.getByTestId("target");

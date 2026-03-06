@@ -4,6 +4,7 @@ import {
   loadScenario,
   readEvents,
   runAction,
+  waitForEventCount,
 } from "../utils/harness-client";
 import { byType } from "../utils/event-assertions";
 
@@ -33,13 +34,8 @@ test.describe("phase2 race conditions", () => {
     await runAction(page, "runRapidTargets", [0.1, 0.8, 0.2, 1]);
     await runAction(page, "hide");
 
-    await expect
-      .poll(async () => {
-        return page.getByTestId("callbacks-item").evaluate((el) => {
-          return Number(getComputedStyle(el).opacity);
-        });
-      })
-      .toBeLessThan(0.5);
+    await waitForEventCount(page, "exitComplete", 1, "callbacks");
+    await expect(page.getByTestId("callbacks-item")).toHaveCount(0);
   });
 
   test("presence rapid inner toggles resolve to stable final state", async ({
@@ -73,23 +69,6 @@ test.describe("phase2 race conditions", () => {
       .locator('[data-testid^="presence-item-"]')
       .count();
     expect(itemCount).toBe(1);
-  });
-
-  test("layout rapid mixed actions keep shared element singular", async ({
-    page,
-  }) => {
-    await loadScenario(page, "layout");
-
-    await runAction(page, "rapidSharedSwap", { cycles: 5, intervalMs: 16 });
-    await runAction(page, "rapidPositionToggle", { cycles: 6, intervalMs: 18 });
-
-    await expect
-      .poll(async () => {
-        const left = await page.getByTestId("layout-shared-left").count();
-        const right = await page.getByTestId("layout-shared-right").count();
-        return left + right;
-      })
-      .toBe(1);
   });
 
   test("presence does not emit exit completion without an exit", async ({

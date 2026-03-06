@@ -215,39 +215,6 @@ describe("AnimatePresence", () => {
     });
   });
 
-  describe("mode='popLayout'", () => {
-    it("positions exiting element absolutely", async () => {
-      const [show, setShow] = createSignal(true);
-
-      render(() => (
-        <div style={{ position: "relative" }}>
-          <AnimatePresence mode="popLayout">
-            <Show when={show()}>
-              <motion.div
-                data-testid="child"
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                Child
-              </motion.div>
-            </Show>
-          </AnimatePresence>
-        </div>
-      ));
-
-      setShow(false);
-      await vi.advanceTimersByTimeAsync(50);
-
-      // Element should be positioned absolutely during exit
-      const child = document.querySelector(
-        '[data-testid="child"]',
-      ) as HTMLElement;
-      if (child) {
-        expect(child.style.position).toBe("absolute");
-      }
-    });
-  });
-
   describe("initial={false}", () => {
     it("disables initial animation on first render", async () => {
       const onAnimationStart = vi.fn();

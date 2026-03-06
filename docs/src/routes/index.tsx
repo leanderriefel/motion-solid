@@ -107,7 +107,7 @@ function CodeCard() {
 
   return (
     <div class="absolute inset-0 overflow-hidden flex items-center justify-center">
-      <AnimatePresence mode="popLayout">
+      <AnimatePresence>
         <For each={currentSnippet()}>
           {(snippet) => (
             <motion.pre
@@ -313,28 +313,22 @@ export default function Home() {
         >
           <div class="h-48 bg-muted/30 flex items-center justify-center relative overflow-hidden">
             <div class="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[24px_24px]" />
-            <div
-              class="w-32 h-16 bg-background border border-border rounded-full p-2 flex items-center shadow-sm"
-              style={{
-                "justify-content": toggled() ? "flex-end" : "flex-start",
-              }}
-            >
+            <div class="relative w-32 h-16 bg-background border border-border rounded-full p-2 shadow-sm">
               <motion.div
-                layout
-                layoutDependencies={[toggled]}
+                animate={{ x: toggled() ? 64 : 0 }}
                 transition={{
                   type: "spring",
                   stiffness: 300,
                   damping: 20,
                 }}
-                class="size-12 bg-primary rounded-full shadow-md"
+                class="absolute left-2 top-2 size-12 bg-primary rounded-full shadow-md"
               />
             </div>
           </div>
           <div class="p-6 flex items-center justify-center grow">
             <p class="text-foreground font-medium text-sm text-center">
-              Silky-smooth layout animations without ViewTransitions, keeping
-              interactivity intact.
+              Solid-friendly reactive animations without wrapper components or
+              browser-only transition APIs.
             </p>
           </div>
         </motion.div>

@@ -1,7 +1,5 @@
 import {
   createEffect,
-  createMemo,
-  createRenderEffect,
   createUniqueId,
   onCleanup,
   onMount,
@@ -56,11 +54,6 @@ import {
 } from "./variants";
 import type { PresenceContextValue } from "../component/presence";
 import type { MotionConfigContextValue } from "../component/motion-config";
-import {
-  createProjectionNode,
-  projectionManager,
-} from "../projection/layout-engine-v2";
-import type { ProjectionUpdate } from "../projection/node/types";
 import { MotionElement } from "./motion-element";
 
 type TransformTemplate = (
@@ -101,10 +94,6 @@ export interface AnimationStateOptions {
     waitForChildren: () => Promise<void>;
     signalParentComplete: () => void;
   } | null;
-  /**
-   * Get style prop values to restore when projection overrides inline styles.
-   */
-  getStyleValues?: () => Record<string, string | number> | undefined;
 }
 
 // Transform properties that should be disabled when reduced motion is active
@@ -124,7 +113,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     parentOrchestration,
     signalAnimationComplete,
     childOrchestration,
-    getStyleValues,
   } = args;
 
   const motionValueOwner: MotionValueOwner = {
@@ -137,7 +125,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   });
 
   const latestValues = new Map<string, AnyResolvedKeyframe>();
-  const projectionLatestValues: Record<string, string | number> = {};
   const waapiActiveKeys = new Set<string>();
   const renderState = createRenderState();
   const prevStyle = new Map<string, string>();
@@ -150,20 +137,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   let motionElement: MotionElement | null = null;
 
   const presenceId = presence ? createUniqueId() : null;
-
-  let projectionTransform: string | null = null;
-  let projectionTransformOrigin: string | null = null;
-  let projectionOpacity: number | null = null;
-  let prevProjectionOpacity: number | null = null;
-  let projectionStyles: Record<string, string | number> | null = null;
-  const prevProjectionStyleKeys = new Set<string>();
-  const projectionStyleKeys = new Set<string>();
-
-  let wasProjectionTransformActive = false;
-  let restoreInlineTransform: string | null = null;
-  let projectionBaseTransform: string | null = null;
-
-  let layoutNode: ReturnType<typeof createProjectionNode> | null = null;
 
   const findVariantAncestor = (
     type: AnimationType | "initial",
@@ -190,9 +163,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   const renderToDom = () => {
     const element = state.element;
     if (!element) return;
-    const styleValues = getStyleValues?.();
-    const styleTransform =
-      typeof styleValues?.transform === "string" ? styleValues.transform : null;
 
     // Reset render state for fresh computation
     renderState.style = {};
@@ -217,123 +187,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       values,
       options.transformTemplate as TransformTemplate | undefined,
     );
-
-    const hasMotionTransform = renderState.style.transform !== undefined;
-    const projectionIsActive =
-      projectionTransform !== null && projectionTransform !== "none";
-
-    if (projectionIsActive && !waapiTransformActive) {
-      const activeProjectionTransform = projectionTransform as string;
-
-      if (!wasProjectionTransformActive) {
-        restoreInlineTransform = element.style.transform;
-        // Snapshot the element's base transform before applying projection.
-        // We must not read computed transforms on subsequent frames because the computed
-        // value would include the projection transform we apply inline, causing compounding.
-        if (typeof getComputedStyle === "function") {
-          const computed = getComputedStyle(element).transform;
-          projectionBaseTransform = computed === "none" ? "" : computed;
-        } else {
-          projectionBaseTransform = restoreInlineTransform ?? "";
-        }
-        wasProjectionTransformActive = true;
-      }
-
-      let baseTransform = renderState.style.transform;
-
-      // If Motion isn't generating a transform, fall back to the snapshotted base transform.
-      // Never read computed styles here (see comment above).
-      if (baseTransform === undefined)
-        baseTransform = styleTransform ?? projectionBaseTransform ?? "";
-
-      const combinedTransform =
-        baseTransform === "" || baseTransform === "none"
-          ? activeProjectionTransform
-          : `${activeProjectionTransform} ${baseTransform}`;
-
-      renderState.style.transform = combinedTransform;
-    } else if (wasProjectionTransformActive && !waapiTransformActive) {
-      if (!hasMotionTransform) {
-        renderState.style.transform = restoreInlineTransform ?? "";
-      }
-
-      restoreInlineTransform = null;
-      projectionBaseTransform = null;
-      wasProjectionTransformActive = false;
-    }
-
-    if (projectionOpacity !== null && !waapiActiveKeys.has("opacity")) {
-      const baseOpacity = renderState.style.opacity;
-      if (baseOpacity === undefined) {
-        renderState.style.opacity = String(projectionOpacity);
-      } else {
-        const parsed = parseFloat(baseOpacity);
-        renderState.style.opacity = Number.isNaN(parsed)
-          ? baseOpacity
-          : String(parsed * projectionOpacity);
-      }
-    } else if (
-      prevProjectionOpacity !== null &&
-      !waapiActiveKeys.has("opacity") &&
-      renderState.style.opacity === undefined
-    ) {
-      renderState.style.opacity = "";
-    }
-
-    prevProjectionOpacity = projectionOpacity;
-    const projectionOverrides: Record<string, string | number> = {};
-
-    if (projectionStyles) {
-      for (const [key, value] of Object.entries(
-        projectionStyles as Record<string, string | number>,
-      )) {
-        projectionOverrides[key] = value;
-      }
-    }
-
-    if (projectionTransformOrigin !== null) {
-      projectionOverrides["transform-origin"] = projectionTransformOrigin;
-    }
-
-    const nextProjectionKeys = new Set(Object.keys(projectionOverrides));
-
-    for (const key of nextProjectionKeys) {
-      renderState.style[key] = String(projectionOverrides[key]);
-    }
-
-    if (prevProjectionStyleKeys.size > 0) {
-      for (const key of prevProjectionStyleKeys) {
-        if (nextProjectionKeys.has(key)) continue;
-        if (renderState.style[key] !== undefined) continue;
-
-        const baseValue = styleValues?.[key];
-        if (baseValue !== undefined) {
-          renderState.style[key] = String(baseValue);
-          continue;
-        }
-
-        const borderRadius = styleValues?.["border-radius"];
-        if (
-          borderRadius !== undefined &&
-          key.startsWith("border-") &&
-          key.endsWith("-radius")
-        ) {
-          const radiusValue = String(borderRadius);
-          if (renderState.style["border-radius"] === undefined) {
-            renderState.style["border-radius"] = radiusValue;
-          }
-          renderState.style[key] = radiusValue;
-          continue;
-        }
-
-        renderState.style[key] = "";
-      }
-    }
-
-    prevProjectionStyleKeys.clear();
-    for (const key of nextProjectionKeys) {
-      prevProjectionStyleKeys.add(key);
-    }
 
     // Apply styles (use setProperty to support kebab-case keys)
     for (const key in renderState.style) {
@@ -565,70 +418,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     }
   });
 
-  const applyProjection = (update: ProjectionUpdate, immediate: boolean) => {
-    projectionTransform = update.transform ?? null;
-    projectionTransformOrigin = update.transformOrigin ?? null;
-    projectionOpacity = update.opacity ?? null;
-    projectionStyles = update.styles ?? null;
-
-    if (immediate) {
-      renderToDom();
-    } else {
-      scheduleRender();
-    }
-  };
-
-  const layoutEnabled = createMemo(
-    () => Boolean(options.layout) || Boolean(options.layoutId),
-  );
-
-  const getLayoutNodeOptions = () => ({
-    layout: options.layout,
-    layoutId: options.layoutId,
-    crossfade: options.layoutCrossfade,
-    layoutScroll: options.layoutScroll,
-    layoutRoot: options.layoutRoot,
-    transition: options.transition as Transition | undefined,
-    onBeforeLayoutMeasure: options.onBeforeLayoutMeasure,
-    onLayoutMeasure: options.onLayoutMeasure,
-    onLayoutAnimationStart: options.onLayoutAnimationStart,
-    onLayoutAnimationComplete: options.onLayoutAnimationComplete,
-  });
-
-  createRenderEffect(() => {
-    const element = state.element;
-    if (!element || !layoutEnabled()) return;
-
-    const node = createProjectionNode({
-      element,
-      options: untrack(getLayoutNodeOptions),
-      apply: applyProjection,
-      render: renderToDom,
-      scheduleRender,
-      latestValues: projectionLatestValues,
-      getStyleValues,
-    });
-
-    layoutNode = node;
-    projectionManager.register(node);
-
-    onCleanup(() => {
-      projectionManager.unregister(node);
-      if (layoutNode === node) layoutNode = null;
-    });
-  });
-
-  createEffect(() => {
-    const enabled = layoutEnabled();
-    const nextOptions = getLayoutNodeOptions();
-    const node = layoutNode;
-
-    if (!enabled || !node) return;
-
-    projectionManager.updateNodeOptions(node, nextOptions);
-    // Layout measurements are scheduled by auto layout tracking.
-  });
-
   const running = new Map<
     string,
     {
@@ -721,20 +510,10 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       const latest = mv.get();
       latestValues.set(key, latest);
       setState("resolvedValues", key, latest);
-      if (isStringOrNumber(latest)) {
-        projectionLatestValues[key] = latest;
-      } else {
-        delete projectionLatestValues[key];
-      }
 
       const unsubscribe = mv.on("change", (next) => {
         latestValues.set(key, next as AnyResolvedKeyframe);
         setState("resolvedValues", key, next as AnyResolvedKeyframe);
-        if (isStringOrNumber(next)) {
-          projectionLatestValues[key] = next;
-        } else {
-          delete projectionLatestValues[key];
-        }
 
         /**
          * When `motion-dom` animates via WAAPI it doesn't emit per-frame MotionValue
@@ -777,40 +556,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   });
 
   createEffect(() => {
-    const styleValues = getStyleValues?.();
-    const nextProjectionStyleKeys = new Set<string>();
-    const hadProjectionStyles = projectionStyleKeys.size > 0;
-
-    if (styleValues) {
-      for (const [key, value] of Object.entries(styleValues)) {
-        if (!isStringOrNumber(value)) continue;
-        if (key !== "transform" && !isTransformProp(key)) continue;
-        if (latestValues.has(key)) continue;
-
-        projectionLatestValues[key] = value;
-        nextProjectionStyleKeys.add(key);
-      }
-    }
-
-    for (const key of projectionStyleKeys) {
-      if (nextProjectionStyleKeys.has(key)) continue;
-      if (latestValues.has(key)) continue;
-      delete projectionLatestValues[key];
-    }
-
-    projectionStyleKeys.clear();
-    for (const key of nextProjectionStyleKeys) {
-      projectionStyleKeys.add(key);
-    }
-
-    const node = layoutNode;
-    if (node && (hadProjectionStyles || nextProjectionStyleKeys.size > 0)) {
-      node.isTransformDirty = true;
-      node.scheduleUpdateProjection();
-    }
-  });
-
-  createEffect(() => {
     effectRunId++;
     const currentRunId = effectRunId;
 
@@ -824,22 +569,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     };
     const isPresent = presence?.isPresent() ?? true;
     const isExiting = presence ? !isPresent : false;
-    const projectionNode = layoutNode;
-
-    if (projectionNode) {
-      projectionNode.isPresent = isPresent;
-    }
 
     // Check if entrance animations are blocked (mode="wait" with pending exits)
     const entranceBlocked = presence?.isEntranceBlocked?.() ?? false;
-
-    if (!wasExiting && isExiting) {
-      const node = projectionNode;
-      if (node?.options.layoutId) {
-        node.isPresent = false;
-        node.relegate();
-      }
-    }
 
     if (wasExiting && !isExiting) {
       exitCycleId++;
@@ -1193,24 +925,14 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           };
         }
 
-        const projectionTransformActive =
-          projectionTransform !== null && projectionTransform !== "none";
-        const projectionOpacityActive = projectionOpacity !== null;
-
-        const canUseWaapi =
-          // Avoid fighting with projection writes which also target `transform`/`opacity`.
-          (key === "transform" || isTransformProp(key)
-            ? !projectionTransformActive
-            : true) &&
-          (key === "opacity" ? !projectionOpacityActive : true) &&
-          Boolean(
-            supportsBrowserAnimation<string | number>({
-              keyframes: keyframes as (string | number)[],
-              name: key,
-              motionValue: mv as MotionValue<string | number>,
-              ...(finalTransition as Record<string, unknown>),
-            }),
-          );
+        const canUseWaapi = Boolean(
+          supportsBrowserAnimation<string | number>({
+            keyframes: keyframes as (string | number)[],
+            name: key,
+            motionValue: mv as MotionValue<string | number>,
+            ...(finalTransition as Record<string, unknown>),
+          }),
+        );
 
         const controls = startMotionValueAnimation({
           name: key,

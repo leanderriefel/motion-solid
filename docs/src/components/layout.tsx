@@ -45,10 +45,6 @@ const docsNav = [
     ],
   },
   {
-    title: "Layout",
-    items: [{ href: "/docs/layout", label: "Layout" }],
-  },
-  {
     title: "Reference",
     items: [{ href: "/docs/api-reference", label: "API Reference" }],
   },

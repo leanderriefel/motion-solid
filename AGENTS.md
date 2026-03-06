@@ -91,12 +91,15 @@ Docs (`@motion-solid/docs`) commands:
 
 - Align semantics with Framer Motion internals for:
   - variant resolution and inheritance
-  - transition overrides (`default`, per-key, `layout`)
+  - transition overrides (`default`, per-key)
   - gesture layering precedence
   - AnimatePresence lifecycle and exit handoff
-  - layout/layoutId projection behavior
+  - layout animation props (`layout`, `layoutId`, `layoutDependency`, `layoutScroll`, `layoutRoot`, `layoutCrossfade`)
+  - `LayoutGroup`, shared layout handoff, and `AnimatePresence mode="popLayout"`
 - Before changing behavior, verify parity assumptions in source and tests.
 - If parity is impossible due to Solid runtime differences, document the exact behavior and rationale.
+- Current documented divergence:
+  - Solid disposes exiting component owners, so the exiting subtree does not remain reactively alive the way `motion/react` can. Retained exit nodes complete through a DOM-side exit callback bridge. `onExitComplete`, `propagate`, and DOM-backed exit handoff are parity targets; long-lived async `safeToRemove` flows inside an already-removed subtree are not React-identical and must stay explicitly documented.
 
 ## Architecture deep dive
 
@@ -111,25 +114,31 @@ Docs (`@motion-solid/docs`) commands:
 - Motion props are split using `splitProps(..., motionKeys)`.
 - `MotionConfig` defaults are merged into per-component options.
 - Presence-aware overrides are applied (`initial`, `custom`, entrance blocking behavior).
-- A Motion state store (`createMotionState`) tracks:
-  - DOM element ref
-  - MotionValues map
-  - resolved/current goals
-  - active gestures
-  - active variants
-  - parent linkage for inheritance
+- Runtime state now lives in upstream `motion-dom` `VisualElement` instances:
+  - `HTMLVisualElement` / `SVGVisualElement`
+  - `latestValues`
+  - render state
+  - projection node
+  - animation state
+  - variant tree
+  - presence context
+- Solid-specific wiring is layered around that runtime in:
+  - `package/src/component/create-dom-visual-element.ts`
+  - `package/src/component/visual-state.ts`
+  - `package/src/component/feature-definitions.ts`
+  - `package/src/component/create-motion-component.tsx`
 
 ### 3) Animation engine flow
 
-- Main hook: `useAnimationState` in `package/src/animation/use-animation-state.ts`.
-- Core responsibilities:
-  - resolve definitions (`initial`, `animate`, `exit`, `while*`) into concrete targets
-  - create missing MotionValues via `buildAnimationTypeMotionValues`
-  - schedule DOM writes through `frame.render`
-  - combine projection styles with animated styles safely
-  - manage WAAPI/native animation handoff and completion cleanup
-- Animation type priority currently follows `animationTypes` ordering in `package/src/animation/types.ts`.
-- Keep this precedence stable unless parity research and tests justify a change.
+- The live runtime is the upstream Motion feature pipeline hanging off `VisualElement.animationState`.
+- `createMotionComponent()` is responsible for:
+  - creating the correct `VisualElement`
+  - mounting/unmounting it against the DOM ref
+  - updating Motion props and presence context
+  - calling `updateFeatures()` / `animateChanges()`
+  - filtering DOM props and converting internal style keys back to DOM-safe output
+- `useAnimationState` remains in the repo for older/isolated helpers, but it is not the source of truth for the primary motion component runtime anymore.
+- Animation type priority should continue to follow upstream Motion ordering unless parity research and tests justify a change.
 
 ### 4) Variant resolution and inheritance
 
@@ -146,18 +155,33 @@ Docs (`@motion-solid/docs`) commands:
 - Presence context and hooks live in `package/src/component/presence.tsx`.
 - `AnimatePresence` supports `mode`: `sync`, `wait`, `popLayout`.
 - Exit lifecycle relies on retained DOM + completion signaling (`onExitComplete`) and exit handoff for unmounting motion components.
+- Because exiting Solid owners are disposed, retained exit nodes complete through a DOM-side callback bridge (`__motionHandleExitComplete`) instead of a live exiting subtree context.
 - Presence APIs expose Accessors and Solid-friendly semantics.
 
-### 6) Layout projection subsystem
+### 6) Layout and projection
 
-- Projection engine/manager: `package/src/projection/layout-engine-v2.ts`.
-- Handles:
-  - snapshot/measure/update cycles
-  - tree rebuild and parent path tracking
-  - layout and layoutId transitions
-  - crossfade/lead-follow stack behavior
-  - transform correction and scale correction
-- Changes here are high-risk; require integration + projection tests.
+- Layout support is implemented through upstream `motion-dom` projection nodes:
+  - `HTMLProjectionNode`
+  - `nodeGroup()`
+  - projection scale correctors for border radius and box shadow
+- Solid layout glue lives in:
+  - `package/src/component/layout-group.tsx`
+  - `package/src/component/layout-group-context.ts`
+  - `package/src/component/switch-layout-group-context.ts`
+  - `package/src/component/layout-hooks.ts`
+- The motion host mirrors Motion’s layout timing split:
+  - pre-commit snapshots via `createComputed(...projection.willUpdate())`
+  - post-commit flush via microtask `projection.root.didUpdate()`
+- Public layout surface includes:
+  - `layout`
+  - `layoutId`
+  - `layoutDependency`
+  - `layoutScroll`
+  - `layoutRoot`
+  - `layoutCrossfade`
+  - `LayoutGroup`
+  - `useInstantLayoutTransition`
+  - `useResetProjection`
 
 ### 7) Gestures and viewport
 
@@ -176,11 +200,13 @@ Docs (`@motion-solid/docs`) commands:
 - Public types: `package/src/types/motion.ts`
 - Motion prop allowlist: `package/src/component/motion-keys.ts`
 - Component wiring: `package/src/component/create-motion-component.tsx`
-- Animation behavior: `package/src/animation/use-animation-state.ts`
+- VisualElement wiring: `package/src/component/create-dom-visual-element.ts`
+- Visual state creation: `package/src/component/visual-state.ts`
+- Feature wiring: `package/src/component/feature-definitions.ts`
 - Variant logic: `package/src/animation/variants.ts`
 - Render/transform normalization: `package/src/animation/render.ts`
 - Presence behavior: `package/src/component/presence.tsx`
-- Layout projection: `package/src/projection/layout-engine-v2.ts`
+- Layout behavior: `package/src/component/layout-group.tsx`, `package/src/component/layout-hooks.ts`
 - Public exports: `package/src/index.ts`, `package/src/component/index.tsx`
 
 ## Testing policy
@@ -189,16 +215,15 @@ Primary suites (all under `package/tests`):
 
 - `animation/` for transitions, keyframes, variants, stagger, defaults
 - `component/` for motion component, config, presence hooks
-- `integration/` for enter/exit, orchestration, gestures, viewport, layout animation
-- `projection/` for geometry, scheduling, style correction, transform math
-- `playwright/` for browser-level race/layout/keyboard/reduced-motion scenarios
+- `integration/` for enter/exit, orchestration, gestures, viewport
+- `playwright/` for browser-level race/presence/keyboard/reduced-motion scenarios
 
 Required verification after meaningful library changes:
 
 - `bun --filter motion-solid typecheck`
 - `bun --filter motion-solid test`
 - `bun --filter motion-solid build`
-- `bun --filter motion-solid test:browser` (for gesture/presence/layout changes)
+- `bun --filter motion-solid test:browser` (for gesture/presence changes)
 
 If docs are changed:
 
@@ -206,11 +231,10 @@ If docs are changed:
 
 ## Performance and correctness guardrails
 
-- Minimize layout thrash: batch reads and writes, avoid repeated computed-style reads in loops.
 - Keep render scheduling explicit (`frame.render`, microtask/raf boundaries).
+- Avoid unnecessary computed-style reads in hot paths.
 - Do not regress exit handoff correctness.
-- Do not regress layout projection cleanup/reset behavior.
-- Preserve pointer-events/opacity/transform composition semantics when projection is active.
+- Preserve pointer-events/opacity/transform composition semantics across animated style updates.
 
 ## Change workflow checklist (must follow)
 
@@ -232,31 +256,14 @@ If docs are changed:
 
 - `onAnimationComplete` now fires exactly once per completed animate cycle; stale/cancelled/replaced animation runs from reactive reruns no longer invoke duplicate callbacks. Completion scheduling is guarded by per-type cycle IDs inside `startAnimations()`.
 - Motion target typings now accept CSS custom property keys (`--*`) in `initial`/`animate`/`exit` targets, matching runtime behavior.
-- `AnimatePresence` `mode="popLayout"` now restores root inline `position`, `min-width`, and `min-height` after the last exit completes.
-- Shared `layoutId` handoff now synchronizes projection-node presence so exiting leads relegate to a still-present member instead of self-selecting.
 - Function variant resolvers that return variant labels now resolve those labels against local `variants` instead of being discarded.
 - Nested `AnimatePresence` now gates parent-driven child exit handoff behind `propagate`, so `propagate={false}` does not trigger nested child exits on parent removal.
-- Projection transform building now sanitizes zero/non-finite tree scales before translate and inverse-scale math to avoid `Infinity`/`NaN` transform output.
 
-## Recent updates (2026-03-02)
+## Recent updates (2026-03-06)
 
-- Projection unmount handling now flushes active layout update cycles after child removal instead of prematurely failing checks, which preserves parent/sibling layout animations during complex exits.
-- Projection manager unregister now removes `nodeByElement` mappings using the captured instance before unmount clears it, preventing stale element-node lookups.
-- Layout projection animation completion is now guarded by per-start commit IDs so stale `finished` callbacks from replaced animations cannot complete newer runs.
-- WAAPI transform usage is now blocked for all transform props (not only literal `transform`) while projection transforms are active, avoiding transform fighting in complex layout transitions.
-- Style transform shortcuts are now fed into projection latest values (including translate alias normalization), improving transform-aware layout measurement parity.
-- `layoutDependency` (singular) is supported as a shorthand alongside `layoutDependencies`, and dependency tracking now supports both Accessors and plain values.
-- Projection transform detection now recognizes additional transform keys (`rotate-z`, `scale-z`, `translate-*`, `skew`, `perspective`, `transform-perspective`) with identity-aware checks.
-- Docs demos now include advanced layout stress scenarios: complex grid reflow, nested `AnimatePresence` + shared `layoutId`, and scroll/sticky projection with `layoutScroll` + `layoutRoot`.
-- Projection style-value plumbing now preserves full style fallback data (`border-radius`, `box-shadow`, etc.) while still exposing transform shortcuts for projection math, restoring scale-correction behavior during layout projection.
-- Tree projection math now applies ancestor transform values for non-shared layout transitions and accumulates ancestor scale factors into `treeScale`, improving transformed-ancestor measurement fidelity and reducing off-screen/over-scaled projection artifacts.
-- Transform-dirty invalidation now forces projection recalculation for non-shared nodes as well as shared nodes, so ancestor transform changes propagate reliably to descendants.
-- Projection composition now prefers current style-provided base transforms while projection is active, preventing stale base-transform snapshots when Solid style transforms update during a projection animation.
-- Generic `transform` strings are no longer treated as directly removable geometric transforms in projection utility checks, avoiding false transform-removal paths that produced incorrect layout measurements.
-- Complex docs demos (`Complex Layout Board`, `Nested Presence + layoutId`, `Scroll + Sticky Layout`) were stabilized by removing stale `Show` accessor captures (using keyed rendering for active detail panels), cleaning list-style artifacts, and removing fixed-height clipping in demo containers.
-- Shared `layoutId` projection completion now clears `resumeFrom` and node snapshots immediately after completion, preventing stale handoff state from retriggering crossfade/projection runs on unrelated layout updates.
-- Non-lead `layoutId` members now stay hidden when no projection target is resolved, so inactive shared elements do not flash/fly in during unrelated layout animations.
-- Layout projection internals were rebuilt into an explicit phased engine (`snapshot` -> `measure` -> `resolve` -> `projection`) with node-owned layout-resolution logic (`resolveLayoutAnimation()`), reducing hidden cross-phase state coupling.
-- Shared handoff state now runs through explicit stale-state expiry (`expireStaleSharedState`) during layout and projection passes, preventing stale `layoutId` snapshots from resurfacing on unrelated layout updates.
-- Interrupting an in-flight layout animation now force-refreshes snapshots from the current visual state before retargeting, so retargeted layout animations continue from the interrupted position instead of restarting from stale origins.
-- Legacy projection manager compatibility re-export was removed; all internal consumers now use `package/src/projection/layout-engine-v2.ts` directly.
+- The motion component runtime was rewritten around upstream `motion-dom` `VisualElement` / `HTMLVisualElement` / `SVGVisualElement` instead of the old local store-driven engine.
+- Layout animation support was restored on top of upstream projection internals, including `layout*` props, `LayoutGroup`, `useInstantLayoutTransition`, `useResetProjection`, and `AnimatePresence mode="popLayout"`.
+- `motion.create(Component, options)` is now part of the public surface. Layout-capable custom components must forward the received `ref` prop to a single DOM/SVG host.
+- Divergence: exiting Solid subtrees are still disposed when removed, so retained exit nodes complete through a DOM-side callback bridge rather than a live exiting subtree owner. This difference must remain documented anywhere `usePresence` / manual exit control is described.
+- Exit handoff now promotes the `exit` animation through `VisualElement.animationState.setActive("exit", true)` and suppresses stale queued `animateChanges()` microtasks during cleanup, avoiding enter-vs-exit races under parallel browser load.
+- Regression coverage now explicitly exercises layout projection creation/filtering, `LayoutGroup` layoutId namespacing, `layoutDependency` measurement gating, `motion.create` ref/prop forwarding, and browser-level layout/shared-layout plus `AnimatePresence mode="popLayout"` retention.
