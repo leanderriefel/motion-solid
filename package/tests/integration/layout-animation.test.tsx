@@ -5,9 +5,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
 import { createSignal, Show } from "solid-js";
 import { motion, AnimatePresence } from "../../src";
+import { projectionManager } from "../../src/projection/layout-engine-v2";
 import { buildProjectionTransform } from "../../src/projection/styles/transform";
 import { calcBoxDelta } from "../../src/projection/geometry/delta-calc";
-import { createBox, createDelta } from "../../src/projection/geometry/models";
+import { createDelta } from "../../src/projection/geometry/models";
 import type { Box, Delta } from "motion-utils";
 import * as motionValueModule from "../../src/animation/motion-value";
 
@@ -46,21 +47,6 @@ function createMockBoundingRect(
     bottom: y + height,
     toJSON: () => "",
   } as DOMRect;
-}
-
-/**
- * Mock an element's bounding box
- */
-function mockElementLayout(
-  element: HTMLElement,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-) {
-  vi.spyOn(element, "getBoundingClientRect").mockReturnValue(
-    createMockBoundingRect(x, y, width, height),
-  );
 }
 
 /**
@@ -706,7 +692,7 @@ describe("layout animation lifecycle", () => {
       <motion.div
         data-testid="layout-deps"
         layout
-        layoutDependencies={[count]}
+        layoutDependencies={[count()]}
         style={{ width: count() === 0 ? "100px" : "200px" }}
       >
         Content
@@ -728,6 +714,46 @@ describe("layout animation lifecycle", () => {
     console.log("[TEST] after change width:", afterWidth);
 
     expect(afterWidth).toBe("200px");
+  });
+
+  it("supports layoutDependency accessor shorthand", async () => {
+    const [count, setCount] = createSignal(0);
+    const scheduleUpdateSpy = vi.spyOn(projectionManager, "scheduleUpdate");
+
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const testId = this.getAttribute("data-testid");
+        if (testId === "layout-dependency-single") {
+          return createMockBoundingRect(0, 0, count() === 0 ? 100 : 180, 40);
+        }
+        return createMockBoundingRect(0, 0, 100, 40);
+      });
+
+    render(() => (
+      <motion.div
+        data-testid="layout-dependency-single"
+        layout
+        layoutDependency={count}
+        style={{ width: count() === 0 ? "100px" : "180px" }}
+      >
+        Content
+      </motion.div>
+    ));
+
+    await vi.advanceTimersByTimeAsync(50);
+    scheduleUpdateSpy.mockClear();
+
+    setCount(1);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(screen.getByTestId("layout-dependency-single").style.width).toBe(
+      "180px",
+    );
+    expect(scheduleUpdateSpy).toHaveBeenCalled();
+
+    rectSpy.mockRestore();
+    scheduleUpdateSpy.mockRestore();
   });
 
   it("handles rapid layout changes without crashing", async () => {
@@ -768,9 +794,6 @@ describe("layout animation lifecycle", () => {
 describe("parent layout animation on child unmount", () => {
   it("should trigger parent willUpdate when child with layout unmounts", async () => {
     const [show, setShow] = createSignal(true);
-    const parentWillUpdateCalls: number[] = [];
-
-    // Track willUpdate calls by spying on the projection manager
     const { unmount } = render(() => (
       <motion.div
         data-testid="parent"

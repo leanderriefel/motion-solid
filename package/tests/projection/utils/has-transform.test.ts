@@ -24,11 +24,13 @@ describe("hasScale", () => {
     expect(hasScale({ scale: 0.5 })).toBe(true);
     expect(hasScale({ "scale-x": 2 })).toBe(true);
     expect(hasScale({ "scale-y": 0.5 })).toBe(true);
+    expect(hasScale({ "scale-z": 1.5 })).toBe(true);
   });
 
   it("handles camelCase alternatives", () => {
     expect(hasScale({ scaleX: 2 })).toBe(true);
     expect(hasScale({ scaleY: 0.5 })).toBe(true);
+    expect(hasScale({ scaleZ: 1.5 })).toBe(true);
   });
 });
 
@@ -39,21 +41,29 @@ describe("has2DTranslate", () => {
 
   it("returns false for zero translation", () => {
     expect(has2DTranslate({ x: 0, y: 0 })).toBe(false);
+    expect(has2DTranslate({ "translate-x": 0, "translate-y": 0 })).toBe(false);
   });
 
   it("returns false for zero string translation", () => {
     expect(has2DTranslate({ x: "0", y: "0%" })).toBe(false);
+    expect(has2DTranslate({ "translate-x": "0", "translate-y": "0%" })).toBe(
+      false,
+    );
   });
 
   it("returns true for non-zero x", () => {
     expect(has2DTranslate({ x: 100 })).toBe(true);
     expect(has2DTranslate({ x: "10px" })).toBe(true);
     expect(has2DTranslate({ x: "10%" })).toBe(true);
+    expect(has2DTranslate({ "translate-x": "10px" })).toBe(true);
+    expect(has2DTranslate({ translateX: 20 })).toBe(true);
   });
 
   it("returns true for non-zero y", () => {
     expect(has2DTranslate({ y: 100 })).toBe(true);
     expect(has2DTranslate({ y: "10px" })).toBe(true);
+    expect(has2DTranslate({ "translate-y": "10px" })).toBe(true);
+    expect(has2DTranslate({ translateY: 20 })).toBe(true);
   });
 });
 
@@ -82,23 +92,34 @@ describe("hasTransform", () => {
   it("returns true for rotate-x/y", () => {
     expect(hasTransform({ "rotate-x": 45 })).toBe(true);
     expect(hasTransform({ "rotate-y": 45 })).toBe(true);
+    expect(hasTransform({ "rotate-z": 45 })).toBe(true);
     expect(hasTransform({ rotateX: 45 })).toBe(true);
     expect(hasTransform({ rotateY: 45 })).toBe(true);
+    expect(hasTransform({ rotateZ: 45 })).toBe(true);
   });
 
   it("returns true for skew", () => {
+    expect(hasTransform({ skew: 10 })).toBe(true);
     expect(hasTransform({ "skew-x": 10 })).toBe(true);
     expect(hasTransform({ "skew-y": 10 })).toBe(true);
     expect(hasTransform({ skewX: 10 })).toBe(true);
     expect(hasTransform({ skewY: 10 })).toBe(true);
   });
 
+  it("returns true for perspective transforms", () => {
+    expect(hasTransform({ perspective: 800 })).toBe(true);
+    expect(hasTransform({ "transform-perspective": 800 })).toBe(true);
+    expect(hasTransform({ transformPerspective: 800 })).toBe(true);
+  });
+
   it("returns false for non-transform properties", () => {
     expect(hasTransform({ opacity: 0.5 })).toBe(false);
     expect(hasTransform({ color: "red" })).toBe(false);
+    expect(hasTransform({ transform: "translateX(10px)" })).toBe(false);
   });
 
   it("returns false for identity transforms", () => {
     expect(hasTransform({ scale: 1, x: 0, y: 0 })).toBe(false);
+    expect(hasTransform({ rotate: 0, skew: 0 })).toBe(false);
   });
 });

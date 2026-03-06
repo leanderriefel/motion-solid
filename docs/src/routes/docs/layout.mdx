@@ -66,7 +66,7 @@ motion-solid automatically tracks: `class`, `classList`, `style`, `textContent`,
 
 ### Manual Dependencies
 
-For other changes, provide `layoutDependencies`:
+For other changes, provide `layoutDependencies` (Accessors and/or plain values):
 
 ```tsx
 const [isOn, setIsOn] = createSignal(false);
@@ -78,6 +78,18 @@ const [isOn, setIsOn] = createSignal(false);
   {/* Child position changes when parent class changes */}
   <motion.div layout layoutDependencies={[isOn]} class="size-8 rounded-full" />
 </button>;
+```
+
+For single dependencies, you can use the shorthand `layoutDependency`:
+
+```tsx
+const [isExpanded, setIsExpanded] = createSignal(false);
+
+<motion.section
+  layout
+  layoutDependency={isExpanded}
+  style={{ width: isExpanded() ? "28rem" : "20rem" }}
+/>;
 ```
 
 Add dependencies when: a parent's prop change affects child position, derived state influences layout, or non-standard props trigger layout shifts.
@@ -167,3 +179,9 @@ function Tabs() {
 - Projection transforms sanitize invalid values (`0`, `NaN`, `Infinity`) before composing CSS transforms
 - Exiting elements in shared `layoutId` transitions are marked not-present before handoff
 - Layout animations work best with `type: "spring"` transitions
+- Scale correction now keeps style-provided `border-radius`/`box-shadow` fallbacks aligned during projection scaling
+- Transformed ancestor scales are now folded into tree projection correction for more stable nested measurements
+- Shared `layoutId` handoff state is cleared after completion, preventing stale shared-element flashes during unrelated layout updates
+- Layout projection now runs through explicit internal phases (`snapshot` -> `measure` -> `resolve` -> `projection`) with stale shared-state expiry checks for shared handoffs
+- Retargeting while a layout animation is in flight now snapshots from the current visual state before resolving the next target, avoiding restart-from-origin jumps
+- For high-complexity cases (nested presence, shared `layoutId`, scroll roots, and grid reflow), see `/docs/demos` examples: **Expandable Card** and **Filterable Grid**

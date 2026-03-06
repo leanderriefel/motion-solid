@@ -10,7 +10,7 @@ import {
 } from "solid-js";
 import { createListTransition } from "@solid-primitives/transition-group";
 import { resolveElements } from "@solid-primitives/refs";
-import { projectionManager } from "../projection/projection-manager";
+import { projectionManager } from "../projection/layout-engine-v2";
 
 export type AnimatePresenceMode = "sync" | "wait" | "popLayout";
 

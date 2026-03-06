@@ -50,6 +50,12 @@ import type {
 } from "./node/types";
 
 const animationTarget = 1000;
+type ProjectionPhase =
+  | "idle"
+  | "snapshot"
+  | "measure"
+  | "resolve"
+  | "projection";
 
 const DEFAULT_LAYOUT_TRANSITION: ValueTransition = {
   duration: 0.45,
@@ -381,11 +387,23 @@ class ProjectionNodeImpl {
       ? transformTemplate(this.latestValues, "")
       : undefined;
 
-    this.updateSnapshot();
+    const isInterruptingLayoutAnimation = Boolean(
+      this.currentAnimation || this.pendingAnimation,
+    );
+
+    if (isInterruptingLayoutAnimation) {
+      const sampledProgress = this.motionValue?.get();
+      if (sampledProgress !== undefined) {
+        this.mixTargetDelta?.(sampledProgress);
+      }
+    }
+
+    this.updateSnapshot(isInterruptingLayoutAnimation);
   }
 
-  updateSnapshot(): void {
-    if (this.snapshot || !this.instance) return;
+  updateSnapshot(force = false): void {
+    if (!force && this.snapshot) return;
+    if (!this.instance) return;
 
     this.snapshot = this.measure();
 
@@ -650,7 +668,7 @@ class ProjectionNodeImpl {
 
   scheduleCheckAfterUnmount(): void {
     queueMicrotask(() => {
-      if (this.isLayoutDirty) {
+      if (this.manager.isUpdating || this.isLayoutDirty) {
         this.manager.flushUpdates();
       } else {
         this.manager.checkUpdateFailed();
@@ -729,7 +747,9 @@ class ProjectionNodeImpl {
       forceRecalculation ||
       (isShared && this.isSharedProjectionDirty) ||
       this.isProjectionDirty ||
+      this.isTransformDirty ||
       this.parent?.isProjectionDirty ||
+      this.parent?.isTransformDirty ||
       this.manager.updateBlockedByResize
     );
 
@@ -805,7 +825,11 @@ class ProjectionNodeImpl {
       canSkip = false;
     }
 
-    if (isShared && (this.isSharedProjectionDirty || this.isTransformDirty)) {
+    if (this.isTransformDirty || this.parent?.isTransformDirty) {
+      canSkip = false;
+    }
+
+    if (isShared && this.isSharedProjectionDirty) {
       canSkip = false;
     }
 
@@ -965,11 +989,12 @@ class ProjectionNodeImpl {
     const lead = this.getLead();
     if (!this.projectionDelta || !this.layout || !lead.target) {
       if (this.options.layoutId) {
-        const opacity =
+        const baseOpacity =
           (this.latestValues.opacity as number) ??
           (this.latestValues["opacity"] as number) ??
           1;
-        update.opacity = opacity;
+        update.opacity =
+          lead === this || this.preserveOpacity ? baseOpacity : 0;
         update.styles = {
           "pointer-events":
             lead === this
@@ -1162,6 +1187,7 @@ class ProjectionNodeImpl {
 
   startAnimation(transition: ValueTransition): void {
     this.options.onLayoutAnimationStart?.();
+    const animationCommitId = ++this.animationCommitId;
 
     this.currentAnimation?.stop();
     this.resumingFrom?.currentAnimation?.stop();
@@ -1189,18 +1215,23 @@ class ProjectionNodeImpl {
         this.motionValue.set(0);
       }
 
-      this.currentAnimation =
+      const animation =
         startMotionValueAnimation({
           name: "layout",
           motionValue: this.motionValue,
           keyframes: animationTarget,
           transition,
         }) ?? undefined;
+      this.currentAnimation = animation;
 
-      if (this.currentAnimation) {
-        this.currentAnimation.finished.then(() => this.completeAnimation());
+      if (animation) {
+        animation.finished.then(() => {
+          if (this.animationCommitId !== animationCommitId) return;
+          if (this.currentAnimation !== animation) return;
+          this.completeAnimation(animationCommitId);
+        });
       } else {
-        this.completeAnimation();
+        this.completeAnimation(animationCommitId);
       }
 
       if (this.resumingFrom) {
@@ -1211,7 +1242,14 @@ class ProjectionNodeImpl {
     });
   }
 
-  completeAnimation(): void {
+  completeAnimation(animationCommitId?: number): void {
+    if (
+      animationCommitId !== undefined &&
+      animationCommitId !== this.animationCommitId
+    ) {
+      return;
+    }
+
     if (this.resumingFrom) {
       this.resumingFrom.currentAnimation = undefined;
       this.resumingFrom.preserveOpacity = undefined;
@@ -1220,6 +1258,8 @@ class ProjectionNodeImpl {
     const stack = this.getStack();
     stack?.exitAnimationComplete();
 
+    this.resumeFrom = undefined;
+    this.snapshot = undefined;
     this.resumingFrom =
       this.currentAnimation =
       this.animationValues =
@@ -1234,7 +1274,169 @@ class ProjectionNodeImpl {
       this.currentAnimation.stop();
     }
 
-    this.completeAnimation();
+    this.completeAnimation(this.animationCommitId);
+  }
+
+  expireStaleSharedState(animationId: number): void {
+    if (
+      this.resumingFrom &&
+      !this.resumingFrom.instance &&
+      !this.currentAnimation
+    ) {
+      this.resumingFrom = undefined;
+    }
+
+    if (
+      this.options.layoutId &&
+      !this.currentAnimation &&
+      !this.pendingAnimation &&
+      this.snapshot &&
+      !this.resumeFrom &&
+      this.snapshot.animationId < animationId - 1
+    ) {
+      this.snapshot = undefined;
+    }
+
+    if (!this.snapshot && !this.currentAnimation && !this.pendingAnimation) {
+      this.resumeFrom = undefined;
+      if (!this.resumingFrom?.currentAnimation) {
+        this.resumingFrom = undefined;
+      }
+    }
+  }
+
+  resolveLayoutAnimation(): void {
+    const snapshot = this.resumingFrom?.snapshot || this.snapshot;
+
+    if (!this.isLead()) return;
+    if (!this.layout || !snapshot) {
+      this.options.onExitComplete?.();
+      return;
+    }
+
+    const { layoutBox: layout, measuredBox: measuredLayout } = this.layout;
+    const animationType = resolveAnimationType(
+      this.options.layout,
+      this.options.layoutId,
+    );
+    const isShared = snapshot.source !== this.layout.source;
+
+    if (animationType === "size") {
+      eachAxis((axis) => {
+        const axisSnapshot = isShared
+          ? snapshot.measuredBox[axis]
+          : snapshot.layoutBox[axis];
+        const length = calcLength(axisSnapshot);
+        axisSnapshot.min = layout[axis].min;
+        axisSnapshot.max = axisSnapshot.min + length;
+      });
+    } else if (
+      shouldAnimatePositionOnly(animationType, snapshot.layoutBox, layout)
+    ) {
+      eachAxis((axis) => {
+        const axisSnapshot = isShared
+          ? snapshot.measuredBox[axis]
+          : snapshot.layoutBox[axis];
+        const length = calcLength(layout[axis]);
+        axisSnapshot.max = axisSnapshot.min + length;
+
+        if (this.relativeTarget && !this.currentAnimation) {
+          this.isProjectionDirty = true;
+          this.relativeTarget[axis].max =
+            this.relativeTarget[axis].min + length;
+        }
+      });
+    }
+
+    const layoutDelta = createDelta();
+    calcBoxDelta(layoutDelta, layout, snapshot.layoutBox);
+
+    const visualDelta = createDelta();
+    if (isShared) {
+      calcBoxDelta(
+        visualDelta,
+        this.applyTransform(measuredLayout, true),
+        snapshot.measuredBox,
+      );
+    } else {
+      calcBoxDelta(visualDelta, layout, snapshot.layoutBox);
+    }
+
+    const hasLayoutChanged = !isDeltaZero(layoutDelta);
+    let hasRelativeLayoutChanged = false;
+
+    if (!this.resumeFrom) {
+      const relativeParent = this.getClosestProjectingParent();
+      if (relativeParent && !relativeParent.resumeFrom) {
+        const { snapshot: parentSnapshot, layout: parentLayout } =
+          relativeParent;
+
+        if (parentSnapshot && parentLayout) {
+          const relativeSnapshot = createBox();
+          calcRelativePosition(
+            relativeSnapshot,
+            snapshot.layoutBox,
+            parentSnapshot.layoutBox,
+          );
+
+          const relativeLayout = createBox();
+          calcRelativePosition(relativeLayout, layout, parentLayout.layoutBox);
+
+          if (!boxEqualsRounded(relativeSnapshot, relativeLayout)) {
+            hasRelativeLayoutChanged = true;
+          }
+
+          if (relativeParent.options.layoutRoot) {
+            this.relativeTarget = relativeLayout;
+            this.relativeTargetOrigin = relativeSnapshot;
+            this.relativeParent = relativeParent;
+          }
+        }
+      }
+    }
+
+    this.options.onLayoutMeasure?.(layout, snapshot.layoutBox);
+
+    if (this.isTreeAnimationBlocked()) {
+      this.target = undefined;
+      this.relativeTarget = undefined;
+      return;
+    }
+
+    const layoutTransition = resolveLayoutTransition(this.options.transition);
+    const hasTargetChanged =
+      !this.targetLayout || !boxEqualsRounded(this.targetLayout, layout);
+    const hasOnlyRelativeTargetChanged =
+      !hasLayoutChanged && hasRelativeLayoutChanged;
+
+    if (
+      this.options.layoutRoot ||
+      this.resumeFrom ||
+      hasOnlyRelativeTargetChanged ||
+      (hasLayoutChanged && (hasTargetChanged || !this.currentAnimation))
+    ) {
+      if (this.resumeFrom) {
+        this.resumingFrom = this.resumeFrom;
+        this.resumingFrom.resumingFrom = undefined;
+      }
+
+      const animationOptions = { ...layoutTransition } as ValueTransition;
+      if (this.options.layoutRoot) {
+        animationOptions.delay = 0;
+        animationOptions.type = false;
+      }
+
+      this.startAnimation(animationOptions);
+      this.setAnimationOrigin(visualDelta, hasOnlyRelativeTargetChanged);
+    } else {
+      if (!hasLayoutChanged) {
+        this.finishAnimation();
+      }
+
+      this.options.onExitComplete?.();
+    }
+
+    this.targetLayout = layout;
   }
 
   promote({
@@ -1309,6 +1511,7 @@ class ProjectionManager {
   animationId = 0;
   projectionUpdateScheduled = false;
   frameTimestamp = 0;
+  phase: ProjectionPhase = "idle";
 
   private updateScheduled = false;
 
@@ -1353,9 +1556,10 @@ class ProjectionManager {
   }
 
   unregister(node: ProjectionNodeImpl): void {
+    const instance = node.instance;
     node.unmount();
     this.nodes.delete(node);
-    if (node.instance) this.nodeByElement.delete(node.instance);
+    if (instance) this.nodeByElement.delete(instance);
   }
 
   updateNodeOptions(
@@ -1397,6 +1601,7 @@ class ProjectionManager {
     if (this.updateManuallyBlocked || this.updateBlockedByResize) return;
     this.isUpdating = true;
     this.animationId++;
+    this.phase = "snapshot";
     this.root.updateScroll("snapshot");
   }
 
@@ -1425,31 +1630,35 @@ class ProjectionManager {
     this.frameTimestamp = performance.now();
 
     this.rebuildTree();
-
     const nodes = this.getSortedNodes();
 
+    this.phase = "snapshot";
     for (const node of nodes) {
+      node.expireStaleSharedState(this.animationId);
       node.options.onBeforeLayoutMeasure?.(
         node.snapshot?.layoutBox ?? node.layout?.layoutBox ?? createBox(),
       );
     }
 
+    this.phase = "measure";
     for (const node of nodes) {
       node.resetTransform();
     }
-
     for (const node of nodes) {
       node.updateLayout();
     }
 
+    this.phase = "resolve";
     for (const node of nodes) {
-      notifyLayoutUpdate(node);
+      node.resolveLayoutAnimation();
     }
 
     this.clearAllSnapshots();
     this.isUpdating = false;
 
+    this.phase = "projection";
     this.updateProjection(true);
+    this.phase = "idle";
   }
 
   scheduleUpdateProjection(): void {
@@ -1478,15 +1687,46 @@ class ProjectionManager {
 
   updateProjection(immediate: boolean): void {
     const nodes = this.getSortedNodes();
+    this.phase = "projection";
 
-    nodes.forEach(propagateDirtyNodes);
-    nodes.forEach((node) => node.resolveTargetDelta());
-    nodes.forEach((node) => node.calcProjection());
-    nodes.forEach(cleanDirtyNodes);
+    for (const node of nodes) {
+      node.expireStaleSharedState(this.animationId);
+      if (!node.parent) continue;
+
+      if (!node.isProjecting()) {
+        node.isProjectionDirty = node.parent.isProjectionDirty;
+      }
+
+      node.isSharedProjectionDirty ||= Boolean(
+        node.isProjectionDirty ||
+        node.parent.isProjectionDirty ||
+        node.parent.isSharedProjectionDirty,
+      );
+
+      node.isTransformDirty ||= node.parent.isTransformDirty;
+    }
+
+    for (const node of nodes) {
+      node.resolveTargetDelta();
+    }
+
+    for (const node of nodes) {
+      node.calcProjection();
+    }
+
+    for (const node of nodes) {
+      node.isProjectionDirty = false;
+      node.isSharedProjectionDirty = false;
+      node.isTransformDirty = false;
+    }
 
     for (const node of nodes) {
       const update = node.applyProjectionStyles(node.getStyleValues?.());
       node.applyUpdate(update, immediate);
+    }
+
+    if (!this.isUpdating) {
+      this.phase = "idle";
     }
   }
 
@@ -1541,7 +1781,7 @@ class ProjectionManager {
 
   clearAllSnapshots(): void {
     this.nodes.forEach((node) => {
-      // Don't clear snapshots for nodes that are about to animate from a layoutId handoff
+      // Keep active handoff snapshots for nodes actively resuming from layoutId.
       if (!node.resumingFrom) {
         node.clearSnapshot();
       }
@@ -1552,168 +1792,10 @@ class ProjectionManager {
     if (this.isUpdating) {
       this.isUpdating = false;
       this.clearAllSnapshots();
+      this.phase = "idle";
     }
   }
 }
-
-const notifyLayoutUpdate = (node: ProjectionNodeImpl): void => {
-  const snapshot = node.resumingFrom?.snapshot || node.snapshot;
-
-  if (node.isLead() && node.layout && snapshot) {
-    const { layoutBox: layout, measuredBox: measuredLayout } = node.layout;
-    const animationType = resolveAnimationType(
-      node.options.layout,
-      node.options.layoutId,
-    );
-    const isShared = snapshot.source !== node.layout.source;
-
-    if (animationType === "size") {
-      eachAxis((axis) => {
-        const axisSnapshot = isShared
-          ? snapshot.measuredBox[axis]
-          : snapshot.layoutBox[axis];
-        const length = calcLength(axisSnapshot);
-        axisSnapshot.min = layout[axis].min;
-        axisSnapshot.max = axisSnapshot.min + length;
-      });
-    } else if (
-      shouldAnimatePositionOnly(animationType, snapshot.layoutBox, layout)
-    ) {
-      eachAxis((axis) => {
-        const axisSnapshot = isShared
-          ? snapshot.measuredBox[axis]
-          : snapshot.layoutBox[axis];
-        const length = calcLength(layout[axis]);
-        axisSnapshot.max = axisSnapshot.min + length;
-
-        if (node.relativeTarget && !node.currentAnimation) {
-          node.isProjectionDirty = true;
-          node.relativeTarget[axis].max =
-            node.relativeTarget[axis].min + length;
-        }
-      });
-    }
-
-    const layoutDelta = createDelta();
-    calcBoxDelta(layoutDelta, layout, snapshot.layoutBox);
-
-    const visualDelta = createDelta();
-    if (isShared) {
-      calcBoxDelta(
-        visualDelta,
-        node.applyTransform(measuredLayout, true),
-        snapshot.measuredBox,
-      );
-    } else {
-      calcBoxDelta(visualDelta, layout, snapshot.layoutBox);
-    }
-
-    const hasLayoutChanged = !isDeltaZero(layoutDelta);
-    let hasRelativeLayoutChanged = false;
-
-    if (!node.resumeFrom) {
-      const relativeParent = node.getClosestProjectingParent();
-      if (relativeParent && !relativeParent.resumeFrom) {
-        const { snapshot: parentSnapshot, layout: parentLayout } =
-          relativeParent;
-
-        if (parentSnapshot && parentLayout) {
-          const relativeSnapshot = createBox();
-          calcRelativePosition(
-            relativeSnapshot,
-            snapshot.layoutBox,
-            parentSnapshot.layoutBox,
-          );
-
-          const relativeLayout = createBox();
-          calcRelativePosition(relativeLayout, layout, parentLayout.layoutBox);
-
-          if (!boxEqualsRounded(relativeSnapshot, relativeLayout)) {
-            hasRelativeLayoutChanged = true;
-          }
-
-          if (relativeParent.options.layoutRoot) {
-            node.relativeTarget = relativeLayout;
-            node.relativeTargetOrigin = relativeSnapshot;
-            node.relativeParent = relativeParent;
-          }
-        }
-      }
-    }
-
-    node.options.onLayoutMeasure?.(layout, snapshot.layoutBox);
-
-    if (node.isTreeAnimationBlocked()) {
-      node.target = undefined;
-      node.relativeTarget = undefined;
-      return;
-    }
-
-    const layoutTransition = resolveLayoutTransition(node.options.transition);
-    const hasTargetChanged =
-      !node.targetLayout || !boxEqualsRounded(node.targetLayout, layout);
-    const hasOnlyRelativeTargetChanged =
-      !hasLayoutChanged && hasRelativeLayoutChanged;
-
-    if (
-      node.options.layoutRoot ||
-      node.resumeFrom ||
-      hasOnlyRelativeTargetChanged ||
-      (hasLayoutChanged && (hasTargetChanged || !node.currentAnimation))
-    ) {
-      if (node.resumeFrom) {
-        node.resumingFrom = node.resumeFrom;
-        node.resumingFrom.resumingFrom = undefined;
-      }
-
-      const animationOptions = {
-        ...layoutTransition,
-      } as ValueTransition;
-
-      if (node.options.layoutRoot) {
-        animationOptions.delay = 0;
-        animationOptions.type = false;
-      }
-
-      node.startAnimation(animationOptions);
-      node.setAnimationOrigin(visualDelta, hasOnlyRelativeTargetChanged);
-    } else {
-      if (!hasLayoutChanged) {
-        node.finishAnimation();
-      }
-
-      if (node.isLead() && node.options.onExitComplete) {
-        node.options.onExitComplete();
-      }
-    }
-
-    node.targetLayout = layout;
-  } else if (node.isLead()) {
-    node.options.onExitComplete?.();
-  }
-};
-
-const propagateDirtyNodes = (node: ProjectionNodeImpl): void => {
-  if (!node.parent) return;
-
-  if (!node.isProjecting()) {
-    node.isProjectionDirty = node.parent.isProjectionDirty;
-  }
-
-  node.isSharedProjectionDirty ||= Boolean(
-    node.isProjectionDirty ||
-    node.parent.isProjectionDirty ||
-    node.parent.isSharedProjectionDirty,
-  );
-
-  node.isTransformDirty ||= node.parent.isTransformDirty;
-};
-
-const cleanDirtyNodes = (node: ProjectionNodeImpl): void => {
-  node.isProjectionDirty = false;
-  node.isSharedProjectionDirty = false;
-  node.isTransformDirty = false;
-};
 
 const mixAxisDelta = (output: AxisDelta, delta: AxisDelta, p: number): void => {
   output.translate = mixNumber(delta.translate, 0, p);

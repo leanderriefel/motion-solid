@@ -7,3 +7,6 @@ export { LayoutBorderRadius } from "./layout-border-radius";
 export { LayoutPositionAnimation } from "./layout-position-animation";
 export { LayoutUnderlineAnimation } from "./layout-underline-animation";
 export { ScrollAnimation } from "./scroll-animation";
+export { ComplexLayoutBoard } from "./complex-layout-board";
+export { NestedPresenceLayoutId } from "./nested-presence-layoutid";
+export { LayoutScrollSticky } from "./layout-scroll-sticky";

@@ -59,7 +59,7 @@ import type { MotionConfigContextValue } from "../component/motion-config";
 import {
   createProjectionNode,
   projectionManager,
-} from "../projection/projection-manager";
+} from "../projection/layout-engine-v2";
 import type { ProjectionUpdate } from "../projection/node/types";
 import { MotionElement } from "./motion-element";
 
@@ -157,6 +157,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   let prevProjectionOpacity: number | null = null;
   let projectionStyles: Record<string, string | number> | null = null;
   const prevProjectionStyleKeys = new Set<string>();
+  const projectionStyleKeys = new Set<string>();
 
   let wasProjectionTransformActive = false;
   let restoreInlineTransform: string | null = null;
@@ -189,6 +190,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   const renderToDom = () => {
     const element = state.element;
     if (!element) return;
+    const styleValues = getStyleValues?.();
+    const styleTransform =
+      typeof styleValues?.transform === "string" ? styleValues.transform : null;
 
     // Reset render state for fresh computation
     renderState.style = {};
@@ -198,10 +202,13 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
     // Convert Map to plain object for buildHTMLStyles
     const values: Record<string, string | number> = {};
+    const waapiTransformActive = Array.from(waapiActiveKeys).some(
+      (key) => key === "transform" || isTransformProp(key),
+    );
     for (const [key, v] of latestValues.entries()) {
       if (waapiActiveKeys.has(key)) continue;
       // If WAAPI is controlling `transform`, don't generate a transform string from transform props.
-      if (waapiActiveKeys.has("transform") && isTransformProp(key)) continue;
+      if (waapiTransformActive && isTransformProp(key)) continue;
       if (isStringOrNumber(v)) values[key] = v;
     }
 
@@ -215,7 +222,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     const projectionIsActive =
       projectionTransform !== null && projectionTransform !== "none";
 
-    if (projectionIsActive && !waapiActiveKeys.has("transform")) {
+    if (projectionIsActive && !waapiTransformActive) {
       const activeProjectionTransform = projectionTransform as string;
 
       if (!wasProjectionTransformActive) {
@@ -237,7 +244,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
       // If Motion isn't generating a transform, fall back to the snapshotted base transform.
       // Never read computed styles here (see comment above).
       if (baseTransform === undefined)
-        baseTransform = projectionBaseTransform ?? "";
+        baseTransform = styleTransform ?? projectionBaseTransform ?? "";
 
       const combinedTransform =
         baseTransform === "" || baseTransform === "none"
@@ -245,10 +252,7 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
           : `${activeProjectionTransform} ${baseTransform}`;
 
       renderState.style.transform = combinedTransform;
-    } else if (
-      wasProjectionTransformActive &&
-      !waapiActiveKeys.has("transform")
-    ) {
+    } else if (wasProjectionTransformActive && !waapiTransformActive) {
       if (!hasMotionTransform) {
         renderState.style.transform = restoreInlineTransform ?? "";
       }
@@ -277,8 +281,6 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
     }
 
     prevProjectionOpacity = projectionOpacity;
-
-    const styleValues = getStyleValues?.();
     const projectionOverrides: Record<string, string | number> = {};
 
     if (projectionStyles) {
@@ -775,6 +777,40 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
   });
 
   createEffect(() => {
+    const styleValues = getStyleValues?.();
+    const nextProjectionStyleKeys = new Set<string>();
+    const hadProjectionStyles = projectionStyleKeys.size > 0;
+
+    if (styleValues) {
+      for (const [key, value] of Object.entries(styleValues)) {
+        if (!isStringOrNumber(value)) continue;
+        if (key !== "transform" && !isTransformProp(key)) continue;
+        if (latestValues.has(key)) continue;
+
+        projectionLatestValues[key] = value;
+        nextProjectionStyleKeys.add(key);
+      }
+    }
+
+    for (const key of projectionStyleKeys) {
+      if (nextProjectionStyleKeys.has(key)) continue;
+      if (latestValues.has(key)) continue;
+      delete projectionLatestValues[key];
+    }
+
+    projectionStyleKeys.clear();
+    for (const key of nextProjectionStyleKeys) {
+      projectionStyleKeys.add(key);
+    }
+
+    const node = layoutNode;
+    if (node && (hadProjectionStyles || nextProjectionStyleKeys.size > 0)) {
+      node.isTransformDirty = true;
+      node.scheduleUpdateProjection();
+    }
+  });
+
+  createEffect(() => {
     effectRunId++;
     const currentRunId = effectRunId;
 
@@ -1163,7 +1199,9 @@ export const useAnimationState = (args: AnimationStateOptions): void => {
 
         const canUseWaapi =
           // Avoid fighting with projection writes which also target `transform`/`opacity`.
-          (key === "transform" ? !projectionTransformActive : true) &&
+          (key === "transform" || isTransformProp(key)
+            ? !projectionTransformActive
+            : true) &&
           (key === "opacity" ? !projectionOpacityActive : true) &&
           Boolean(
             supportsBrowserAnimation<string | number>({
