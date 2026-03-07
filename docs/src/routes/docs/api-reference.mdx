@@ -4,8 +4,9 @@ Public surface exported from `motion-solid`.
 
 ## Components
 
-- `motion` - Proxy exposing `motion.div`, `motion.svg`, and all HTML/SVG tags
+- `motion` - Proxy exposing `motion.div`, `motion.svg`, all HTML/SVG tags, and `motion.create(Component, options)`
 - `AnimatePresence` - Enables exit animations
+- `LayoutGroup` - Groups layout and shared-layout projection nodes
 - `MotionConfig` - Global defaults for transitions and reduced motion
 
 ## Hooks
@@ -13,6 +14,8 @@ Public surface exported from `motion-solid`.
 - `usePresence` - Presence state plus `safeToRemove` callback for manual exit control
 - `useIsPresent` - Just the presence accessor
 - `usePresenceData` - Access the `custom` payload from AnimatePresence
+- `useInstantLayoutTransition` - Temporarily disable layout animation for the next update
+- `useResetProjection` - Reset projection state for a layout tree
 - `useReducedMotion` - System preference for reduced motion as a Solid accessor
 - `useMotionConfig` - Current MotionConfig context
 
@@ -30,3 +33,8 @@ Motion Solid re-exports types from `motion-dom`: `Variant`, `Variants`, `Transit
 ## Notes
 
 CSS custom properties (`--*`) are supported in `initial`, `animate`, and `exit` targets.
+Layout props are part of `MotionProps`, including `layout`, `layoutId`, `layoutDependency`, `layoutScroll`, `layoutRoot`, and `layoutCrossfade`.
+
+## Divergence
+
+Exiting Solid subtrees are disposed when removed. `motion-solid` keeps the exiting DOM node for exit/layout handoff, but a removed subtree is not reactively alive in the same way as `motion/react`.

@@ -42,14 +42,24 @@ test.describe("phase2 animate-presence", () => {
     await expect(page.getByTestId("presence-item-b")).toHaveCount(0);
   });
 
-  test("mode popLayout replacement keeps UI stable", async ({ page }) => {
+  test("mode popLayout pins the exiting node during replacement", async ({
+    page,
+  }) => {
+    await clearEvents(page);
     await runAction(page, "setMode", "popLayout");
+    await runAction(page, "setCurrent", "a");
     await runAction(page, "cycle");
 
-    await expect(page.getByTestId("presence-sibling")).toHaveCount(1);
-    await expect
-      .poll(async () => page.locator('[data-testid^="presence-item-"]').count())
-      .toBe(1);
+    await expect(page.getByTestId("presence-item-b")).toHaveCount(1);
+    await expect(page.getByTestId("presence-item-a")).toHaveCount(1);
+    await expect(page.getByTestId("presence-item-a")).toHaveAttribute(
+      "data-motion-pop-id",
+      /.+/,
+    );
+
+    await expect(page.getByTestId("presence-item-a")).toHaveCount(0, {
+      timeout: 2_000,
+    });
   });
 
   test("nested propagate=true outer hide removes nested tree", async ({

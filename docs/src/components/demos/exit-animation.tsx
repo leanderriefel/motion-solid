@@ -10,7 +10,7 @@ export const ExitAnimation = () => {
     <Animation name="Exit Animation" class="h-[300px]" source={source}>
       <div class="flex flex-col items-center gap-8">
         <div class="h-24 flex items-center justify-center">
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence>
             <Show when={isVisible()}>
               <motion.div
                 class="size-24 rounded-2xl bg-primary shadow-lg"

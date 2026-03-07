@@ -4,6 +4,7 @@ export type HarnessScenarioName =
   | "callbacks"
   | "presence"
   | "layout"
+  | "gestures"
   | "viewport-orchestration"
   | "reduced-motion"
   | "keyboard";

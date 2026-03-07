@@ -1,4 +1,5 @@
 import { defineConfig } from "tsup";
+import { solidPlugin } from "esbuild-plugin-solid";
 import * as preset from "tsup-preset-solid";
 
 const presetOptions: preset.PresetOptions = {
@@ -24,5 +25,22 @@ export default defineConfig((config) => {
     );
   }
 
-  return preset.generateTsupOptions(parsedData);
+  return preset.generateTsupOptions(parsedData).map((option) => {
+    if (option.platform !== "browser") return option;
+
+    return {
+      ...option,
+      esbuildPlugins: [
+        solidPlugin({
+          solid: {
+            generate: "dom",
+            hydratable: true,
+          },
+        }),
+        ...(option.esbuildPlugins ?? []).filter(
+          (plugin) => plugin.name !== "esbuild:solid",
+        ),
+      ],
+    };
+  });
 });

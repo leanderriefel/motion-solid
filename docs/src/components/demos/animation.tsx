@@ -10,6 +10,7 @@ export const Animation: Component<{
   name?: string;
   source?: string;
   class?: string;
+  wrapperClass?: string;
   showReloadButton?: boolean;
   containerRef?: ComponentProps<"div">["ref"];
   scrollable?: boolean;
@@ -92,10 +93,13 @@ export const Animation: Component<{
       </Show>
       <Show when={mounted()}>
         <div
-          class={cn({
-            "px-3 pb-3": props.scrollable,
-            "flex flex-1 items-center justify-center p-6": !props.scrollable,
-          })}
+          class={cn(
+            {
+              "px-3 pb-3": props.scrollable,
+              "flex flex-1 items-center justify-center p-6": !props.scrollable,
+            },
+            props.wrapperClass,
+          )}
         >
           {props.children}
         </div>

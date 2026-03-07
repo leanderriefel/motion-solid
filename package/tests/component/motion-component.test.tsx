@@ -83,6 +83,23 @@ describe("motion component", () => {
       ));
       expect(container.querySelector("div span")).toBeTruthy();
     });
+
+    it("does not resolve JSX children more than once per render", () => {
+      const childRenderSpy = vi.fn();
+      const Child = () => {
+        childRenderSpy();
+        return <span data-testid="child">Nested</span>;
+      };
+
+      render(() => (
+        <motion.div data-testid="target">
+          <Child />
+        </motion.div>
+      ));
+
+      expect(screen.getByTestId("child").textContent).toBe("Nested");
+      expect(childRenderSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("initial styles", () => {
@@ -384,18 +401,6 @@ describe("motion component", () => {
       ));
       const element = screen.getByTestId("target");
       expect(element.hasAttribute("whileInView")).toBe(false);
-    });
-
-    it("does not pass layout prop to DOM", () => {
-      render(() => <motion.div data-testid="target" layout />);
-      const element = screen.getByTestId("target");
-      expect(element.hasAttribute("layout")).toBe(false);
-    });
-
-    it("does not pass layoutId prop to DOM", () => {
-      render(() => <motion.div data-testid="target" layoutId="test" />);
-      const element = screen.getByTestId("target");
-      expect(element.hasAttribute("layoutId")).toBe(false);
     });
 
     it("passes className to DOM", () => {

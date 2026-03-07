@@ -153,6 +153,63 @@ Set to `false` to prevent inheriting variants from ancestors.
 </motion.ul>
 ```
 
+## Layout
+
+### `layout`
+
+Enable automatic layout animations when size or position changes.
+
+```tsx
+<motion.div layout />
+<motion.div layout="position" />
+<motion.div layout="size" />
+<motion.div layout="preserve-aspect" />
+```
+
+Sibling reordering in Solid control flow, such as resorting a `For` list of `layout` items, is part of the supported layout behavior.
+
+See [Layout Animations](/docs/layout-animations) for shared-layout handoff patterns, `layoutDependency`, and distortion/correction guidance.
+
+### `layoutId`
+
+Share layout state between different elements for handoff transitions:
+
+```tsx
+<motion.div layoutId="card" />
+```
+
+### `layoutDependency`
+
+Explicitly invalidate layout measurement when related state changes outside the motion node:
+
+```tsx
+<motion.div layout layoutDependency={selectedId()} />
+```
+
+### `layoutScroll` / `layoutRoot` / `layoutCrossfade`
+
+Use Motion-compatible projection options directly on the node:
+
+```tsx
+<motion.div layout layoutScroll />
+<motion.div layout layoutRoot />
+<motion.div layoutId="card" layoutCrossfade={false} />
+```
+
+When layout projection scales a component, add `layout` or `layout="position"` to immediate children that should not appear stretched. `borderRadius` and `boxShadow` correction only applies when those values are present on the motion component itself via `style`, `initial`, `animate`, or `exit`.
+
+### Layout Callbacks
+
+```tsx
+<motion.div
+  layout
+  onBeforeLayoutMeasure={() => console.log("before measure")}
+  onLayoutMeasure={(box, prev) => console.log(box, prev)}
+  onLayoutAnimationStart={() => console.log("layout start")}
+  onLayoutAnimationComplete={() => console.log("layout done")}
+/>
+```
+
 ## Style
 
 Regular Solid style object, merged with animated values. Use kebab-case for CSS and transform properties (`scale-x`, `rotate-y`, etc).
@@ -183,6 +240,20 @@ Fired when the `animate` target starts or finishes. `onAnimationComplete` fires 
 />
 ```
 
+## Custom Components
+
+Use `motion.create()` for custom components. The wrapped component must forward the received `ref` prop to a single DOM or SVG host node.
+
+```tsx
+const Card = (props: JSX.HTMLAttributes<HTMLDivElement>) => (
+  <div ref={props.ref} {...props} />
+);
+
+const MotionCard = motion.create(Card);
+
+<MotionCard layout animate={{ opacity: 1 }} />;
+```
+
 ## Gestures and Drag
 
 Motion supports gesture animations and callbacks:
@@ -203,20 +274,6 @@ See [Gestures](/docs/gestures) and [Drag](/docs/drag) for details.
 />
 ```
 
-## Layout
-
-Enable layout animations with `layout` or `layoutId`:
-
-```tsx
-// Animate position and size changes
-<motion.div layout />
-
-// Shared element transitions
-<motion.div layoutId="sidebar" />
-```
-
-See [Layout](/docs/layout) for details.
-
 ## Server-Side Rendering
 
 On the server, motion components render with deterministic styles:
@@ -234,5 +291,15 @@ On the server, motion components render with deterministic styles:
 
 ## Limitations
 
-- Custom components via `motion(Component)` are not supported yet
+- Layout-capable custom components must forward `ref` to a single host element
 - MotionValue in `style` prop is planned
+
+## Divergence
+
+Solid disposes exiting component owners when they leave the tree. `motion-solid` keeps the DOM node for exit/layout handoff, but the exiting subtree is no longer reactively alive.
+
+This matters most with `AnimatePresence`:
+
+- exit and layout handoff still run
+- `onExitComplete` still fires
+- async `safeToRemove` flows inside an already-removed subtree are not React-identical

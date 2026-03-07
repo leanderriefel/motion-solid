@@ -47,11 +47,10 @@ export function PresenceScenario(props: ScenarioProps) {
     }
   });
 
-  const renderItem = createMemo(() => {
-    const item = current();
-
+  const renderItem = (item: PresenceItem) => {
     return (
       <motion.div
+        key={item}
         data-testid={`presence-item-${item}`}
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
@@ -79,7 +78,7 @@ export function PresenceScenario(props: ScenarioProps) {
         {item.toUpperCase()}
       </motion.div>
     );
-  });
+  };
 
   const queueABC = () => {
     clearTimers();
@@ -234,7 +233,6 @@ export function PresenceScenario(props: ScenarioProps) {
             onExitComplete={() => {
               props.log({ type: "outerExitComplete", node: "outer" });
             }}
-            root={stageElement}
           >
             <Show when={outerVisible()}>
               <motion.div
@@ -257,7 +255,9 @@ export function PresenceScenario(props: ScenarioProps) {
                         });
                       }}
                     >
-                      <Show when={innerVisible()}>{renderItem()}</Show>
+                      <For each={innerVisible() ? [current()] : []}>
+                        {(item) => renderItem(item)}
+                      </For>
                     </AnimatePresence>
                   }
                 >
@@ -267,7 +267,9 @@ export function PresenceScenario(props: ScenarioProps) {
                       props.log({ type: "exitComplete", node: "inner" });
                     }}
                   >
-                    <Show when={innerVisible()}>{renderItem()}</Show>
+                    <For each={innerVisible() ? [current()] : []}>
+                      {(item) => renderItem(item)}
+                    </For>
                   </AnimatePresence>
                 </Show>
               </motion.div>

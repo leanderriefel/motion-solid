@@ -1,6 +1,6 @@
 # Getting Started
 
-motion-solid is a [SolidJS](https://solidjs.com) animation library built on [Motion](https://motion.dev). It provides declarative animations, gestures, drag, and layout animations with a Solid-native API.
+motion-solid is a [SolidJS](https://solidjs.com) animation library built on [Motion](https://motion.dev). It provides declarative animations, gestures, drag, and exit orchestration with a Solid-native API.
 
 ## Features
 
@@ -8,9 +8,26 @@ motion-solid is a [SolidJS](https://solidjs.com) animation library built on [Mot
 - **Variants** - Name and orchestrate complex animation sequences
 - **Gestures** - Hover, tap, focus, and viewport-triggered animations
 - **Drag** - Built-in draggable elements with constraints and momentum
-- **Layout animations** - Smoothly animate elements when they move or resize
 - **Exit animations** - Animate elements out when they leave the tree
-- **SSR-ready** - Server-side rendering with correct initial styles
+- **Layout animations** - Automatic layout and shared-layout projection via `layout` / `layoutId`
+- **SSR-ready** - Server-side rendering with correct initial styles and matching intrinsic host markup during client hydration
+
+## Current Scope
+
+The current runtime is backed by upstream `motion-dom` `VisualElement` and projection internals.
+
+Standard `motion.div` / `motion.svg`-style hosts render as real Solid intrinsic elements on both the server and client. Custom components created with `motion.create(...)` still need to forward `ref` to a single DOM/SVG host node.
+
+Available layout surface:
+
+- `layout`
+- `layoutId`
+- `layoutDependency`
+- `layoutScroll`
+- `layoutRoot`
+- `layoutCrossfade`
+- `LayoutGroup`
+- `AnimatePresence mode="popLayout"`
 
 ## Installation
 
@@ -125,10 +142,10 @@ Motion components render deterministically on the server. They use `initial` sty
 ## Next Steps
 
 - [Motion Component](/docs/motion-component) - All props and options
+- [Layout Animations](/docs/layout-animations) - Shared layout, `layoutDependency`, and distortion fixes
 - [Variants](/docs/variants) - Orchestrate complex animations
 - [Gestures](/docs/gestures) - Hover, tap, focus interactions
 - [Drag](/docs/drag) - Draggable elements
-- [Layout](/docs/layout) - Animate layout changes
 - [AnimatePresence](/docs/animate-presence) - Exit animations
 - [MotionConfig](/docs/motion-config) - Global configuration
 - [Demos](/docs/demos) - Interactive examples

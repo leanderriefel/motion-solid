@@ -1,4 +1,4 @@
-import type { Accessor, JSX } from "solid-js";
+import type { JSX } from "solid-js";
 import type {
   AnyResolvedKeyframe,
   MotionValue,
@@ -8,7 +8,7 @@ import type {
   VariantLabels,
 } from "motion-dom";
 import type { AnimationType } from "../animation/types";
-import type { BoundingBox } from "motion-utils";
+import type { BoundingBox, Box } from "motion-utils";
 import type { ElementTag, SVGElements } from "./elements";
 
 /**
@@ -126,7 +126,6 @@ type TransitionOverrides<Tag extends ElementTag> = Partial<
   Record<MotionTargetKey<Tag>, TransitionOverrideValue>
 > & {
   default?: ValueTransition;
-  layout?: ValueTransition;
 };
 
 export type Transition<Tag extends ElementTag = ElementTag> = BaseTransition &
@@ -227,8 +226,11 @@ export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   | "onAnimationStart"
   | "onAnimationComplete"
 > & {
+  style?: MotionStyle;
   custom?: unknown;
   dragControls?: unknown;
+  _dragX?: MotionValue<number>;
+  _dragY?: MotionValue<number>;
   viewport?: SolidViewportOptions;
   dragConstraints?: false | Partial<BoundingBox> | Element;
   transition?: Transition<Tag>;
@@ -248,7 +250,17 @@ export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   ) => string;
   onAnimationStart?: (definition: MotionAnimationDefinition<Tag>) => void;
   onAnimationComplete?: (definition: MotionAnimationDefinition<Tag>) => void;
-  layoutDependencies?: Accessor<unknown>[];
+  layout?: boolean | "position" | "size" | "preserve-aspect";
+  layoutId?: string;
+  layoutDependency?: unknown;
+  layoutScroll?: boolean;
+  layoutRoot?: boolean;
+  layoutCrossfade?: boolean;
+  onBeforeLayoutMeasure?: (box: Box) => void;
+  onLayoutMeasure?: (box: Box, prevBox: Box) => void;
+  onLayoutAnimationStart?: () => void;
+  onLayoutAnimationComplete?: () => void;
+  "data-framer-portal-id"?: string;
 };
 
 export interface MotionState {

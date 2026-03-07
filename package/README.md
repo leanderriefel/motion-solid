@@ -3,6 +3,7 @@
 [SolidJS](https://solidjs.com) bindings for [Motion](https://motion.dev).
 
 Please refer to the [docs](https://motion-solid.leanderriefel.com) for more information.
+The docs include dedicated pages for [layout animations](https://motion-solid.leanderriefel.com/docs/layout-animations), drag, gestures, and interactive demos for basic `layout` reflow plus more advanced shared-layout handoff patterns.
 
 Please note that this library is still in early beta and the API is subject to change and may get daily breaking changes. The documentation may not be up to date with the latest features and may include missing or outdated information. You can always create an issue on [GitHub](https://github.com/leanderriefel/motion-solid) or, even better, open a pull request to fix the documentation or add new features.
 
@@ -11,6 +12,39 @@ Please note that this library is still in early beta and the API is subject to c
 `motion-solid` is currently only half-maintained. I currently have a lot of stress with university and private stuff, so updates will be very slow and there will likely be long periods without updates.
 
 I will still respond to issues and pull requests. The library should generally work fine, but there can still be rough edges while the API settles.
+
+## Current scope
+
+Current public surface includes:
+
+- `motion.*` HTML/SVG components backed by upstream `motion-dom` `VisualElement`
+- `AnimatePresence` with `mode="sync" | "wait" | "popLayout"`
+- layout animation props: `layout`, `layoutId`, `layoutDependency`, `layoutScroll`, `layoutRoot`, `layoutCrossfade`
+- `LayoutGroup`, `useInstantLayoutTransition`, `useResetProjection`
+- `createDragControls()` with `.start()`, `.cancel()`, and `.stop()`
+- `motion.create(Component, options)` for custom components that forward `ref` to a single DOM/SVG host node
+- intrinsic `motion.*` tags render as real Solid HTML/SVG elements on both the server and client, which keeps initial styles and hydration shape aligned
+- sibling reordering in Solid control flow such as `For` participates in layout animation, including list resorting demos in the docs
+
+## Layout notes
+
+- Shared-layout patterns that depend on external Solid state should pass that state through `layoutDependency` when the motion host itself doesn't otherwise read it.
+- `borderRadius` and `boxShadow` scale correction only works when those values are present on the motion component itself via `style`, `initial`, `animate`, or `exit`. Utility classes alone are not visible to Motion's projection scale correctors.
+
+## Drag notes
+
+- Drag is now mounted through the upstream Motion feature pipeline rather than a separate local store-driven path.
+- `drag`, `dragConstraints`, `dragElastic`, `dragMomentum`, `dragSnapToOrigin`, `dragTransition`, `whileDrag`, and `dragControls` all run through the `VisualElement` runtime.
+
+## Divergence
+
+Solid disposes exiting component owners as soon as they leave the tree. `motion-solid` retains the DOM node for exit/layout handoff, but the exiting subtree itself is no longer reactively alive the way `motion/react` can keep it alive.
+
+This means:
+
+- exit animations and `onExitComplete` still work
+- `popLayout` and shared/layout projection handoff still work
+- long-lived async `safeToRemove` flows inside an already-removed subtree are not React-identical and should be avoided in favor of parent-managed state or `onExitComplete`
 
 If you want to seriously maintain this and help make it fully fledged, please open an issue or DM me on X: [@leanderriefel](https://x.com/leanderriefel).
 

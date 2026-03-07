@@ -1,6 +1,7 @@
 import { render } from "solid-js/web";
 import { createMemo, createSignal } from "solid-js";
 import { CallbacksScenario } from "./scenarios/callbacks";
+import { GesturesScenario } from "./scenarios/gestures";
 import { KeyboardScenario } from "./scenarios/keyboard";
 import { LayoutScenario } from "./scenarios/layout";
 import { PresenceScenario } from "./scenarios/presence";
@@ -34,6 +35,7 @@ const knownScenarios: HarnessScenarioName[] = [
   "callbacks",
   "presence",
   "layout",
+  "gestures",
   "viewport-orchestration",
   "reduced-motion",
   "keyboard",
@@ -128,7 +130,7 @@ const harnessApi: HarnessApi = {
     return {
       scenario: scenario(),
       options: options(),
-      ...(controller?.getState() ?? {}),
+      ...controller?.getState(),
     };
   },
   getEvents() {
@@ -228,6 +230,14 @@ function ScenarioRoot() {
 
         {currentScenario() === "layout" && (
           <LayoutScenario
+            options={options}
+            log={logEvent}
+            registerController={registerController}
+          />
+        )}
+
+        {currentScenario() === "gestures" && (
+          <GesturesScenario
             options={options}
             log={logEvent}
             registerController={registerController}

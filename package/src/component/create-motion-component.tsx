@@ -1,193 +1,81 @@
-import type { Component, ComponentProps } from "solid-js";
+import { mergeRefs } from "@solid-primitives/refs";
 import {
+  HTMLProjectionNode,
+  HTMLVisualElement,
+  SVGVisualElement,
+  animateVisualElement,
+  isControllingVariants,
+  isMotionValue,
+  isVariantLabel,
+  resolveVariant,
+  type AnimationDefinition,
+  type MotionNodeOptions,
+  type IProjectionNode,
+} from "motion-dom";
+import type { Component, ComponentProps, JSX, ValidComponent } from "solid-js";
+import {
+  createUniqueId,
+  createSignal,
   createComputed,
+  createEffect,
   createMemo,
   createRenderEffect,
-  createSignal,
   mergeProps,
+  onCleanup,
+  onMount,
   splitProps,
+  untrack,
 } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { createStore } from "solid-js/store";
-import { mergeRefs } from "@solid-primitives/refs";
 import type {
   ElementInstance,
   ElementTag,
-  MotionElement,
+  MotionAnimationDefinition,
   MotionOptions,
   MotionStyle,
-  Variants,
 } from "../types";
-import { createMotionState } from "../state";
-import { useAnimationState } from "../animation";
-import { useGestures, useDragGesture } from "../gestures";
-import { projectionManager } from "../projection/projection-manager";
-import { MotionStateContext, useMotionState } from "./context";
+import { isSVGElement } from "../types";
+import { createDomVisualElement } from "./create-dom-visual-element";
+import { filterProps } from "./filter-props";
+import { initFeatureDefinitions } from "./feature-definitions";
+import { useLayoutGroupContext } from "./layout-group-context";
+import {
+  MotionContext,
+  useMotionContext,
+  type MotionContextValue,
+} from "./motion-context";
 import { useMotionConfig } from "./motion-config";
 import { motionKeys } from "./motion-keys";
+import { normalizeMotionOptions } from "./normalize-props";
 import { usePresenceContext } from "./presence";
+import { useSwitchLayoutGroupContext } from "./switch-layout-group-context";
 import {
-  OrchestrationContext,
-  useOrchestration,
-  type OrchestrationContextValue,
-} from "./orchestration-context";
-import { isStaggerFunction, type StaggerFunction } from "../animation/stagger";
-import { resolveDefinitionToTarget } from "../animation/variants";
-import { pickInitialFromKeyframes } from "../animation/keyframes";
-import {
-  buildHTMLStyles,
-  buildTransform,
-  createRenderState,
-} from "../animation/render";
+  createInitialVisualProps,
+  createVisualState,
+  type VisualState,
+} from "./visual-state";
 
-type TransformTemplate = (
-  transform: Record<string, string | number>,
-  generatedTransform: string,
-) => string;
+type TransformStyle = Record<string, unknown>;
 
-/**
- * Transform shortcut properties that can be used in the style prop.
- * These will be converted to a CSS transform string.
- */
-const styleTransformShortcuts = new Set([
-  "x",
-  "y",
-  "z",
-  "rotate",
-  "rotate-x",
-  "rotate-y",
-  "rotate-z",
-  "scale",
-  "scale-x",
-  "scale-y",
-  "scale-z",
-  "skew",
-  "skew-x",
-  "skew-y",
-  "translate-x",
-  "translate-y",
-  "translate-z",
-  "perspective",
-  "transform-perspective",
-]);
+const camelToKebab = (key: string) =>
+  key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 
-const normalizeStyleKey = (key: string): string => {
-  if (key.startsWith("--")) return key;
-  return key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
-};
+const toDomStyle = (style: TransformStyle | undefined) => {
+  if (!style) return style;
 
-/**
- * Process style prop to handle transform shortcuts.
- * Returns the processed style object.
- *
- * @param style - The raw style prop
- */
-const processStyleProp = (
-  style: Record<string, string | number> | string | undefined,
-): Record<string, string | number> => {
-  if (!style || typeof style === "string") {
-    return {};
-  }
-
-  const processedStyle: Record<string, string | number> = {};
-  const transformValues: Record<string, string | number> = {};
-  let hasTransformShortcuts = false;
+  const domStyle: TransformStyle = {};
 
   for (const key in style) {
     const value = style[key];
-    if (value === undefined) continue;
+    const styleKey =
+      key.startsWith("--") || key.includes("-") ? key : camelToKebab(key);
 
-    const normalizedKey = normalizeStyleKey(key);
-
-    // Check if it's a transform shortcut
-    if (styleTransformShortcuts.has(normalizedKey)) {
-      hasTransformShortcuts = true;
-      transformValues[normalizedKey] = value;
-      continue;
-    }
-
-    // Pass through to processed style
-    processedStyle[normalizedKey] = value;
+    domStyle[styleKey] = value;
   }
 
-  // If we have transform shortcuts, build the transform string
-  if (hasTransformShortcuts) {
-    const renderState = createRenderState();
-    const transformString = buildTransform(
-      transformValues,
-      renderState.transform,
-    );
-    if (transformString && transformString !== "none") {
-      // Merge with existing transform if present
-      const existingTransform = processedStyle.transform;
-      if (existingTransform && typeof existingTransform === "string") {
-        processedStyle.transform = `${transformString} ${existingTransform}`;
-      } else {
-        processedStyle.transform = transformString;
-      }
-    }
-  }
-
-  return processedStyle;
+  return domStyle;
 };
 
-const getInitialStyles = (
-  options: MotionOptions,
-  parent: any,
-): Record<string, string> => {
-  const initialDefinition = options.initial;
-  const definition = initialDefinition ? initialDefinition : options.animate;
-  if (!definition) return {};
-
-  const minimalState = {
-    element: null,
-    values: {},
-    goals: {},
-    resolvedValues: {},
-    activeGestures: {
-      hover: false,
-      tap: false,
-      focus: false,
-      drag: false,
-      inView: false,
-    },
-    activeVariants: {},
-    options,
-    parent,
-  };
-
-  const target = resolveDefinitionToTarget({
-    definition,
-    options,
-    state: minimalState,
-  });
-
-  if (!target) return {};
-
-  const values: Record<string, string | number> = {};
-  for (const [key, keyframes] of Object.entries(target)) {
-    if (key === "transition" || key === "transitionEnd") continue;
-
-    const initial = pickInitialFromKeyframes(keyframes);
-    if (initial !== null) {
-      values[key] = initial;
-    }
-  }
-
-  const renderState = createRenderState();
-  buildHTMLStyles(
-    renderState,
-    values,
-    options.transformTemplate as TransformTemplate | undefined,
-  );
-
-  return renderState.style as Record<string, string>;
-};
-
-/**
- * Motion component props type for internal use.
- * This is the base type that works correctly with splitProps.
- */
 type MotionPropsInternal<Tag extends ElementTag> = Omit<
   ComponentProps<Tag>,
   "onAnimationStart" | "onAnimationComplete"
@@ -196,376 +84,806 @@ type MotionPropsInternal<Tag extends ElementTag> = Omit<
     key?: string | number;
   };
 
-/**
- * Motion component props type.
- * Extends the base element's props with motion-specific options.
- * The `style` prop is extended to support transform shortcuts (x, y, scale, rotate, etc.)
- *
- * @example
- * ```tsx
- * <motion.div style={{ x: 100, opacity: 0.5 }} />
- * ```
- */
 export type MotionProps<Tag extends ElementTag> = Omit<
   MotionPropsInternal<Tag>,
   "style"
 > & {
-  /** Extended style prop that supports transform shortcuts (x, y, scale, rotate, etc.) */
   style?: MotionStyle;
 };
 
-interface OrchestrationOptions {
-  when?: false | "beforeChildren" | "afterChildren";
-  delayChildren?: number | StaggerFunction;
-  staggerChildren?: number;
-  staggerDirection?: number;
+export interface MotionComponentOptions {
+  forwardMotionProps?: boolean;
+  type?: "html" | "svg";
 }
 
-/**
- * Extract orchestration options from a variant's transition.
- * Only works when the animation definition is a variant label.
- */
-const extractOrchestrationOptions = (
-  animateDef: unknown,
-  variants: Variants | undefined,
-): OrchestrationOptions | null => {
-  if (!variants) return null;
+type MotionExitMarker = Element & {
+  __motionIsAnimatingExit?: boolean;
+  __motionPresenceId?: string;
+  __motionShouldExit?: boolean;
+  __motionHandleExitComplete?: VoidFunction;
+};
 
-  // Only extract orchestration from variant labels
-  if (typeof animateDef !== "string" && !Array.isArray(animateDef)) {
-    return null;
+let hasTakenAnySnapshot = false;
+
+const copyRawValuesOnly = (
+  target: TransformStyle,
+  source: MotionStyle | undefined,
+  props: MotionOptions,
+) => {
+  if (!source || typeof source === "string") return;
+
+  for (const key in source) {
+    const value = source[key as keyof MotionStyle];
+    if (!isMotionValue(value) && key !== "transformTemplate") {
+      target[key] = value;
+    }
   }
 
-  const variantName = Array.isArray(animateDef) ? animateDef[0] : animateDef;
-  const variant = variants[variantName];
+  if (props.drag && props.dragListener !== false) {
+    target.userSelect = "none";
+    target.WebkitUserSelect = "none";
+    target.WebkitTouchCallout = "none";
+    target.touchAction =
+      props.drag === true ? "none" : props.drag === "x" ? "pan-y" : "pan-x";
+  }
+};
 
-  if (!variant || typeof variant !== "object") return null;
-
-  const transition = (variant as Record<string, unknown>).transition as
-    | Record<string, unknown>
-    | undefined;
-  if (!transition) return null;
-
-  const result: OrchestrationOptions = {};
-
-  if (
-    transition.when === "beforeChildren" ||
-    transition.when === "afterChildren" ||
-    transition.when === false
-  ) {
-    result.when = transition.when;
+const getCurrentTreeVariants = (
+  props: MotionOptions,
+  context: MotionContextValue,
+): MotionContextValue => {
+  if (isControllingVariants(props as unknown as MotionNodeOptions)) {
+    const { initial, animate } = props;
+    return {
+      initial:
+        initial === false || isVariantLabel(initial)
+          ? (initial as false | string | string[])
+          : undefined,
+      animate: isVariantLabel(animate)
+        ? (animate as string | string[])
+        : undefined,
+    };
   }
 
-  if (typeof transition.delayChildren === "number") {
-    result.delayChildren = transition.delayChildren;
-  } else if (isStaggerFunction(transition.delayChildren)) {
-    result.delayChildren = transition.delayChildren;
+  return props.inherit !== false ? context : {};
+};
+
+const getClosestProjectingNode = (
+  visualElement?: MotionContextValue["visualElement"],
+): IProjectionNode | undefined => {
+  if (!visualElement) return undefined;
+
+  const options = visualElement.options as { allowProjection?: boolean };
+
+  return options.allowProjection !== false
+    ? visualElement.projection
+    : getClosestProjectingNode(visualElement.parent);
+};
+
+const snapshotProjectionSubtreeFromCurrentLayout = (
+  projection: IProjectionNode | undefined,
+) => {
+  if (!projection) return false;
+
+  const queue = [projection];
+  let hasPreparedSnapshot = false;
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (!node) continue;
+
+    if (node.layout && !node.snapshot) {
+      node.snapshot = node.layout;
+      hasPreparedSnapshot = true;
+    }
+
+    if (node.layout) {
+      node.isLayoutDirty = true;
+    }
+
+    queue.push(...node.children);
   }
 
-  if (typeof transition.staggerChildren === "number") {
-    result.staggerChildren = transition.staggerChildren;
+  return hasPreparedSnapshot;
+};
+
+const shouldCreateProjectionNode = (props: MotionOptions) =>
+  Boolean(
+    props.layout || props.layoutId || props.layoutScroll || props.layoutRoot,
+  );
+
+const getTransitionRuntimeMs = (definition: unknown) => {
+  const readDuration = (transition: unknown): number => {
+    if (
+      !transition ||
+      typeof transition !== "object" ||
+      Array.isArray(transition)
+    ) {
+      return 0;
+    }
+
+    const source = transition as Record<string, unknown>;
+    const duration = typeof source.duration === "number" ? source.duration : 0;
+    const delay = typeof source.delay === "number" ? source.delay : 0;
+    const repeat = typeof source.repeat === "number" ? source.repeat : 0;
+    const repeatDelay =
+      typeof source.repeatDelay === "number" ? source.repeatDelay : 0;
+    let max = delay + duration * Math.max(repeat + 1, 1) + repeatDelay * repeat;
+
+    for (const key in source) {
+      const value = source[key];
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      max = Math.max(max, readDuration(value));
+    }
+
+    return max;
+  };
+
+  const readTargetDuration = (target: unknown): number => {
+    if (!target || typeof target !== "object" || Array.isArray(target)) {
+      return 0.3;
+    }
+
+    const source = target as { transition?: unknown };
+    return readDuration(source.transition) || 0.3;
+  };
+
+  if (Array.isArray(definition)) {
+    return (
+      Math.max(...definition.map((entry) => readTargetDuration(entry)), 0.3) *
+        1000 +
+      100
+    );
   }
 
-  if (typeof transition.staggerDirection === "number") {
-    result.staggerDirection = transition.staggerDirection;
-  }
-
-  // Only return if there are actual orchestration options
-  if (Object.keys(result).length === 0) return null;
-
-  return result;
+  return readTargetDuration(definition) * 1000 + 100;
 };
 
 export const createMotionComponent = <Tag extends ElementTag = "div">(
-  tag: Tag,
+  component: Tag | ValidComponent,
+  options: MotionComponentOptions = {},
 ): Component<MotionProps<Tag>> => {
-  // The internal implementation uses MotionPropsInternal which works correctly with splitProps
-  // The public MotionProps type extends the style prop with transform shortcuts
-  const component = (props: MotionPropsInternal<Tag>) => {
-    const context = useMotionState();
-    const parent = context ? context[0] : null;
-    const presence = usePresenceContext();
+  initFeatureDefinitions();
+
+  const isSVG = options.type
+    ? options.type === "svg"
+    : typeof component === "string"
+      ? isSVGElement(component as Tag)
+      : false;
+  const isIntrinsicComponent = typeof component === "string";
+  const componentTag = isIntrinsicComponent ? component : isSVG ? "svg" : "div";
+  const MotionComponent = (props: MotionPropsInternal<Tag>) => {
+    const parentContext = useMotionContext();
+    const layoutGroup = useLayoutGroupContext();
+    const switchLayoutGroup = useSwitchLayoutGroupContext();
     const motionConfig = useMotionConfig();
-    const parentOrchestration = useOrchestration();
-    const [local, motionOptions, rest] = splitProps(
+    const presence = usePresenceContext();
+    const presenceId = createUniqueId();
+    let currentElement: ElementInstance<Tag> | null = null;
+    let childListObserver: MutationObserver | undefined;
+    let isSyncingChildListLayout = false;
+    let hasScheduledChildListSync = false;
+    const [latestDidUpdateId, setLatestDidUpdateId] = createSignal(0);
+    const [hasMounted, setHasMounted] = createSignal(false);
+    let isCleaningUp = false;
+    let animationChangesId = 0;
+    let hasScheduledInitialAnimation = false;
+    let scheduledInitialAnimationFrame: number | null = null;
+    const isPresent = () => presence?.isPresent() ?? true;
+    const [local, motionOptions, domProps] = splitProps(
       props as Record<string, unknown>,
-      ["ref"],
+      [
+        "ref",
+        "style",
+        "children",
+        "class",
+        "classList",
+        "textContent",
+        "innerHTML",
+      ],
       motionKeys as readonly string[],
-    ) as [{ ref?: unknown }, MotionOptions, Record<string, unknown>];
-
-    const [styleProps, elementProps] = splitProps(rest, ["style"]);
-
-    const resolvedMotionOptions = mergeProps(motionOptions, {
-      get transition() {
-        return motionOptions.transition ?? motionConfig?.transition();
+    ) as unknown as [
+      {
+        ref?: unknown;
+        style?: MotionStyle;
+        children?: unknown;
+        class?: unknown;
+        classList?: unknown;
+        textContent?: unknown;
+        innerHTML?: unknown;
       },
-      get initial() {
-        if (presence && !presence.initial()) return false;
-        return motionOptions.initial;
-      },
-      get custom() {
-        if (motionOptions.custom !== undefined) return motionOptions.custom;
-        return presence?.custom();
-      },
-    }) as MotionOptions;
-    const resolvedOptions = resolvedMotionOptions;
+      MotionOptions<ElementTag>,
+      Record<string, unknown>,
+    ];
 
-    const initialStyles = createMemo(() => {
-      return getInitialStyles(resolvedOptions, parent);
+    const layoutId = createMemo(() =>
+      layoutGroup.id && motionOptions.layoutId !== undefined
+        ? `${layoutGroup.id}-${motionOptions.layoutId}`
+        : motionOptions.layoutId,
+    );
+
+    const resolvedMotionOptions = createMemo(() => {
+      const onAnimationStart = motionOptions.onAnimationStart;
+      const onAnimationComplete = motionOptions.onAnimationComplete;
+      const rawOptions = mergeProps(motionOptions, {
+        style: local.style,
+        transition: motionOptions.transition ?? motionConfig?.transition(),
+        initial:
+          presence && !presence.initial() ? false : motionOptions.initial,
+        custom:
+          motionOptions.custom !== undefined
+            ? motionOptions.custom
+            : presence?.custom(),
+        onAnimationStart:
+          typeof onAnimationStart === "function"
+            ? (definition: MotionAnimationDefinition) => {
+                const marker = currentElement as MotionExitMarker | null;
+                if (marker?.__motionShouldExit || !isPresent()) return;
+                onAnimationStart(definition);
+              }
+            : undefined,
+        onAnimationComplete:
+          typeof onAnimationComplete === "function"
+            ? (definition: MotionAnimationDefinition) => {
+                const marker = currentElement as MotionExitMarker | null;
+                if (marker?.__motionShouldExit || !isPresent()) return;
+                onAnimationComplete(definition);
+              }
+            : undefined,
+        layoutId: layoutId(),
+      }) as MotionOptions<ElementTag>;
+
+      return normalizeMotionOptions(rawOptions);
     });
 
-    // Register this component as a child with parent's orchestration
-    let childIndex = 0;
-    if (parentOrchestration) {
-      childIndex = parentOrchestration.registerChild();
+    const motionDomPresenceContext = createMemo(() =>
+      presence
+        ? {
+            id: presence.id ?? presenceId,
+            initial:
+              presence.initial() === false
+                ? false
+                : (undefined as false | undefined),
+            isPresent: presence.isPresent(),
+            custom: presence.custom(),
+            onExitComplete: (id: string | number) =>
+              presence.onExitComplete(String(id), currentElement ?? undefined),
+            register: (id: string | number) => presence.register(id),
+          }
+        : null,
+    );
+
+    const treeVariants = createMemo(() =>
+      getCurrentTreeVariants(resolvedMotionOptions(), parentContext),
+    );
+
+    const initialVisualState = untrack(() =>
+      createVisualState(
+        resolvedMotionOptions(),
+        treeVariants(),
+        presence
+          ? {
+              initial: presence.initial(),
+              custom: presence.custom(),
+            }
+          : null,
+        isSVG,
+      ),
+    ) as VisualState<HTMLElement | SVGElement, unknown>;
+
+    const visualElement = createDomVisualElement(componentTag, {
+      visualState: initialVisualState,
+      parent: parentContext.visualElement,
+      props: resolvedMotionOptions() as unknown as MotionNodeOptions,
+      presenceContext: motionDomPresenceContext(),
+      blockInitialAnimation: presence ? !presence.initial() : false,
+      reducedMotionConfig: motionConfig?.reducedMotion(),
+      isSVG,
+    });
+
+    const unregisterPresence = presence?.register?.(presenceId);
+    if (unregisterPresence) {
+      onCleanup(unregisterPresence);
     }
 
-    // Orchestration state for this component's children
-    let registeredChildCount = 0;
-    let completedChildCount = 0;
+    const ensureProjectionNode = (nodeOptions: MotionOptions) => {
+      if (typeof window === "undefined" || visualElement.projection) return;
+      if (!shouldCreateProjectionNode(nodeOptions)) return;
 
-    // For "beforeChildren": promise that resolves when parent animation completes
-    let parentCompleteResolver: (() => void) | null = null;
-    const [childrenCanStartPromise, setChildrenCanStartPromise] = createSignal(
-      Promise.resolve(),
-    );
+      visualElement.projection = new HTMLProjectionNode(
+        visualElement.latestValues,
+        nodeOptions["data-framer-portal-id"]
+          ? undefined
+          : getClosestProjectingNode(parentContext.visualElement),
+      );
 
-    // For "afterChildren": promise that resolves when all children have completed
-    let afterChildrenResolver: (() => void) | null = null;
-    let afterChildrenPromise: Promise<void> | null = null;
+      if (currentElement && !visualElement.projection.instance) {
+        visualElement.projection.mount(
+          currentElement as unknown as HTMLElement,
+        );
+      }
+    };
 
-    // Create orchestration context for this component's children
-    const orchestrationOptions = createMemo(() =>
-      extractOrchestrationOptions(
-        resolvedMotionOptions.animate,
-        resolvedMotionOptions.variants as Variants | undefined,
-      ),
-    );
+    const updateProjectionOptions = (nodeOptions: MotionOptions) => {
+      const projection = visualElement.projection;
+      if (!projection) return;
 
-    // When orchestration options change, set up the childrenCanStart promise
-    createRenderEffect(() => {
-      const orch = orchestrationOptions();
-      const when = orch?.when;
+      projection.setOptions({
+        layoutId: nodeOptions.layoutId,
+        layout: nodeOptions.layout,
+        alwaysMeasureLayout:
+          Boolean(nodeOptions.drag) ||
+          (typeof Element !== "undefined" &&
+            nodeOptions.dragConstraints instanceof Element),
+        layoutScroll: nodeOptions.layoutScroll,
+        layoutRoot: nodeOptions.layoutRoot,
+        crossfade: nodeOptions.layoutCrossfade,
+        layoutDependency: nodeOptions.layoutDependency,
+        visualElement,
+        animationType:
+          typeof nodeOptions.layout === "string" ? nodeOptions.layout : "both",
+        initialPromotionConfig: switchLayoutGroup,
+        onExitComplete: () =>
+          presence?.onExitComplete(presenceId, currentElement ?? undefined),
+      });
+    };
 
-      if (when === "beforeChildren") {
-        // Children must wait for parent to signal completion
-        let resolver: () => void;
-        const promise = new Promise<void>((resolve) => {
-          resolver = resolve;
-        });
-        parentCompleteResolver = resolver!;
-        setChildrenCanStartPromise(promise);
-      } else {
-        // Children can start immediately (no orchestration or afterChildren)
-        parentCompleteResolver = null;
-        setChildrenCanStartPromise(Promise.resolve());
+    const initialProjectionOptions = untrack(resolvedMotionOptions);
+    ensureProjectionNode(initialProjectionOptions);
+    updateProjectionOptions(initialProjectionOptions);
+
+    createComputed<
+      | {
+          layoutDependency: unknown;
+          isPresent: boolean;
+          forceRenderVersion: number;
+        }
+      | undefined
+    >((prev) => {
+      const props = resolvedMotionOptions();
+      const currentIsPresent = isPresent();
+      const forceRenderVersion = layoutGroup.forceRenderVersion?.() ?? 0;
+
+      local.class;
+      local.classList;
+      local.textContent;
+      local.innerHTML;
+      props.style;
+
+      if (!hasMounted() || !visualElement.projection) {
+        return {
+          layoutDependency: props.layoutDependency,
+          isPresent: currentIsPresent,
+          forceRenderVersion,
+        };
       }
 
-      // Reset child completion tracking
-      completedChildCount = 0;
-      afterChildrenResolver = null;
-      afterChildrenPromise = null;
+      visualElement.projection.isPresent = currentIsPresent;
+      updateProjectionOptions(props);
+
+      const shouldMeasure =
+        props.layoutDependency === undefined ||
+        prev?.layoutDependency !== props.layoutDependency ||
+        prev?.isPresent !== currentIsPresent ||
+        prev?.forceRenderVersion !== forceRenderVersion;
+
+      if (shouldMeasure) {
+        hasTakenAnySnapshot = true;
+        visualElement.projection.willUpdate();
+        setLatestDidUpdateId((value: number) => value + 1);
+      }
+
+      return {
+        layoutDependency: props.layoutDependency,
+        isPresent: currentIsPresent,
+        forceRenderVersion,
+      };
     });
 
-    const childOrchestration: OrchestrationContextValue = {
-      childrenCanStart: childrenCanStartPromise,
-      signalChildComplete: () => {
-        completedChildCount++;
-        // Check if all registered children have completed
-        if (
-          afterChildrenResolver &&
-          completedChildCount >= registeredChildCount
-        ) {
-          afterChildrenResolver();
-          afterChildrenResolver = null;
-        }
-      },
-      getChildDelay: (idx: number) => {
-        const orch = orchestrationOptions();
-        if (!orch) return 0;
+    const visualProps = createMemo(() => {
+      const props = resolvedMotionOptions();
+      const initialProps = createInitialVisualProps(
+        componentTag,
+        props,
+        visualElement.latestValues,
+        isSVG,
+      );
+      const normalizedStyle = props.style;
+      const style = {};
 
-        let baseDelay = 0;
-        const total = registeredChildCount || 1;
-        const direction = orch.staggerDirection ?? 1;
+      copyRawValuesOnly(style, normalizedStyle, props);
 
-        // Handle delayChildren
-        if (typeof orch.delayChildren === "number") {
-          baseDelay = orch.delayChildren;
-        } else if (isStaggerFunction(orch.delayChildren)) {
-          baseDelay = orch.delayChildren(
-            direction === 1 ? idx : total - 1 - idx,
-            total,
-          );
-        }
+      const initialStyle = initialProps.style as TransformStyle | undefined;
+      const mergedStyle =
+        style && initialStyle
+          ? { ...style, ...initialStyle }
+          : style || initialStyle;
 
-        // Handle deprecated staggerChildren
-        if (orch.staggerChildren) {
-          const staggerIndex = direction === 1 ? idx : total - 1 - idx;
-          baseDelay += orch.staggerChildren * staggerIndex;
-        }
+      const forwardedProps: Record<string, unknown> = {
+        ...domProps,
+      };
 
-        return baseDelay;
-      },
-      registerChild: () => {
-        return registeredChildCount++;
-      },
-      getChildCount: () => registeredChildCount,
-      getWhen: () => orchestrationOptions()?.when,
-      waitForChildren: () => {
-        // If no children registered, resolve immediately
-        if (registeredChildCount === 0) {
-          return Promise.resolve();
-        }
+      if (local.class !== undefined) {
+        forwardedProps.class = local.class;
+      }
 
-        // If all children already completed, resolve immediately
-        if (completedChildCount >= registeredChildCount) {
-          return Promise.resolve();
-        }
+      if (local.classList !== undefined) {
+        forwardedProps.classList = local.classList;
+      }
 
-        // Create a promise that resolves when all children complete
-        if (!afterChildrenPromise) {
-          afterChildrenPromise = new Promise<void>((resolve) => {
-            afterChildrenResolver = resolve;
-          });
-        }
+      if (local.textContent !== undefined) {
+        forwardedProps.textContent = local.textContent;
+      }
 
-        return afterChildrenPromise;
-      },
-      signalParentComplete: () => {
-        if (parentCompleteResolver) {
-          parentCompleteResolver();
-          parentCompleteResolver = null;
-        }
-      },
-    };
-
-    const [state, setState] = createStore(
-      createMotionState({
-        options: resolvedOptions,
-        parent,
-      }),
-    );
-
-    let cachedElement: Element | null = null;
-
-    // Process style prop for transform shortcuts.
-    // Keep raw values available so projection can restore overrides.
-    const processedStyleData = createMemo<Record<string, string | number>>(
-      () => {
-        const rawStyle = styleProps.style as
-          | Record<string, string | number>
-          | string
-          | undefined;
-        // Never exclude - let Solid render the raw values, renderToDom will correct when needed
-        return processStyleProp(rawStyle);
-      },
-    );
-
-    const getStyleValues = () => processedStyleData();
-
-    // Calculate additional delay from parent orchestration
-    const getParentOrchestrationDelay = (): number => {
-      if (!parentOrchestration) return 0;
-      return parentOrchestration.getChildDelay(childIndex);
-    };
-
-    useAnimationState({
-      state,
-      setState,
-      options: resolvedOptions,
-      presence,
-      getElement: () => cachedElement,
-      motionConfig,
-      getOrchestrationDelay: getParentOrchestrationDelay,
-      parentOrchestration,
-      signalAnimationComplete: () => {
-        parentOrchestration?.signalChildComplete();
-      },
-      childOrchestration,
-      getStyleValues,
-    });
-    useGestures({ state, setState, options: resolvedOptions });
-    useDragGesture({ state, setState, options: resolvedOptions });
-
-    const ref = mergeRefs<ElementInstance<Tag> & MotionElement>(
-      local.ref as ElementInstance<Tag> & MotionElement,
-      (el) => {
-        if (el) {
-          cachedElement = el;
-          (el as any).__motionSolid = true;
-        }
-        setState("element", el);
-      },
-    );
-
-    const mergedStyles = createMemo(() => {
-      const initial = initialStyles();
-      const processedStyle = processedStyleData();
-      return { ...processedStyle, ...initial };
-    });
-
-    let didAutoLayoutSnapshot = false;
-
-    createComputed(() => {
-      const layoutEnabled =
-        Boolean(motionOptions.layout) || Boolean(motionOptions.layoutId);
-
-      if (!layoutEnabled) {
-        didAutoLayoutSnapshot = false;
-        return;
+      if (local.innerHTML !== undefined) {
+        forwardedProps.innerHTML = local.innerHTML;
       }
 
       if (
-        !motionOptions.layoutDependencies ||
-        motionOptions.layoutDependencies.length === 0
+        (options.forwardMotionProps ?? false) &&
+        typeof component !== "string"
       ) {
-        void motionOptions.layoutRoot;
-        void motionOptions.layoutScroll;
-        void motionOptions.layoutCrossfade;
-        void styleProps.style;
-        void (elementProps as Record<string, unknown>).class;
-        void (elementProps as Record<string, unknown>).classList;
-        void (elementProps as Record<string, unknown>).textContent;
-        void (elementProps as Record<string, unknown>).innerHTML;
-      } else {
-        const dependencies = motionOptions.layoutDependencies;
-        if (dependencies) {
-          for (const dependency of dependencies) {
-            if (typeof dependency === "function") {
-              dependency();
-            }
+        Object.assign(forwardedProps, motionOptions);
+      }
+
+      const filteredProps = filterProps(
+        forwardedProps as MotionOptions & Record<string, unknown>,
+        typeof component === "string",
+        options.forwardMotionProps ?? false,
+      );
+      delete filteredProps.children;
+      delete filteredProps.ref;
+
+      if (
+        filteredProps.tabIndex === undefined &&
+        (props.onTap || props.onTapStart || props.whileTap)
+      ) {
+        filteredProps.tabIndex = 0;
+      }
+
+      if (props.drag && props.dragListener !== false) {
+        filteredProps.draggable = false;
+      }
+
+      return {
+        ...filteredProps,
+        ...initialProps,
+        style: toDomStyle(mergedStyle),
+      };
+    });
+
+    const MotionHostChildren: Component = () => {
+      const resolvedChildren = () => {
+        const value = local.children;
+        return isMotionValue(value) ? value.get() : value;
+      };
+
+      return resolvedChildren();
+    };
+
+    const renderMotionChildren = () => {
+      if (local.textContent !== undefined || local.innerHTML !== undefined) {
+        return undefined;
+      }
+
+      return (
+        <MotionContext.Provider
+          value={{
+            ...treeVariants(),
+            visualElement,
+          }}
+        >
+          <MotionHostChildren />
+        </MotionContext.Provider>
+      );
+    };
+
+    const ref = mergeRefs<ElementInstance<Tag>>(
+      local.ref as ((el: ElementInstance<Tag>) => void) | undefined,
+      (element) => {
+        currentElement = element ?? null;
+
+        if (element) {
+          (element as unknown as MotionExitMarker).__motionIsAnimatingExit =
+            false;
+          if (isSVG) {
+            (visualElement as SVGVisualElement).mount(
+              element as unknown as SVGElement,
+            );
+          } else {
+            (visualElement as HTMLVisualElement).mount(
+              element as unknown as HTMLElement,
+            );
           }
+          visualElement.updateFeatures();
+          visualElement.scheduleRenderMicrotask();
+        }
+      },
+    );
+
+    onMount(() => {
+      setHasMounted(true);
+    });
+
+    createRenderEffect(() => {
+      const props = resolvedMotionOptions();
+      const mounted = hasMounted();
+
+      ensureProjectionNode(props);
+      updateProjectionOptions(props);
+
+      visualElement.update(
+        props as unknown as MotionNodeOptions,
+        motionDomPresenceContext(),
+      );
+
+      if (visualElement.projection && layoutGroup.group) {
+        layoutGroup.group.add(visualElement.projection);
+      }
+
+      if (
+        visualElement.projection &&
+        switchLayoutGroup.register &&
+        props.layoutId
+      ) {
+        switchLayoutGroup.register(visualElement.projection);
+      }
+
+      if (mounted) {
+        visualElement.updateFeatures();
+        visualElement.scheduleRenderMicrotask();
+      }
+    });
+
+    createRenderEffect(() => {
+      childListObserver?.disconnect();
+      childListObserver = undefined;
+
+      if (typeof MutationObserver === "undefined") return;
+      if (!hasMounted()) return;
+      if (!visualElement.projection || !currentElement) return;
+
+      childListObserver = new MutationObserver((records) => {
+        if (isCleaningUp || isSyncingChildListLayout) return;
+
+        const hasChildListMutation = records.some(
+          (record) =>
+            record.type === "childList" &&
+            (record.addedNodes.length > 0 || record.removedNodes.length > 0),
+        );
+
+        if (!hasChildListMutation || hasScheduledChildListSync) return;
+
+        hasScheduledChildListSync = true;
+
+        queueMicrotask(() => {
+          hasScheduledChildListSync = false;
+
+          if (isCleaningUp || isSyncingChildListLayout) return;
+
+          const projection = visualElement.projection;
+          if (!projection || !currentElement?.isConnected) return;
+
+          const root = projection.root;
+          if (!root || root.isUpdateBlocked()) return;
+
+          const hasSnapshot =
+            snapshotProjectionSubtreeFromCurrentLayout(projection);
+          if (!hasSnapshot) return;
+
+          isSyncingChildListLayout = true;
+          hasTakenAnySnapshot = true;
+
+          root.startUpdate();
+          root.didUpdate();
+          setLatestDidUpdateId((value) => value + 1);
+
+          queueMicrotask(() => {
+            isSyncingChildListLayout = false;
+          });
+        });
+      });
+
+      childListObserver.observe(currentElement, { childList: true });
+    });
+
+    createEffect(() => {
+      if (!hasMounted()) return;
+
+      resolvedMotionOptions();
+      const currentIsPresent = isPresent();
+      const currentAnimationChangesId = ++animationChangesId;
+      const runAnimationChanges = () => {
+        if (isCleaningUp) return;
+        if (currentAnimationChangesId !== animationChangesId) return;
+
+        const marker = currentElement as MotionExitMarker | null;
+        if (
+          !currentElement ||
+          marker?.__motionShouldExit ||
+          !currentIsPresent
+        ) {
+          return;
+        }
+
+        visualElement.animationState?.animateChanges();
+        visualElement.enteringChildren = undefined;
+      };
+
+      if (!hasScheduledInitialAnimation) {
+        hasScheduledInitialAnimation = true;
+
+        if (scheduledInitialAnimationFrame !== null) {
+          cancelAnimationFrame(scheduledInitialAnimationFrame);
+        }
+
+        scheduledInitialAnimationFrame = requestAnimationFrame(() => {
+          scheduledInitialAnimationFrame = null;
+          runAnimationChanges();
+        });
+
+        return;
+      }
+
+      queueMicrotask(() => {
+        runAnimationChanges();
+      });
+    });
+
+    createRenderEffect(() => {
+      const didUpdateId = latestDidUpdateId();
+      if (!didUpdateId || !visualElement.projection) return;
+
+      queueMicrotask(() => {
+        if (!visualElement.projection) return;
+        if (didUpdateId !== latestDidUpdateId()) return;
+
+        if (hasTakenAnySnapshot) {
+          visualElement.projection.root?.didUpdate();
+        }
+
+        queueMicrotask(() => {
+          const projection = visualElement.projection;
+          if (
+            projection &&
+            !projection.currentAnimation &&
+            projection.isLead() &&
+            !isPresent()
+          ) {
+            presence?.onExitComplete(presenceId, currentElement ?? undefined);
+          }
+        });
+      });
+    });
+
+    const renderHost = (): JSX.Element => {
+      return (
+        <Dynamic
+          component={component as ValidComponent}
+          {...visualProps()}
+          ref={ref}
+        >
+          {renderMotionChildren()}
+        </Dynamic>
+      );
+    };
+
+    onCleanup(() => {
+      isCleaningUp = true;
+      childListObserver?.disconnect();
+      childListObserver = undefined;
+      animationChangesId++;
+      if (scheduledInitialAnimationFrame !== null) {
+        cancelAnimationFrame(scheduledInitialAnimationFrame);
+        scheduledInitialAnimationFrame = null;
+      }
+
+      const projection = visualElement.projection;
+      const element = currentElement;
+
+      if (projection) {
+        hasTakenAnySnapshot = true;
+        projection.scheduleCheckAfterUnmount();
+
+        if (layoutGroup.group) {
+          layoutGroup.group.remove(projection);
+        }
+
+        if (switchLayoutGroup.deregister) {
+          switchLayoutGroup.deregister(projection);
         }
       }
 
-      const element = state.element;
-      if (!element) {
-        didAutoLayoutSnapshot = false;
+      const marker = element as MotionExitMarker | null;
+      const shouldHandoff = Boolean(marker?.__motionShouldExit) || !isPresent();
+
+      if (
+        !presence &&
+        (!element || !shouldHandoff || !element.isConnected || !marker)
+      ) {
+        visualElement.unmount();
         return;
       }
 
-      if (!didAutoLayoutSnapshot) {
-        didAutoLayoutSnapshot = true;
-        return;
-      }
+      queueMicrotask(() => {
+        const queuedMarker = element as MotionExitMarker | null;
+        const queuedShouldHandoff =
+          Boolean(queuedMarker?.__motionShouldExit) || !isPresent();
 
-      projectionManager.scheduleUpdate(state.element);
+        if (
+          !element ||
+          !queuedShouldHandoff ||
+          !element.isConnected ||
+          !queuedMarker
+        ) {
+          visualElement.unmount();
+          return;
+        }
+
+        queuedMarker.__motionIsAnimatingExit = true;
+        queuedMarker.__motionPresenceId = presenceId;
+
+        const exitDefinition = visualElement.getProps().exit as
+          | MotionAnimationDefinition
+          | undefined;
+
+        if (!exitDefinition || exitDefinition === true) {
+          queuedMarker.__motionIsAnimatingExit = false;
+          presence?.onExitComplete(presenceId, element);
+          visualElement.unmount();
+          return;
+        }
+
+        const exitAnimation = exitDefinition as AnimationDefinition;
+        const resolvedExitDefinition =
+          typeof exitDefinition === "string" ||
+          typeof exitDefinition === "function"
+            ? resolveVariant(
+                visualElement,
+                exitDefinition,
+                visualElement.presenceContext?.custom,
+              )
+            : exitDefinition;
+        const exitTimeoutMs = getTransitionRuntimeMs(
+          resolvedExitDefinition ?? exitDefinition,
+        );
+        let exitTimeout: ReturnType<typeof setTimeout> | undefined;
+        let hasCompletedExit = false;
+
+        const completeExit = () => {
+          if (hasCompletedExit) return;
+          hasCompletedExit = true;
+
+          if (exitTimeout !== undefined) {
+            clearTimeout(exitTimeout);
+          }
+
+          queuedMarker.__motionIsAnimatingExit = false;
+          queuedMarker.__motionHandleExitComplete?.();
+          presence?.onExitComplete(presenceId, element);
+          visualElement.unmount();
+        };
+
+        exitTimeout = setTimeout(completeExit, exitTimeoutMs);
+
+        const exitAnimationPromise =
+          visualElement.animationState?.setActive("exit", true, {
+            type: "exit",
+            custom: visualElement.presenceContext?.custom,
+          }) ??
+          animateVisualElement(visualElement, exitAnimation, {
+            type: "exit",
+            custom: visualElement.presenceContext?.custom,
+          });
+
+        void exitAnimationPromise.catch(() => undefined).then(completeExit);
+      });
     });
 
-    return (
-      <MotionStateContext.Provider value={[state, setState]}>
-        <OrchestrationContext.Provider value={childOrchestration}>
-          <Dynamic
-            component={tag}
-            {...(elementProps as ComponentProps<Tag>)}
-            style={mergedStyles() as any}
-            ref={ref}
-          />
-        </OrchestrationContext.Provider>
-      </MotionStateContext.Provider>
-    );
+    const host = renderHost();
+
+    return host;
   };
 
-  // Cast to the public MotionProps type which extends style with transform shortcuts
-  return component as unknown as Component<MotionProps<Tag>>;
+  return MotionComponent as unknown as Component<MotionProps<Tag>>;
 };
