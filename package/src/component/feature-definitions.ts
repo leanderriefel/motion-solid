@@ -1,5 +1,6 @@
 import { setFeatureDefinitions } from "motion-dom";
 import { AnimationFeature } from "../features/animation-feature";
+import { DragFeature } from "../features/drag-feature";
 import { FocusFeature } from "../features/focus-feature";
 import { HoverFeature } from "../features/hover-feature";
 import { InViewFeature } from "../features/inview-feature";
@@ -17,6 +18,7 @@ const featureProps = {
     "whileFocus",
     "whileDrag",
   ],
+  drag: ["drag", "dragControls"],
   hover: ["whileHover", "onHoverStart", "onHoverEnd"],
   tap: ["whileTap", "onTap", "onTapStart", "onTapCancel"],
   pan: ["onPan", "onPanStart", "onPanSessionStart", "onPanEnd"],
@@ -43,6 +45,11 @@ export const initFeatureDefinitions = () => {
           props as Record<string, unknown>,
           featureProps.animation,
         ),
+    },
+    drag: {
+      Feature: DragFeature as never,
+      isEnabled: (props) =>
+        hasFeatureProp(props as Record<string, unknown>, featureProps.drag),
     },
     hover: {
       Feature: HoverFeature as never,

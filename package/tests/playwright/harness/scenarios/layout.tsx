@@ -1,10 +1,21 @@
 import { LayoutGroup, motion } from "../../../../src";
-import { createSignal } from "solid-js";
+import { For, createMemo, createSignal } from "solid-js";
 import type { ScenarioController, ScenarioProps } from "../types";
 
 export function LayoutScenario(props: ScenarioProps) {
   const [expanded, setExpanded] = createSignal(false);
   const [selected, setSelected] = createSignal<"a" | "b">("a");
+  const [sortMetric, setSortMetric] = createSignal<"impact" | "speed">(
+    "impact",
+  );
+
+  const queue = createMemo(() => {
+    const metric = sortMetric();
+
+    return [...reorderItems].sort(
+      (left, right) => right[metric] - left[metric],
+    );
+  });
 
   const controller: ScenarioController = {
     act(action, payload) {
@@ -27,9 +38,15 @@ export function LayoutScenario(props: ScenarioProps) {
             setSelected(payload);
           }
           return;
+        case "setSortMetric":
+          if (payload === "impact" || payload === "speed") {
+            setSortMetric(payload);
+          }
+          return;
         case "reset":
           setExpanded(false);
           setSelected("a");
+          setSortMetric("impact");
           return;
       }
     },
@@ -37,6 +54,8 @@ export function LayoutScenario(props: ScenarioProps) {
       return {
         expanded: expanded(),
         selected: selected(),
+        sortMetric: sortMetric(),
+        reorderIds: queue().map((item) => item.id),
       };
     },
   };
@@ -135,8 +154,116 @@ export function LayoutScenario(props: ScenarioProps) {
               ))}
             </div>
           </LayoutGroup>
+
+          <motion.div
+            layout
+            data-testid="layout-reorder-list"
+            style={{
+              display: "grid",
+              gap: "12px",
+              width: "320px",
+            }}
+          >
+            <For each={queue()}>
+              {(item) => (
+                <motion.button
+                  layout
+                  type="button"
+                  data-testid={`layout-reorder-${item.id}`}
+                  onLayoutAnimationStart={() => {
+                    props.log({
+                      type: "layoutStart",
+                      node: `reorder-${item.id}`,
+                    });
+                  }}
+                  onLayoutAnimationComplete={() => {
+                    props.log({
+                      type: "layoutComplete",
+                      node: `reorder-${item.id}`,
+                    });
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    border: "1px solid rgb(203, 213, 225)",
+                    "border-radius": "20px",
+                    padding: "16px",
+                    "text-align": "left",
+                    "background-color": "white",
+                    "box-shadow": "0px 10px 24px rgba(15, 23, 42, 0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      "justify-content": "space-between",
+                      gap: "12px",
+                      "align-items": "center",
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          "font-size": "14px",
+                          "font-weight": "600",
+                          color: "rgb(15, 23, 42)",
+                        }}
+                      >
+                        {item.label}
+                      </div>
+                      <div
+                        style={{
+                          "margin-top": "4px",
+                          "font-size": "12px",
+                          color: "rgb(100, 116, 139)",
+                        }}
+                      >
+                        {item.owner}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      padding: "6px 10px",
+                      "border-radius": "999px",
+                      "background-color": "rgb(241, 245, 249)",
+                      "font-size": "12px",
+                      "font-weight": "600",
+                      color: "rgb(15, 23, 42)",
+                    }}
+                  >
+                    {sortMetric() === "impact" ? item.impact : item.speed}
+                  </div>
+                </motion.button>
+              )}
+            </For>
+          </motion.div>
         </div>
       </div>
     </div>
   );
 }
+
+const reorderItems = [
+  {
+    id: "sync",
+    label: "Sync profile settings",
+    owner: "Platform",
+    impact: 92,
+    speed: 44,
+  },
+  {
+    id: "feed",
+    label: "Reduce feed jank",
+    owner: "Experience",
+    impact: 78,
+    speed: 81,
+  },
+  {
+    id: "invite",
+    label: "Tighten invite flow",
+    owner: "Growth",
+    impact: 64,
+    speed: 88,
+  },
+] as const;

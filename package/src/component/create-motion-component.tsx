@@ -12,7 +12,7 @@ import {
   type MotionNodeOptions,
   type IProjectionNode,
 } from "motion-dom";
-import type { Component, ComponentProps, ValidComponent } from "solid-js";
+import type { Component, ComponentProps, JSX, ValidComponent } from "solid-js";
 import {
   createUniqueId,
   createSignal,
@@ -22,6 +22,7 @@ import {
   createRenderEffect,
   mergeProps,
   onCleanup,
+  onMount,
   splitProps,
   untrack,
 } from "solid-js";
@@ -159,6 +160,33 @@ const getClosestProjectingNode = (
     : getClosestProjectingNode(visualElement.parent);
 };
 
+const snapshotProjectionSubtreeFromCurrentLayout = (
+  projection: IProjectionNode | undefined,
+) => {
+  if (!projection) return false;
+
+  const queue = [projection];
+  let hasPreparedSnapshot = false;
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (!node) continue;
+
+    if (node.layout && !node.snapshot) {
+      node.snapshot = node.layout;
+      hasPreparedSnapshot = true;
+    }
+
+    if (node.layout) {
+      node.isLayoutDirty = true;
+    }
+
+    queue.push(...node.children);
+  }
+
+  return hasPreparedSnapshot;
+};
+
 const shouldCreateProjectionNode = (props: MotionOptions) =>
   Boolean(
     props.layout || props.layoutId || props.layoutScroll || props.layoutRoot,
@@ -222,9 +250,8 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     : typeof component === "string"
       ? isSVGElement(component as Tag)
       : false;
-  const componentTag =
-    typeof component === "string" ? component : isSVG ? "svg" : "div";
-
+  const isIntrinsicComponent = typeof component === "string";
+  const componentTag = isIntrinsicComponent ? component : isSVG ? "svg" : "div";
   const MotionComponent = (props: MotionPropsInternal<Tag>) => {
     const parentContext = useMotionContext();
     const layoutGroup = useLayoutGroupContext();
@@ -233,10 +260,15 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     const presence = usePresenceContext();
     const presenceId = createUniqueId();
     let currentElement: ElementInstance<Tag> | null = null;
+    let childListObserver: MutationObserver | undefined;
+    let isSyncingChildListLayout = false;
+    let hasScheduledChildListSync = false;
     const [latestDidUpdateId, setLatestDidUpdateId] = createSignal(0);
-    let isMounted = false;
+    const [hasMounted, setHasMounted] = createSignal(false);
     let isCleaningUp = false;
     let animationChangesId = 0;
+    let hasScheduledInitialAnimation = false;
+    let scheduledInitialAnimationFrame: number | null = null;
     const isPresent = () => presence?.isPresent() ?? true;
     const [local, motionOptions, domProps] = splitProps(
       props as Record<string, unknown>,
@@ -414,12 +446,11 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
       local.class;
       local.classList;
-      local.children;
       local.textContent;
       local.innerHTML;
       props.style;
 
-      if (!isMounted || !visualElement.projection) {
+      if (!hasMounted() || !visualElement.projection) {
         return {
           layoutDependency: props.layoutDependency,
           isPresent: currentIsPresent,
@@ -521,6 +552,32 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       };
     });
 
+    const MotionHostChildren: Component = () => {
+      const resolvedChildren = () => {
+        const value = local.children;
+        return isMotionValue(value) ? value.get() : value;
+      };
+
+      return resolvedChildren();
+    };
+
+    const renderMotionChildren = () => {
+      if (local.textContent !== undefined || local.innerHTML !== undefined) {
+        return undefined;
+      }
+
+      return (
+        <MotionContext.Provider
+          value={{
+            ...treeVariants(),
+            visualElement,
+          }}
+        >
+          <MotionHostChildren />
+        </MotionContext.Provider>
+      );
+    };
+
     const ref = mergeRefs<ElementInstance<Tag>>(
       local.ref as ((el: ElementInstance<Tag>) => void) | undefined,
       (element) => {
@@ -538,17 +595,19 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
               element as unknown as HTMLElement,
             );
           }
-          isMounted = true;
           visualElement.updateFeatures();
           visualElement.scheduleRenderMicrotask();
-          void visualElement.animationState?.animateChanges();
-          visualElement.enteringChildren = undefined;
         }
       },
     );
 
+    onMount(() => {
+      setHasMounted(true);
+    });
+
     createRenderEffect(() => {
       const props = resolvedMotionOptions();
+      const mounted = hasMounted();
 
       ensureProjectionNode(props);
       updateProjectionOptions(props);
@@ -570,20 +629,71 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         switchLayoutGroup.register(visualElement.projection);
       }
 
-      if (isMounted) {
+      if (mounted) {
         visualElement.updateFeatures();
         visualElement.scheduleRenderMicrotask();
       }
     });
 
+    createRenderEffect(() => {
+      childListObserver?.disconnect();
+      childListObserver = undefined;
+
+      if (typeof MutationObserver === "undefined") return;
+      if (!hasMounted()) return;
+      if (!visualElement.projection || !currentElement) return;
+
+      childListObserver = new MutationObserver((records) => {
+        if (isCleaningUp || isSyncingChildListLayout) return;
+
+        const hasChildListMutation = records.some(
+          (record) =>
+            record.type === "childList" &&
+            (record.addedNodes.length > 0 || record.removedNodes.length > 0),
+        );
+
+        if (!hasChildListMutation || hasScheduledChildListSync) return;
+
+        hasScheduledChildListSync = true;
+
+        queueMicrotask(() => {
+          hasScheduledChildListSync = false;
+
+          if (isCleaningUp || isSyncingChildListLayout) return;
+
+          const projection = visualElement.projection;
+          if (!projection || !currentElement?.isConnected) return;
+
+          const root = projection.root;
+          if (!root || root.isUpdateBlocked()) return;
+
+          const hasSnapshot =
+            snapshotProjectionSubtreeFromCurrentLayout(projection);
+          if (!hasSnapshot) return;
+
+          isSyncingChildListLayout = true;
+          hasTakenAnySnapshot = true;
+
+          root.startUpdate();
+          root.didUpdate();
+          setLatestDidUpdateId((value) => value + 1);
+
+          queueMicrotask(() => {
+            isSyncingChildListLayout = false;
+          });
+        });
+      });
+
+      childListObserver.observe(currentElement, { childList: true });
+    });
+
     createEffect(() => {
-      if (!isMounted) return;
+      if (!hasMounted()) return;
 
       resolvedMotionOptions();
       const currentIsPresent = isPresent();
       const currentAnimationChangesId = ++animationChangesId;
-
-      queueMicrotask(() => {
+      const runAnimationChanges = () => {
         if (isCleaningUp) return;
         if (currentAnimationChangesId !== animationChangesId) return;
 
@@ -598,6 +708,25 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
         visualElement.animationState?.animateChanges();
         visualElement.enteringChildren = undefined;
+      };
+
+      if (!hasScheduledInitialAnimation) {
+        hasScheduledInitialAnimation = true;
+
+        if (scheduledInitialAnimationFrame !== null) {
+          cancelAnimationFrame(scheduledInitialAnimationFrame);
+        }
+
+        scheduledInitialAnimationFrame = requestAnimationFrame(() => {
+          scheduledInitialAnimationFrame = null;
+          runAnimationChanges();
+        });
+
+        return;
+      }
+
+      queueMicrotask(() => {
+        runAnimationChanges();
       });
     });
 
@@ -627,9 +756,27 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       });
     });
 
+    const renderHost = (): JSX.Element => {
+      return (
+        <Dynamic
+          component={component as ValidComponent}
+          {...visualProps()}
+          ref={ref}
+        >
+          {renderMotionChildren()}
+        </Dynamic>
+      );
+    };
+
     onCleanup(() => {
       isCleaningUp = true;
+      childListObserver?.disconnect();
+      childListObserver = undefined;
       animationChangesId++;
+      if (scheduledInitialAnimationFrame !== null) {
+        cancelAnimationFrame(scheduledInitialAnimationFrame);
+        scheduledInitialAnimationFrame = null;
+      }
 
       const projection = visualElement.projection;
       const element = currentElement;
@@ -733,25 +880,9 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       });
     });
 
-    return (
-      <MotionContext.Provider
-        value={{
-          ...treeVariants(),
-          visualElement,
-        }}
-      >
-        <Dynamic
-          component={component as ValidComponent}
-          {...visualProps()}
-          ref={ref}
-        >
-          {(() => {
-            const children = local.children;
-            return isMotionValue(children) ? children.get() : children;
-          })()}
-        </Dynamic>
-      </MotionContext.Provider>
-    );
+    const host = renderHost();
+
+    return host;
   };
 
   return MotionComponent as unknown as Component<MotionProps<Tag>>;

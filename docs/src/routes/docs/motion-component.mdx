@@ -166,6 +166,10 @@ Enable automatic layout animations when size or position changes.
 <motion.div layout="preserve-aspect" />
 ```
 
+Sibling reordering in Solid control flow, such as resorting a `For` list of `layout` items, is part of the supported layout behavior.
+
+See [Layout Animations](/docs/layout-animations) for shared-layout handoff patterns, `layoutDependency`, and distortion/correction guidance.
+
 ### `layoutId`
 
 Share layout state between different elements for handoff transitions:
@@ -191,6 +195,8 @@ Use Motion-compatible projection options directly on the node:
 <motion.div layout layoutRoot />
 <motion.div layoutId="card" layoutCrossfade={false} />
 ```
+
+When layout projection scales a component, add `layout` or `layout="position"` to immediate children that should not appear stretched. `borderRadius` and `boxShadow` correction only applies when those values are present on the motion component itself via `style`, `initial`, `animate`, or `exit`.
 
 ### Layout Callbacks
 

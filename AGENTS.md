@@ -27,7 +27,9 @@ When in doubt, follow this file and update other docs to match.
 - Library source: `package/src`
 - Library tests: `package/tests`
 - Docs site content: `docs/src/routes/docs`
+- Interactive docs demos live in `docs/src/components/demos`; keep the shared underline demo (`LayoutGroup` + `layoutId`), the reshuffling list demo (`layout` sibling reordering plus internal size changes), the gesture playground (single draggable square with axis-lock toggles), and the foreground card selection demo (shared-layout handoff into a modal-style overlay) aligned with runtime behavior and docs.
 - CI workflows: `.github/workflows`
+- Docs app: client bootstrap in `docs/src/entry-client.tsx` must default-export the `StartClient` mount function for Vinxi/Solid Start production builds. Side-effect-only mounting breaks the deployed site with a client boot error (`TypeError: e is not a function`). Do not use a top-level `"use client"` directive in docs components (e.g. `background-dots.tsx`); it is ignored by the current docs toolchain and only adds noisy build warnings.
 
 ## Package manager and key commands
 
@@ -86,6 +88,7 @@ Docs (`@motion-solid/docs`) commands:
 - Do not add new camelCase alias APIs for transforms or motion CSS keys.
 - Existing internal compatibility paths may still normalize camelCase input from `motion-dom`/ecosystem boundaries, but docs and types should prioritize kebab-case usage.
 - CSS variables (`--*`) must pass through unchanged.
+- Motion target typings accept CSS custom property keys (`--*`) in `initial`/`animate`/`exit` targets, matching runtime behavior.
 
 ## Framer Motion parity requirements
 
@@ -99,7 +102,7 @@ Docs (`@motion-solid/docs`) commands:
 - Before changing behavior, verify parity assumptions in source and tests.
 - If parity is impossible due to Solid runtime differences, document the exact behavior and rationale.
 - Current documented divergence:
-  - Solid disposes exiting component owners, so the exiting subtree does not remain reactively alive the way `motion/react` can. Retained exit nodes complete through a DOM-side exit callback bridge. `onExitComplete`, `propagate`, and DOM-backed exit handoff are parity targets; long-lived async `safeToRemove` flows inside an already-removed subtree are not React-identical and must stay explicitly documented.
+  - Solid disposes exiting component owners, so the exiting subtree does not remain reactively alive the way `motion/react` can. Retained exit nodes complete through a DOM-side exit callback bridge rather than a live exiting subtree owner. `onExitComplete`, `propagate`, and DOM-backed exit handoff are parity targets; long-lived async `safeToRemove` flows inside an already-removed subtree are not React-identical and must stay explicitly documented. This difference must remain documented anywhere `usePresence` / manual exit control is described.
 
 ## Architecture deep dive
 
@@ -107,7 +110,9 @@ Docs (`@motion-solid/docs`) commands:
 
 - Entry exports are centralized in `package/src/index.ts`.
 - `motion` proxy in `package/src/component/index.tsx` lazily caches generated components per tag.
-- `createMotionComponent(tag)` in `package/src/component/create-motion-component.tsx` wraps intrinsic elements through `Dynamic`.
+- `createMotionComponent(tag)` in `package/src/component/create-motion-component.tsx` renders intrinsic tags through Solid's normal `<Dynamic>` path. Hydration safety depends on materializing the host element once per component instance and keeping child resolution inside a dedicated inner component under `MotionContext`; repeatedly reading raw `props.children` inside layout/reactive tracking will recreate child JSX and break hydration.
+- `motion.create(Component, options)` is part of the public surface. Layout-capable custom components must forward the received `ref` prop to a single DOM/SVG host.
+- `package/tsup.config.ts` forces the published browser build through `solidPlugin({ solid: { generate: "dom", hydratable: true } })`. Do not drop `hydratable: true`, or published SSR consumers will regress even if the workspace docs app still looks fine.
 
 ### 2) Prop processing and state wiring
 
@@ -137,8 +142,11 @@ Docs (`@motion-solid/docs`) commands:
   - updating Motion props and presence context
   - calling `updateFeatures()` / `animateChanges()`
   - filtering DOM props and converting internal style keys back to DOM-safe output
+- Intrinsic motion hosts must keep the same element shape on the server and client. Do not reintroduce manual `template()` / `getNextElement()` / `ssrElement()` host wiring or any other SSR/client-specific host branch for standard HTML/SVG tags.
+- Do not read raw `props.children` in layout tracking/effects. Keep child resolution inside the dedicated inner host-children component and memoize that read there; otherwise motion components can recreate child JSX during hydration or resolve nested motion children outside `MotionContext`.
 - `useAnimationState` remains in the repo for older/isolated helpers, but it is not the source of truth for the primary motion component runtime anymore.
 - Animation type priority should continue to follow upstream Motion ordering unless parity research and tests justify a change.
+- `onAnimationComplete` fires exactly once per completed animate cycle; stale/cancelled/replaced animation runs from reactive reruns no longer invoke duplicate callbacks. Completion scheduling is guarded by per-type cycle IDs inside `startAnimations()`.
 
 ### 4) Variant resolution and inheritance
 
@@ -148,13 +156,16 @@ Docs (`@motion-solid/docs`) commands:
   - variant labels
   - function variants
   - parent variant inheritance when `inherit !== false`
+- Function variant resolvers that return variant labels resolve those labels against local `variants` instead of being discarded.
 - Key normalization flows through transform normalization; avoid introducing duplicate key aliases that create ambiguity.
 
 ### 5) Presence and exit lifecycle
 
 - Presence context and hooks live in `package/src/component/presence.tsx`.
 - `AnimatePresence` supports `mode`: `sync`, `wait`, `popLayout`.
+- Nested `AnimatePresence` gates parent-driven child exit handoff behind `propagate`, so `propagate={false}` does not trigger nested child exits on parent removal.
 - Exit lifecycle relies on retained DOM + completion signaling (`onExitComplete`) and exit handoff for unmounting motion components.
+- Exit handoff promotes the `exit` animation through `VisualElement.animationState.setActive("exit", true)` and suppresses stale queued `animateChanges()` microtasks during cleanup, avoiding enter-vs-exit races under parallel browser load.
 - Because exiting Solid owners are disposed, retained exit nodes complete through a DOM-side callback bridge (`__motionHandleExitComplete`) instead of a live exiting subtree context.
 - Presence APIs expose Accessors and Solid-friendly semantics.
 
@@ -182,10 +193,16 @@ Docs (`@motion-solid/docs`) commands:
   - `LayoutGroup`
   - `useInstantLayoutTransition`
   - `useResetProjection`
+- A dedicated layout docs page lives at `docs/src/routes/docs/layout-animations.mdx`. Keep that page, the demos page, and the layout-related README notes updated together.
+- `borderRadius` and `boxShadow` correction only applies when Motion can see those values on the projecting motion node itself (`style`, `initial`, `animate`, or `exit`). Class-only radius/shadow styling on the layout surface will not be corrected.
+- Shared-layout patterns driven by external Solid selection state should use `layoutDependency` when the source/target motion hosts do not directly read that signal themselves.
+- Sibling reordering inside Solid control flow (for example `For` resorting a `layout` list) must animate from the previous committed layout. The runtime currently restores this by snapshotting the subtree from its last measured layout when a motion host's child list mutates, then forcing a projection update.
+- `LayoutGroup.forceRender()` invalidates the provider value without recreating its underlying `nodeGroup()`, so `presenceAffectsLayout` exit completion can refresh grouped layout consumers in Solid without breaking shared-layout membership.
 
 ### 7) Gestures and viewport
 
 - Gesture orchestration: `package/src/gestures/use-gestures.ts` and `package/src/gestures/use-drag.ts`.
+- Drag is mounted through `package/src/features/drag-feature.ts`, which wires drag lifecycle directly into the upstream `VisualElement` feature pipeline. Keep docs demos and browser harness coverage aligned with that path; do not reintroduce a second store-driven drag runtime for motion components.
 - Maintain parity for hover/tap/focus/pan/drag and viewport triggers.
 - Keep pointer/keyboard accessibility behavior intact.
 
@@ -218,12 +235,17 @@ Primary suites (all under `package/tests`):
 - `integration/` for enter/exit, orchestration, gestures, viewport
 - `playwright/` for browser-level race/presence/keyboard/reduced-motion scenarios
 
+Regression coverage explicitly exercises: layout projection creation/filtering, Solid `For` sibling reordering, `LayoutGroup` layoutId namespacing, `layoutDependency` measurement gating, `motion.create` ref/prop forwarding, and browser-level layout/shared-layout plus `AnimatePresence mode="popLayout"` retention.
+Regression coverage must also include browser-level drag movement/axis locking and layout scale correction on a projecting node with `borderRadius`/`boxShadow`.
+
 Required verification after meaningful library changes:
 
 - `bun --filter motion-solid typecheck`
 - `bun --filter motion-solid test`
 - `bun --filter motion-solid build`
 - `bun --filter motion-solid test:browser` (for gesture/presence changes)
+
+SSR/hydration regressions must be verified in a real hydratable browser build (`docs` build/start or equivalent). The Vitest/jsdom transform in this repo is not configured as a hydratable Solid client build, so hydration-specific failures can be missed there.
 
 If docs are changed:
 
@@ -251,22 +273,3 @@ If docs are changed:
 - `AGENTS.md` has been updated for the change.
 - Behavior remains Framer Motion-aligned or divergence is explicitly documented.
 - API remains SolidJS-native (Accessors, kebab-case conventions, Solid reactive design choices).
-
-## Recent updates (2026-02-20)
-
-- `onAnimationComplete` now fires exactly once per completed animate cycle; stale/cancelled/replaced animation runs from reactive reruns no longer invoke duplicate callbacks. Completion scheduling is guarded by per-type cycle IDs inside `startAnimations()`.
-- Motion target typings now accept CSS custom property keys (`--*`) in `initial`/`animate`/`exit` targets, matching runtime behavior.
-- Function variant resolvers that return variant labels now resolve those labels against local `variants` instead of being discarded.
-- Nested `AnimatePresence` now gates parent-driven child exit handoff behind `propagate`, so `propagate={false}` does not trigger nested child exits on parent removal.
-
-## Recent updates (2026-03-06)
-
-- The motion component runtime was rewritten around upstream `motion-dom` `VisualElement` / `HTMLVisualElement` / `SVGVisualElement` instead of the old local store-driven engine.
-- Layout animation support was restored on top of upstream projection internals, including `layout*` props, `LayoutGroup`, `useInstantLayoutTransition`, `useResetProjection`, and `AnimatePresence mode="popLayout"`.
-- `motion.create(Component, options)` is now part of the public surface. Layout-capable custom components must forward the received `ref` prop to a single DOM/SVG host.
-- Divergence: exiting Solid subtrees are still disposed when removed, so retained exit nodes complete through a DOM-side callback bridge rather than a live exiting subtree owner. This difference must remain documented anywhere `usePresence` / manual exit control is described.
-- Exit handoff now promotes the `exit` animation through `VisualElement.animationState.setActive("exit", true)` and suppresses stale queued `animateChanges()` microtasks during cleanup, avoiding enter-vs-exit races under parallel browser load.
-- Regression coverage now explicitly exercises layout projection creation/filtering, `LayoutGroup` layoutId namespacing, `layoutDependency` measurement gating, `motion.create` ref/prop forwarding, and browser-level layout/shared-layout plus `AnimatePresence mode="popLayout"` retention.
-- `LayoutGroup.forceRender()` now invalidates the provider value without recreating its underlying `nodeGroup()`, so `presenceAffectsLayout` exit completion can refresh grouped layout consumers in Solid without breaking shared-layout membership.
-- The docs app client bootstrap in `docs/src/entry-client.tsx` must default-export the `StartClient` mount function for Vinxi/Solid Start production builds. Side-effect-only mounting breaks the deployed site with a client boot error (`TypeError: e is not a function`).
-- `docs/src/components/background-dots.tsx` no longer uses a top-level `"use client"` directive; it was ignored by the current docs toolchain and only added noisy build warnings.

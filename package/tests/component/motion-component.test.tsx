@@ -83,6 +83,23 @@ describe("motion component", () => {
       ));
       expect(container.querySelector("div span")).toBeTruthy();
     });
+
+    it("does not resolve JSX children more than once per render", () => {
+      const childRenderSpy = vi.fn();
+      const Child = () => {
+        childRenderSpy();
+        return <span data-testid="child">Nested</span>;
+      };
+
+      render(() => (
+        <motion.div data-testid="target">
+          <Child />
+        </motion.div>
+      ));
+
+      expect(screen.getByTestId("child").textContent).toBe("Nested");
+      expect(childRenderSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("initial styles", () => {

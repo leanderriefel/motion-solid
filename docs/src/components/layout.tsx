@@ -1,3 +1,4 @@
+import { useColorMode } from "@kobalte/core";
 import { A, useLocation, useMatch } from "@solidjs/router";
 import {
   ParentProps,
@@ -7,12 +8,11 @@ import {
   onCleanup,
   Show,
 } from "solid-js";
+import { BackgroundDots } from "~/components/background-dots";
 import { Logo } from "~/components/logo";
 import { AiFillGithub } from "solid-icons/ai";
 import { cn } from "~/utils/cn";
-import { BackgroundDots } from "~/components/background-dots";
 import { ThemeSwitcher } from "~/components/theme-switcher";
-import { useColorMode } from "@kobalte/core";
 
 type TocItem = {
   id: string;
@@ -32,6 +32,7 @@ const docsNav = [
     title: "Core",
     items: [
       { href: "/docs/motion-component", label: "motion" },
+      { href: "/docs/layout-animations", label: "Layout Animations" },
       { href: "/docs/variants", label: "Variants" },
       { href: "/docs/animate-presence", label: "AnimatePresence" },
       { href: "/docs/motion-config", label: "MotionConfig" },
@@ -53,8 +54,8 @@ const docsNav = [
 export default function Layout(props: ParentProps) {
   const isDocsPage = useMatch(() => "/docs/*");
   const location = useLocation();
-  const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
   const { colorMode } = useColorMode();
+  const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
 
   createEffect(() => {
     // oxlint-disable-next-line no-unused-expressions
@@ -245,9 +246,19 @@ export default function Layout(props: ParentProps) {
               </aside>
             </div>
           </div>
-          <BackgroundDots opacity={colorMode() === "dark" ? 0.25 : 0.5} />
         </Show>
       </main>
+      <BackgroundDots
+        opacity={
+          colorMode() === "dark"
+            ? isDocsPage()
+              ? 0.25
+              : 0.5
+            : isDocsPage()
+              ? 0.5
+              : 1
+        }
+      />
       <div class="fixed h-96 w-40 bg-radial from-primary blur-[96px] rounded-full rotate-240 -top-64 left-20 -z-40" />
       <div class="fixed h-80 w-32 bg-radial from-primary blur-[96px] rounded-full rotate-120 -top-64 left-80 -z-40" />
       <div class="fixed h-96 w-40 bg-radial from-primary blur-[96px] rounded-full rotate-240 -right-52 -bottom-40 -z-40" />

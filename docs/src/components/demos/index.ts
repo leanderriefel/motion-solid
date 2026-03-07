@@ -1,5 +1,9 @@
 export { FirstAnimation } from "./first-animation";
 export { EnterAnimation } from "./enter-animation";
 export { ExitAnimation } from "./exit-animation";
+export { GestureAnimation } from "./gesture-animation";
 export { HoverAndTapAnimation } from "./hover-and-tap-animation";
 export { ScrollAnimation } from "./scroll-animation";
+export { SimpleLayoutAnimation } from "./simple-layout-animation";
+export { ComplexLayoutAnimation } from "./complex-layout-animation";
+export { ForegroundCardLayoutAnimation } from "./foreground-card-layout-animation";

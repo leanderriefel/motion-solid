@@ -333,7 +333,7 @@ export const AnimatePresence: FlowComponent<AnimatePresenceProps> = (props) => {
   const custom = () => props.custom;
   const [isInitialRender, setIsInitialRender] = createSignal(true);
   const initial = () => (isInitialRender() ? (props.initial ?? true) : true);
-  const mode = () => props.mode ?? "sync";
+  const mode = () => props.mode ?? "popLayout";
   const anchorX = () => props.anchorX ?? "left";
   const anchorY = () => props.anchorY ?? "top";
   const presenceAffectsLayout = () => props.presenceAffectsLayout ?? true;

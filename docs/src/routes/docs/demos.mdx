@@ -1,8 +1,12 @@
 import { FirstAnimation } from "~/components/demos/first-animation";
 import { EnterAnimation } from "~/components/demos/enter-animation";
 import { ExitAnimation } from "~/components/demos/exit-animation";
+import { GestureAnimation } from "~/components/demos/gesture-animation";
 import { HoverAndTapAnimation } from "~/components/demos/hover-and-tap-animation";
 import { ScrollAnimation } from "~/components/demos/scroll-animation";
+import { SimpleLayoutAnimation } from "~/components/demos/simple-layout-animation";
+import { ComplexLayoutAnimation } from "~/components/demos/complex-layout-animation";
+import { ForegroundCardLayoutAnimation } from "~/components/demos/foreground-card-layout-animation";
 
 # Demos
 
@@ -10,33 +14,19 @@ Interactive examples demonstrating motion-solid's capabilities.
 
 <div class="w-full flex justify-center items-center gap-y-6 flex-col my-12">
 
-## First Animation
-
-Basic enter animation with scale and opacity.
-
 <FirstAnimation />
-
-## Enter Animation
-
-Smooth fade-in with position offset.
-
-<EnterAnimation />
-
-## Hover & Tap
-
-Interactive button with scale feedback on hover and tap.
 
 <HoverAndTapAnimation />
 
-## Scroll Animation
-
-Elements animate as they enter the viewport using `whileInView`.
+<GestureAnimation />
 
 <ScrollAnimation />
 
-## Exit Animation
+<SimpleLayoutAnimation />
 
-Exit animation when element is removed.
+<ComplexLayoutAnimation />
+
+<ForegroundCardLayoutAnimation />
 
 <ExitAnimation />
 

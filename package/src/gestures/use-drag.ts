@@ -31,6 +31,18 @@ interface DragConstraints {
   bottom?: number;
 }
 
+export interface DragControlOptions {
+  /**
+   * Whether to center the dragged element on the pointer immediately.
+   */
+  snapToCursor?: boolean;
+  /**
+   * Reserved for Motion parity. The current Solid drag pipeline starts
+   * dragging immediately on pointer down.
+   */
+  distanceThreshold?: number;
+}
+
 /**
  * DragControls interface for programmatic drag control
  */
@@ -38,40 +50,66 @@ export interface DragControls {
   /**
    * Start a drag gesture programmatically
    */
-  start: (event: PointerEvent, options?: { snapToCursor?: boolean }) => void;
+  start: (event: PointerEvent, options?: DragControlOptions) => void;
+  /**
+   * Cancel an active drag gesture.
+   */
+  cancel: () => void;
+  /**
+   * Stop an active drag gesture and run release animations.
+   */
+  stop: () => void;
+}
+
+interface DragControlSubscriber {
+  start: (event: PointerEvent, options?: DragControlOptions) => void;
+  cancel?: () => void;
+  stop?: () => void;
 }
 
 /**
  * Create a DragControls object for programmatic drag control
  */
 export const createDragControls = (): DragControls => {
-  const subscribers = new Set<
-    (event: PointerEvent, options?: { snapToCursor?: boolean }) => void
+  const controllerSubscribers = new Set<DragControlSubscriber>();
+  const callbackSubscribers = new Set<
+    (event: PointerEvent, options?: DragControlOptions) => void
   >();
 
   return {
-    start: (event: PointerEvent, options?: { snapToCursor?: boolean }) => {
-      // Notify all subscribers (draggable elements) about the programmatic drag start
-      for (const subscriber of subscribers) {
+    start: (event: PointerEvent, options?: DragControlOptions) => {
+      for (const subscriber of controllerSubscribers) {
+        subscriber.start(event, options);
+      }
+      for (const subscriber of callbackSubscribers) {
         subscriber(event, options);
       }
     },
-    // Internal method to allow elements to subscribe
+    cancel: () => {
+      for (const subscriber of controllerSubscribers) {
+        subscriber.cancel?.();
+      }
+    },
+    stop: () => {
+      for (const subscriber of controllerSubscribers) {
+        subscriber.stop?.();
+      }
+    },
+    subscribe: (controls: DragControlSubscriber): (() => void) => {
+      controllerSubscribers.add(controls);
+      return () => controllerSubscribers.delete(controls);
+    },
+    // Legacy internal hook subscription.
     _subscribe: (
-      callback: (
-        event: PointerEvent,
-        options?: { snapToCursor?: boolean },
-      ) => void,
+      callback: (event: PointerEvent, options?: DragControlOptions) => void,
     ): (() => void) => {
-      subscribers.add(callback);
-      return () => subscribers.delete(callback);
+      callbackSubscribers.add(callback);
+      return () => callbackSubscribers.delete(callback);
     },
   } as DragControls & {
+    subscribe: (controls: DragControlSubscriber) => () => void;
     _subscribe: (
-      callback: (
-        event: PointerEvent,
-        options?: { snapToCursor?: boolean },
-      ) => void,
+      callback: (event: PointerEvent, options?: DragControlOptions) => void,
     ) => () => void;
   };
 };

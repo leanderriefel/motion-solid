@@ -10,11 +10,13 @@ motion-solid is a [SolidJS](https://solidjs.com) animation library built on [Mot
 - **Drag** - Built-in draggable elements with constraints and momentum
 - **Exit animations** - Animate elements out when they leave the tree
 - **Layout animations** - Automatic layout and shared-layout projection via `layout` / `layoutId`
-- **SSR-ready** - Server-side rendering with correct initial styles
+- **SSR-ready** - Server-side rendering with correct initial styles and matching intrinsic host markup during client hydration
 
 ## Current Scope
 
 The current runtime is backed by upstream `motion-dom` `VisualElement` and projection internals.
+
+Standard `motion.div` / `motion.svg`-style hosts render as real Solid intrinsic elements on both the server and client. Custom components created with `motion.create(...)` still need to forward `ref` to a single DOM/SVG host node.
 
 Available layout surface:
 
@@ -140,6 +142,7 @@ Motion components render deterministically on the server. They use `initial` sty
 ## Next Steps
 
 - [Motion Component](/docs/motion-component) - All props and options
+- [Layout Animations](/docs/layout-animations) - Shared layout, `layoutDependency`, and distortion fixes
 - [Variants](/docs/variants) - Orchestrate complex animations
 - [Gestures](/docs/gestures) - Hover, tap, focus interactions
 - [Drag](/docs/drag) - Draggable elements

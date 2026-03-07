@@ -1,6 +1,12 @@
 import { render, screen } from "@solidjs/testing-library";
 import { HTMLProjectionNode, visualElementStore } from "motion-dom";
-import { createSignal, type Component, type JSX } from "solid-js";
+import {
+  For,
+  createMemo,
+  createSignal,
+  type Component,
+  type JSX,
+} from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { LayoutGroup, motion } from "../../src";
 import { useLayoutGroupContext } from "../../src/component/layout-group-context";
@@ -139,6 +145,58 @@ describe("layout runtime", () => {
     await Promise.resolve();
     expect(projection?.options.layoutDependency).toBe(1);
     expect(willUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks reordered child layout nodes for measurement when parent children change", async () => {
+    const [sortByImpact, setSortByImpact] = createSignal(true);
+
+    render(() => {
+      const items = createMemo(() => {
+        const metric = sortByImpact() ? "impact" : "speed";
+
+        return [
+          ...[
+            { id: "a", impact: 90, speed: 40 },
+            { id: "b", impact: 70, speed: 95 },
+            { id: "c", impact: 80, speed: 60 },
+          ],
+        ].sort((left, right) => right[metric] - left[metric]);
+      });
+
+      return (
+        <motion.div data-testid="layout-list" layout>
+          <For each={items()}>
+            {(item) => (
+              <motion.div data-testid={`layout-item-${item.id}`} layout>
+                {item.id}
+              </motion.div>
+            )}
+          </For>
+        </motion.div>
+      );
+    });
+
+    const itemA = screen.getByTestId("layout-item-a");
+    const itemB = screen.getByTestId("layout-item-b");
+    const itemC = screen.getByTestId("layout-item-c");
+    const list = screen.getByTestId("layout-list");
+
+    const listProjection = getProjection(list);
+    const projectionA = getProjection(itemA);
+    const projectionB = getProjection(itemB);
+    const projectionC = getProjection(itemC);
+
+    expect(listProjection).toBeTruthy();
+    expect(projectionA).toBeTruthy();
+    expect(projectionB).toBeTruthy();
+    expect(projectionC).toBeTruthy();
+
+    const didUpdate = vi.spyOn(listProjection!.root!, "didUpdate");
+    setSortByImpact(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(didUpdate).toHaveBeenCalled();
   });
 
   it("supports layout-capable custom components created with motion.create", () => {

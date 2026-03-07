@@ -229,6 +229,8 @@ export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   style?: MotionStyle;
   custom?: unknown;
   dragControls?: unknown;
+  _dragX?: MotionValue<number>;
+  _dragY?: MotionValue<number>;
   viewport?: SolidViewportOptions;
   dragConstraints?: false | Partial<BoundingBox> | Element;
   transition?: Transition<Tag>;
