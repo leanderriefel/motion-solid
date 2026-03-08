@@ -27,14 +27,6 @@ export {
 } from "./component/index";
 
 export {
-  animationTypes,
-  type AnimationType,
-  type AnimationTypeTargets,
-  type AnimationTypeValuesMap,
-  buildAnimationTypeMotionValues,
-} from "./animation";
-
-export {
   stagger,
   isStaggerFunction,
   type StaggerOptions,

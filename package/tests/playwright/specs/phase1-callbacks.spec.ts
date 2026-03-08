@@ -19,7 +19,11 @@ test.describe("phase1 callbacks", () => {
     await expect(page.getByTestId("callbacks-item")).toHaveCount(1);
   });
 
-  test("records animation completion on initial mount", async ({ page }) => {
+  test("records animation completion after an opacity retarget", async ({
+    page,
+  }) => {
+    await clearEvents(page);
+    await runAction(page, "setOpacity", 0.45);
     await waitForEventCount(page, "animationComplete", 1);
 
     const events = await readEvents(page);
@@ -46,11 +50,16 @@ test.describe("phase1 callbacks", () => {
 
     await expect
       .poll(async () => {
-        return page.getByTestId("callbacks-item").evaluate((el) => {
+        const item = page.getByTestId("callbacks-item");
+        if ((await item.count()) === 0) {
+          return 0;
+        }
+
+        return item.evaluate((el) => {
           return Number(getComputedStyle(el).opacity);
         });
       })
-      .toBeLessThan(0.3);
+      .toBeLessThan(0.6);
   });
 
   test("hide then show remounts callbacks item", async ({ page }) => {

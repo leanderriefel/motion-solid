@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal } from "solid-js";
-import { motion } from "motion-solid";
+import { AnimatePresence, motion } from "motion-solid";
 import { Animation } from "./animation";
 import source from "./complex-layout-animation.tsx?raw";
 
@@ -55,8 +55,7 @@ const queue: readonly QueueItem[] = [
 
 export const ComplexLayoutAnimation = () => {
   const [sortBy, setSortBy] = createSignal<"impact" | "speed">("impact");
-  const [expandedId, setExpandedId] =
-    createSignal<(typeof queue)[number]["id"]>("sync");
+  const [expandedId, setExpandedId] = createSignal<string | null>("sync");
 
   const sortedQueue = createMemo(() => {
     const metric = sortBy();
@@ -122,48 +121,73 @@ export const ComplexLayoutAnimation = () => {
                   }}
                   onClick={() =>
                     setExpandedId((current) =>
-                      current === item.id ? "" : item.id,
+                      current === item.id ? null : item.id,
                     )
                   }
                 >
-                  <div class="flex items-start justify-between gap-4">
-                    <div>
+                  <motion.div
+                    layout="position"
+                    class="flex items-start justify-between gap-4"
+                  >
+                    <motion.div layout="position">
                       <p class="text-sm font-semibold text-foreground">
                         {item.title}
                       </p>
                       <p class="mt-1 text-xs text-muted-foreground">
                         {item.owner}
                       </p>
-                    </div>
-                    <div class="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">
+                    </motion.div>
+                    <motion.div
+                      layout="position"
+                      class="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground"
+                    >
                       {sortBy() === "impact" ? "Impact" : "Speed"}{" "}
                       {currentValue()}
-                    </div>
-                  </div>
-
-                  <div class="mt-4 h-2 rounded-full bg-muted">
-                    <motion.div
-                      layout
-                      class={`h-full rounded-full ${item.accent}`}
-                      style={{ width: `${currentValue()}%` }}
-                    />
-                  </div>
-
-                  <Show when={isExpanded()}>
-                    <motion.div
-                      layout
-                      class="mt-4 bg-muted p-3"
-                      style={{ "border-radius": "20px" }}
-                    >
-                      <p class="text-sm leading-6 text-muted-foreground">
-                        {item.detail}
-                      </p>
-                      <div class="mt-3 flex gap-3 text-xs text-muted-foreground">
-                        <span>Impact: {item.impact}</span>
-                        <span>Speed: {item.speed}</span>
-                      </div>
                     </motion.div>
-                  </Show>
+                  </motion.div>
+
+                  <motion.div
+                    layout
+                    class="mt-4 h-2 bg-muted"
+                    style={{ "border-radius": "999px" }}
+                  >
+                    <motion.div
+                      layout
+                      class={`h-full ${item.accent}`}
+                      style={{
+                        width: `${currentValue()}%`,
+                        "border-radius": "999px",
+                      }}
+                    />
+                  </motion.div>
+
+                  <AnimatePresence initial={false}>
+                    <Show when={isExpanded()}>
+                      <motion.div
+                        layout
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.18 }}
+                        class="mt-4 bg-muted p-3"
+                        style={{ "border-radius": "20px" }}
+                      >
+                        <motion.p
+                          layout="position"
+                          class="text-sm leading-6 text-muted-foreground"
+                        >
+                          {item.detail}
+                        </motion.p>
+                        <motion.div
+                          layout="position"
+                          class="mt-3 flex gap-3 text-xs text-muted-foreground"
+                        >
+                          <span>Impact: {item.impact}</span>
+                          <span>Speed: {item.speed}</span>
+                        </motion.div>
+                      </motion.div>
+                    </Show>
+                  </AnimatePresence>
                 </motion.button>
               );
             }}

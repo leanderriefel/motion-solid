@@ -1,6 +1,7 @@
 import {
   Feature,
   addValueToWillChange,
+  animateMotionValue,
   frame,
   isElementTextInput,
   isMotionValue,
@@ -12,7 +13,6 @@ import {
   type Transition,
   type VisualElement,
 } from "motion-dom";
-import { animateMotionValue } from "../animation/motion-value";
 import type { MotionOptions } from "../types";
 import type { DragControlOptions, DragControls } from "../gestures/use-drag";
 

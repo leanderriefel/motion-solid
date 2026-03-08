@@ -60,7 +60,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "author": "Leander Riefel <riefel.leander@gmail.com>"
 }

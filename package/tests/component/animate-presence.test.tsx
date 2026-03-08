@@ -120,6 +120,38 @@ describe("AnimatePresence", () => {
   });
 
   describe("mode='sync' (default)", () => {
+    it("defaults to sync mode when mode is omitted", async () => {
+      const [show, setShow] = createSignal(true);
+
+      render(() => (
+        <AnimatePresence>
+          {show() ? (
+            <motion.div
+              data-testid="default-first"
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              First
+            </motion.div>
+          ) : (
+            <motion.div
+              data-testid="default-second"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2 }}
+            >
+              Second
+            </motion.div>
+          )}
+        </AnimatePresence>
+      ));
+
+      setShow(false);
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(screen.getByTestId("default-second")).toBeTruthy();
+    });
+
     it("allows enter and exit to animate simultaneously", async () => {
       const [show, setShow] = createSignal(true);
 

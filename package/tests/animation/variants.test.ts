@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
+import { motionValue } from "motion-dom";
 import {
+  buildResolvedValues,
   isVariantLabels,
   isTargetAndTransition,
   mergeTargets,
   isTransition,
   resolveVariantToTarget,
 } from "../../src/animation/variants";
-import type { MotionOptions, MotionState, Variants } from "../../src/types";
+import type { MotionOptions, Variants } from "../../src/types";
 
 describe("isVariantLabels", () => {
   it("returns true for string", () => {
@@ -169,21 +171,22 @@ describe("isTransition", () => {
 });
 
 describe("resolveVariantToTarget", () => {
-  const createState = (): MotionState => ({
-    element: null,
+  const createState = () => ({
     values: {},
-    goals: {},
-    resolvedValues: {},
-    activeGestures: {
-      hover: false,
-      tap: false,
-      focus: false,
-      drag: false,
-      inView: false,
-    },
-    activeVariants: {},
     options: {},
     parent: null,
+  });
+
+  it("builds resolved values directly from motion values", () => {
+    const state = {
+      values: {
+        opacity: motionValue(0.4),
+      },
+      options: {},
+      parent: null,
+    };
+
+    expect(buildResolvedValues(state)).toEqual({ opacity: 0.4 });
   });
 
   it("resolves function variants that return a label", () => {

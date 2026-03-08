@@ -4,6 +4,7 @@ import {
   HTMLVisualElement,
   SVGVisualElement,
   animateVisualElement,
+  frame,
   isControllingVariants,
   isMotionValue,
   isVariantLabel,
@@ -187,6 +188,27 @@ const snapshotProjectionSubtreeFromCurrentLayout = (
   return hasPreparedSnapshot;
 };
 
+const getProjectionSnapshotRoot = (projection: IProjectionNode) => {
+  let snapshotRoot = projection;
+  let parent = projection.parent;
+
+  while (parent) {
+    const options = parent.options as {
+      layout?: unknown;
+      layoutId?: string;
+    };
+
+    if (!options.layout && options.layoutId === undefined) {
+      break;
+    }
+
+    snapshotRoot = parent;
+    parent = parent.parent;
+  }
+
+  return snapshotRoot;
+};
+
 const shouldCreateProjectionNode = (props: MotionOptions) =>
   Boolean(
     props.layout || props.layoutId || props.layoutScroll || props.layoutRoot,
@@ -269,6 +291,10 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     let animationChangesId = 0;
     let hasScheduledInitialAnimation = false;
     let scheduledInitialAnimationFrame: number | null = null;
+    let hasCommittedProjectionMount = false;
+    let groupProjection: IProjectionNode | undefined;
+    let switchProjection: IProjectionNode | undefined;
+    let removeProjectionAnimationCompleteListener: VoidFunction | undefined;
     const isPresent = () => presence?.isPresent() ?? true;
     const [local, motionOptions, domProps] = splitProps(
       props as Record<string, unknown>,
@@ -459,7 +485,10 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       }
 
       visualElement.projection.isPresent = currentIsPresent;
-      updateProjectionOptions(props);
+
+      // Keep the previous projection options through the snapshot phase so
+      // interrupted shared-layout promotions can still resume from the lead
+      // that is animating out of the previous state.
 
       const shouldMeasure =
         props.layoutDependency === undefined ||
@@ -470,6 +499,23 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       if (shouldMeasure) {
         hasTakenAnySnapshot = true;
         visualElement.projection.willUpdate();
+
+        if (prev?.isPresent !== currentIsPresent) {
+          if (currentIsPresent) {
+            visualElement.projection.promote();
+          } else if (!visualElement.projection.relegate()) {
+            frame.postRender(() => {
+              const stack = visualElement.projection?.getStack();
+              if (!stack || !stack.members.length) {
+                presence?.onExitComplete(
+                  presenceId,
+                  currentElement ?? undefined,
+                );
+              }
+            });
+          }
+        }
+
         setLatestDidUpdateId((value: number) => value + 1);
       }
 
@@ -617,16 +663,43 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         motionDomPresenceContext(),
       );
 
-      if (visualElement.projection && layoutGroup.group) {
-        layoutGroup.group.add(visualElement.projection);
+      const projection = visualElement.projection;
+
+      if (projection && layoutGroup.group && groupProjection !== projection) {
+        layoutGroup.group.add(projection);
+        groupProjection = projection;
       }
 
       if (
-        visualElement.projection &&
+        projection &&
         switchLayoutGroup.register &&
-        props.layoutId
+        props.layoutId &&
+        switchProjection !== projection
       ) {
-        switchLayoutGroup.register(visualElement.projection);
+        switchLayoutGroup.register(projection);
+        switchProjection = projection;
+      }
+
+      if (projection && !hasCommittedProjectionMount) {
+        hasCommittedProjectionMount = true;
+
+        if (hasTakenAnySnapshot) {
+          projection.root?.didUpdate();
+        }
+      }
+
+      if (
+        projection &&
+        removeProjectionAnimationCompleteListener === undefined
+      ) {
+        removeProjectionAnimationCompleteListener = projection.addEventListener(
+          "animationComplete",
+          (() => {
+            if (!isPresent()) {
+              presence?.onExitComplete(presenceId, currentElement ?? undefined);
+            }
+          }) as never,
+        );
       }
 
       if (mounted) {
@@ -661,9 +734,10 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
           if (isCleaningUp || isSyncingChildListLayout) return;
 
-          const projection = visualElement.projection;
-          if (!projection || !currentElement?.isConnected) return;
+          const currentProjection = visualElement.projection;
+          if (!currentProjection || !currentElement?.isConnected) return;
 
+          const projection = getProjectionSnapshotRoot(currentProjection);
           const root = projection.root;
           if (!root || root.isUpdateBlocked()) return;
 
@@ -772,6 +846,8 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       isCleaningUp = true;
       childListObserver?.disconnect();
       childListObserver = undefined;
+      removeProjectionAnimationCompleteListener?.();
+      removeProjectionAnimationCompleteListener = undefined;
       animationChangesId++;
       if (scheduledInitialAnimationFrame !== null) {
         cancelAnimationFrame(scheduledInitialAnimationFrame);

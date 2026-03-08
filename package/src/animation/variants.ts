@@ -1,14 +1,23 @@
 import type { AnyResolvedKeyframe, VariantLabels } from "motion-dom";
 import type {
+  MotionGoals,
   MotionOptions,
-  MotionState,
+  MotionValues,
   MotionTargetAndTransition,
   Transition,
   Variant,
   Variants,
 } from "../types";
-import { isRecord, isStringOrNumber } from "./types";
+import { isRecord, isStringOrNumber } from "./utils";
 import { normalizeTransformKey } from "./render";
+
+type VariantResolutionState = {
+  values: MotionValues;
+  goals?: MotionGoals;
+  resolvedValues?: MotionGoals;
+  options: MotionOptions;
+  parent: VariantResolutionState | null;
+};
 
 const hasFunction = (obj: Record<string, unknown>, key: string): boolean =>
   typeof obj[key] === "function";
@@ -70,7 +79,7 @@ export const isTargetAndTransition = (
   isRecord(value) && !Array.isArray(value) && !isLegacyAnimationControls(value);
 
 export const buildResolvedValues = (
-  state: MotionState,
+  state: VariantResolutionState,
 ): Record<string, AnyResolvedKeyframe> => {
   const latest: Record<string, AnyResolvedKeyframe> = {};
   for (const [key, mv] of Object.entries(state.values)) {
@@ -80,7 +89,7 @@ export const buildResolvedValues = (
 };
 
 export const buildResolvedVelocities = (
-  state: MotionState,
+  state: VariantResolutionState,
 ): Record<string, AnyResolvedKeyframe> => {
   const v: Record<string, AnyResolvedKeyframe> = {};
   for (const [key, mv] of Object.entries(state.values)) {
@@ -127,7 +136,7 @@ export const mergeTargets = (
 export const resolveVariantToTarget = (args: {
   variant: Variant;
   options: MotionOptions;
-  state: MotionState;
+  state: VariantResolutionState;
 }): MotionTargetAndTransition | null => {
   const { variant, options, state } = args;
 
@@ -182,7 +191,7 @@ export const resolveVariantLabelsToTarget = (args: {
   labels: VariantLabels;
   variants: Variants;
   options: MotionOptions;
-  state: MotionState;
+  state: VariantResolutionState;
 }): MotionTargetAndTransition | null => {
   const { labels, variants, options, state } = args;
   const labelList = Array.isArray(labels) ? labels : [labels];
@@ -205,7 +214,7 @@ export const resolveVariantLabelsToTarget = (args: {
  */
 const getInheritedVariants = (
   options: MotionOptions,
-  state: MotionState,
+  state: VariantResolutionState,
 ): Variants | null => {
   // If inherit is explicitly false, don't inherit from parent
   if (options.inherit === false) return null;
@@ -226,7 +235,7 @@ const getInheritedVariants = (
 export const resolveDefinitionToTarget = (args: {
   definition: unknown;
   options: MotionOptions;
-  state: MotionState;
+  state: VariantResolutionState;
 }): MotionTargetAndTransition | null => {
   const { definition, options, state } = args;
 

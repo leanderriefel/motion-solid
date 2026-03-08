@@ -36,6 +36,10 @@ Use `layoutId` when one visual element should hand off to another:
 
 If you need a whole card handoff, put the shared `layoutId` on the card shell itself, not only on one inner row.
 
+If text can wrap differently between the source and target, put the `layoutId` on a shared wrapper and set that wrapper to `layout="position"` instead of animating the text node itself.
+
+If the source card also needs press or hover affordance, keep those effects off the shared shell itself. Put the click handling on a wrapper or use non-transform hover styles, otherwise the shared shell can fight the handoff transform and appear to snap on open.
+
 <ForegroundCardLayoutAnimation />
 
 ## External State And `layoutDependency`

@@ -40,6 +40,13 @@ const cards: readonly DemoCard[] = [
 
 const partId = (id: string, part: string) => `${id}-${part}`;
 
+const sharedCardShellStyle = {
+  position: "relative",
+  overflow: "hidden",
+  "border-radius": "24px",
+  "box-shadow": "0 14px 34px rgba(15, 23, 42, 0.08)",
+} as const;
+
 export const ForegroundCardLayoutAnimation = () => {
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
 
@@ -71,54 +78,61 @@ export const ForegroundCardLayoutAnimation = () => {
                 const isSelected = () => selectedId() === card.id;
 
                 return (
-                  <motion.button
-                    layout
-                    layoutId={partId(card.id, "card")}
-                    layoutDependency={selectedId()}
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.99 }}
-                    transition={{ type: "spring", stiffness: 320, damping: 28 }}
+                  <button
                     type="button"
-                    class="border border-border bg-card p-4 text-left"
+                    class="block w-full bg-transparent p-0 text-left"
                     style={{
-                      "border-radius": "24px",
-                      "box-shadow": "0 14px 34px rgba(15, 23, 42, 0.08)",
-                      opacity: isSelected() ? 0.94 : 1,
+                      border: "none",
+                      "pointer-events": isSelected() ? "none" : "auto",
                     }}
                     onClick={() => setSelectedId(card.id)}
                   >
-                    <div class="flex items-start gap-4">
-                      <motion.div
-                        layoutId={partId(card.id, "square")}
-                        class="size-14 shrink-0"
-                        style={{
-                          background: card.color,
-                          "border-radius": "18px",
-                        }}
-                      />
+                    <motion.div
+                      layout
+                      layoutId={partId(card.id, "card")}
+                      layoutDependency={selectedId()}
+                      layoutCrossfade={false}
+                      transition={{
+                        type: "spring",
+                        stiffness: 320,
+                        damping: 28,
+                      }}
+                      class="border border-border bg-card p-4 text-left transition-colors hover:border-foreground/20"
+                      style={sharedCardShellStyle}
+                    >
+                      <div class="flex items-start gap-4">
+                        <motion.div
+                          layoutId={partId(card.id, "square")}
+                          layoutCrossfade={false}
+                          class="size-14 shrink-0"
+                          style={{
+                            background: card.color,
+                            "border-radius": "18px",
+                          }}
+                        />
 
-                      <motion.div layout="position" class="min-w-0">
-                        <motion.p
-                          layoutId={partId(card.id, "title")}
-                          class="text-base font-semibold text-foreground"
+                        <motion.div
+                          layoutId={partId(card.id, "text")}
+                          layout="position"
+                          layoutCrossfade={false}
+                          class="min-w-0"
                         >
-                          {card.title}
-                        </motion.p>
-                        <motion.p
-                          layoutId={partId(card.id, "summary")}
-                          class="mt-1 text-sm leading-6 text-muted-foreground"
-                        >
-                          {card.summary}
-                        </motion.p>
-                      </motion.div>
-                    </div>
-                  </motion.button>
+                          <p class="text-base font-semibold text-foreground">
+                            {card.title}
+                          </p>
+                          <p class="mt-1 text-sm leading-6 text-muted-foreground">
+                            {card.summary}
+                          </p>
+                        </motion.div>
+                      </div>
+                    </motion.div>
+                  </button>
                 );
               }}
             </For>
           </motion.div>
 
-          <AnimatePresence mode="sync">
+          <AnimatePresence initial={false} mode="sync">
             <Show when={selectedCard()} keyed>
               {(card) => (
                 <div class="absolute inset-0 z-20">
@@ -134,63 +148,69 @@ export const ForegroundCardLayoutAnimation = () => {
                   />
 
                   <div class="absolute inset-3 flex items-center justify-center md:inset-6">
-                    <motion.div
-                      layoutId={partId(card.id, "card")}
-                      layoutDependency={selectedId()}
-                      class="w-full max-w-2xl border border-border bg-card p-5 md:p-6"
+                    <div
+                      class="w-full max-w-2xl"
                       style={{
-                        "border-radius": "32px",
-                        "box-shadow": "0 30px 90px rgba(15, 23, 42, 0.22)",
+                        filter:
+                          "drop-shadow(0 30px 90px rgba(15, 23, 42, 0.22))",
                       }}
                     >
-                      <div class="flex items-start justify-between gap-4">
-                        <div class="flex min-w-0 items-start gap-4">
-                          <motion.div
-                            layoutId={partId(card.id, "square")}
-                            class="size-24 shrink-0"
-                            style={{
-                              background: card.color,
-                              "border-radius": "24px",
-                            }}
-                          />
+                      <motion.div
+                        layoutId={partId(card.id, "card")}
+                        layoutDependency={selectedId()}
+                        layoutCrossfade={false}
+                        class="w-full border border-border bg-card p-5 md:p-6"
+                        style={sharedCardShellStyle}
+                      >
+                        <div class="flex items-start justify-between gap-4">
+                          <div class="flex min-w-0 items-start gap-4">
+                            <motion.div
+                              layoutId={partId(card.id, "square")}
+                              layoutCrossfade={false}
+                              class="size-24 shrink-0"
+                              style={{
+                                background: card.color,
+                                "border-radius": "24px",
+                              }}
+                            />
 
-                          <motion.div layout="position" class="min-w-0">
-                            <motion.p
-                              layoutId={partId(card.id, "title")}
-                              class="text-base font-semibold text-foreground"
+                            <motion.div
+                              layoutId={partId(card.id, "text")}
+                              layout="position"
+                              layoutCrossfade={false}
+                              class="min-w-0"
                             >
-                              {card.title}
-                            </motion.p>
-                            <motion.p
-                              layoutId={partId(card.id, "summary")}
-                              class="mt-2 text-sm leading-6 text-muted-foreground"
-                            >
-                              {card.summary}
-                            </motion.p>
-                          </motion.div>
+                              <p class="text-base font-semibold text-foreground">
+                                {card.title}
+                              </p>
+                              <p class="mt-2 text-sm leading-6 text-muted-foreground">
+                                {card.summary}
+                              </p>
+                            </motion.div>
+                          </div>
+
+                          <button
+                            type="button"
+                            class="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground"
+                            onClick={() => setSelectedId(null)}
+                          >
+                            Close
+                          </button>
                         </div>
 
-                        <button
-                          type="button"
-                          class="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground"
-                          onClick={() => setSelectedId(null)}
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 8 }}
+                          transition={{ duration: 0.2, delay: 0.05 }}
+                          class="mt-6"
                         >
-                          Close
-                        </button>
-                      </div>
-
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 8 }}
-                        transition={{ duration: 0.2, delay: 0.05 }}
-                        class="mt-6"
-                      >
-                        <p class="text-sm leading-7 text-foreground">
-                          {card.detail}
-                        </p>
+                          <p class="text-sm leading-7 text-foreground">
+                            {card.detail}
+                          </p>
+                        </motion.div>
                       </motion.div>
-                    </motion.div>
+                    </div>
                   </div>
                 </div>
               )}

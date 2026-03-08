@@ -2,6 +2,7 @@ import { render, screen } from "@solidjs/testing-library";
 import { HTMLProjectionNode, visualElementStore } from "motion-dom";
 import {
   For,
+  Show,
   createMemo,
   createSignal,
   type Component,
@@ -196,6 +197,48 @@ describe("layout runtime", () => {
     await Promise.resolve();
     await Promise.resolve();
 
+    expect(didUpdate).toHaveBeenCalled();
+  });
+
+  it("flushes the projection root when a shared layout target mounts after snapshots already exist", async () => {
+    const [layoutDependency, setLayoutDependency] = createSignal(0);
+    const [showTarget, setShowTarget] = createSignal(false);
+
+    render(() => (
+      <LayoutGroup id="shared">
+        <motion.div
+          data-testid="shared-source"
+          layoutId="card"
+          layoutDependency={layoutDependency()}
+        />
+        <Show when={showTarget()}>
+          <motion.div
+            data-testid="shared-target"
+            layoutId="card"
+            layoutDependency={layoutDependency()}
+          />
+        </Show>
+      </LayoutGroup>
+    ));
+
+    const source = screen.getByTestId("shared-source");
+    const projection = getProjection(source);
+
+    expect(projection?.root).toBeTruthy();
+
+    const didUpdate = vi.spyOn(projection!.root!, "didUpdate");
+
+    setLayoutDependency(1);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    didUpdate.mockClear();
+
+    setShowTarget(true);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(screen.getByTestId("shared-target")).toBeTruthy();
     expect(didUpdate).toHaveBeenCalled();
   });
 
