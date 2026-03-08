@@ -16,6 +16,7 @@ type TopLayerSample = TransformSample & {
   topTag: string | null;
   opacity: string;
   containsTarget: boolean;
+  intersectsViewport: boolean;
 };
 
 type SharedShellSample = {
@@ -26,6 +27,20 @@ type SharedShellSample = {
   left: number;
   width: number;
   height: number;
+};
+
+type LayoutBoxSample = {
+  frame: number;
+  top: number | null;
+  left: number | null;
+  height: number | null;
+  transform: string | null;
+};
+
+type HarnessWindow = Window & {
+  __MOTION_HARNESS__?: {
+    act?: (action: string, payload?: unknown) => void;
+  };
 };
 
 const sampledTransformAnimation = async (page: Page, testId: string) => {
@@ -89,50 +104,6 @@ const sampledScaleContinuity = async (page: Page, testId: string) => {
   );
 };
 
-const sampledTopLayerContinuity = async (page: Page, testId: string) => {
-  return page.evaluate(
-    async ({ testId }) => {
-      const samples: TopLayerSample[] = [];
-      let hasAnimated = false;
-
-      for (let i = 0; i < 16; i += 1) {
-        const element = document.querySelector(
-          `[data-testid="${testId}"]`,
-        ) as HTMLElement | null;
-
-        if (!element) return samples;
-
-        const transform = getComputedStyle(element).transform;
-        hasAnimated ||= transform !== "none";
-
-        if (hasAnimated) {
-          const rect = element.getBoundingClientRect();
-          const topElement = document.elementFromPoint(
-            rect.left + rect.width / 2,
-            rect.top + rect.height / 2,
-          ) as HTMLElement | null;
-
-          samples.push({
-            frame: i,
-            transform,
-            topTestId: topElement?.getAttribute("data-testid") ?? null,
-            topTag: topElement?.tagName ?? null,
-            opacity: getComputedStyle(element).opacity,
-            containsTarget: Boolean(topElement && element.contains(topElement)),
-          });
-        }
-
-        await new Promise<void>((resolve) =>
-          requestAnimationFrame(() => resolve()),
-        );
-      }
-
-      return samples;
-    },
-    { testId },
-  );
-};
-
 const sampledSharedShellContinuity = async (page: Page, testId: string) => {
   return page.evaluate(
     async ({ testId }) => {
@@ -167,6 +138,217 @@ const sampledSharedShellContinuity = async (page: Page, testId: string) => {
     },
     { testId },
   );
+};
+
+const sampledActionLayoutBoxes = async (
+  page: Page,
+  action: string,
+  payload: unknown,
+  testIds: string[],
+  frames: number = 20,
+) => {
+  return page.evaluate(
+    async ({ action, payload, testIds, frames }) => {
+      const harnessWindow = window as HarnessWindow;
+      const samples = Object.fromEntries(
+        testIds.map((testId) => [testId, [] as LayoutBoxSample[]]),
+      ) as Record<string, LayoutBoxSample[]>;
+
+      harnessWindow.__MOTION_HARNESS__?.act?.(action, payload);
+
+      for (let i = 0; i < frames; i += 1) {
+        for (const testId of testIds) {
+          const element = document.querySelector(
+            `[data-testid="${testId}"]`,
+          ) as HTMLElement | null;
+          const rect = element?.getBoundingClientRect();
+          const elementSamples = samples[testId] ?? (samples[testId] = []);
+
+          elementSamples.push({
+            frame: i,
+            top: rect?.top ?? null,
+            left: rect?.left ?? null,
+            height: rect?.height ?? null,
+            transform: element ? getComputedStyle(element).transform : null,
+          });
+        }
+
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      }
+
+      return samples;
+    },
+    { action, payload, testIds, frames },
+  );
+};
+
+const sampledActionTopLayerContinuity = async (
+  page: Page,
+  action: string,
+  payload: unknown,
+  testIds: string | string[],
+) => {
+  return page.evaluate(
+    async ({ action, payload, testIds }) => {
+      const harnessWindow = window as HarnessWindow;
+      const samples: TopLayerSample[] = [];
+      const ids = Array.isArray(testIds) ? testIds : [testIds];
+
+      harnessWindow.__MOTION_HARNESS__?.act?.(action, payload);
+
+      for (let i = 0; i < 16; i += 1) {
+        const elements = ids
+          .map(
+            (testId) =>
+              document.querySelector(
+                `[data-testid="${testId}"]`,
+              ) as HTMLElement | null,
+          )
+          .filter((element): element is HTMLElement => element !== null);
+        const element =
+          elements[0] ??
+          (document.querySelector(
+            `[data-testid="${ids[0]}"]`,
+          ) as HTMLElement | null);
+
+        if (!element) return samples;
+
+        const transform = getComputedStyle(element).transform;
+        const rect = element.getBoundingClientRect();
+        const visibleLeft = Math.max(rect.left, 0);
+        const visibleTop = Math.max(rect.top, 0);
+        const visibleRight = Math.min(rect.right, window.innerWidth);
+        const visibleBottom = Math.min(rect.bottom, window.innerHeight);
+        const intersectsViewport =
+          visibleRight > visibleLeft && visibleBottom > visibleTop;
+        const sampleX = intersectsViewport
+          ? visibleLeft + (visibleRight - visibleLeft) / 2
+          : null;
+        const sampleY = intersectsViewport
+          ? visibleTop + (visibleBottom - visibleTop) / 2
+          : null;
+        const topElement =
+          sampleX !== null && sampleY !== null
+            ? (document.elementFromPoint(
+                sampleX,
+                sampleY,
+              ) as HTMLElement | null)
+            : null;
+
+        samples.push({
+          frame: i,
+          transform,
+          topTestId: topElement?.getAttribute("data-testid") ?? null,
+          topTag: topElement?.tagName ?? null,
+          opacity: getComputedStyle(element).opacity,
+          intersectsViewport,
+          containsTarget: Boolean(
+            topElement &&
+            elements.some(
+              (candidate) =>
+                candidate === topElement || candidate.contains(topElement),
+            ),
+          ),
+        });
+
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      }
+
+      return samples;
+    },
+    { action, payload, testIds },
+  );
+};
+
+const sampledActionSharedShellContinuity = async (
+  page: Page,
+  action: string,
+  payload: unknown,
+  testId: string,
+) => {
+  return page.evaluate(
+    async ({ action, payload, testId }) => {
+      const harnessWindow = window as HarnessWindow;
+      const samples: SharedShellSample[] = [];
+
+      harnessWindow.__MOTION_HARNESS__?.act?.(action, payload);
+
+      for (let i = 0; i < 16; i += 1) {
+        const element = document.querySelector(
+          `[data-testid="${testId}"]`,
+        ) as HTMLElement | null;
+
+        if (!element) return samples;
+
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+
+        samples.push({
+          frame: i,
+          transform: style.transform,
+          borderTopLeftRadius: style.borderTopLeftRadius,
+          top: rect.top,
+          left: rect.left,
+          width: rect.width,
+          height: rect.height,
+        });
+
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      }
+
+      return samples;
+    },
+    { action, payload, testId },
+  );
+};
+
+const readElementTops = async (page: Page, testIds: string[]) => {
+  return page.evaluate(
+    ({ testIds }) => {
+      return Object.fromEntries(
+        testIds.map((testId) => {
+          const element = document.querySelector(
+            `[data-testid="${testId}"]`,
+          ) as HTMLElement | null;
+
+          return [testId, element?.getBoundingClientRect().top ?? null];
+        }),
+      ) as Record<string, number | null>;
+    },
+    { testIds },
+  );
+};
+
+const hasContinuousLayoutMovement = (
+  samples: LayoutBoxSample[],
+  finalTop: number | null,
+) => {
+  if (finalTop === null) return false;
+
+  const positionedSamples = samples.filter(
+    (sample): sample is LayoutBoxSample & { top: number } =>
+      sample.top !== null,
+  );
+  if (!positionedSamples.length) return false;
+
+  const hasAnimatedTransform = positionedSamples.some(
+    (sample) => sample.transform !== null && sample.transform !== "none",
+  );
+  const tops = positionedSamples.map((sample) => sample.top);
+  const minTop = Math.min(...tops);
+  const maxTop = Math.max(...tops);
+  const hasVisibleTravel = maxTop - minTop > 8;
+  const reachesFinalPosition = positionedSamples.some(
+    (sample) => Math.abs(sample.top - finalTop) < 2,
+  );
+
+  return hasAnimatedTransform && hasVisibleTravel && reachesFinalPosition;
 };
 
 test.describe("phase2 layout", () => {
@@ -276,7 +458,7 @@ test.describe("phase2 layout", () => {
       .toBeGreaterThan((before?.y ?? 0) + 40);
   });
 
-  test("expanding a middle card animates lower siblings instead of snapping", async ({
+  test("expanding a middle card animates lower siblings without LayoutGroup instead of snapping", async ({
     page,
   }) => {
     await runAction(page, "setExpandedDetail", null);
@@ -298,6 +480,80 @@ test.describe("phase2 layout", () => {
         return box?.y ?? 0;
       })
       .toBeGreaterThan((before?.y ?? 0) + 20);
+  });
+
+  test("alternating expanded cards keeps sibling reflow animated on every cycle without LayoutGroup", async ({
+    page,
+  }) => {
+    const rowIds = ["sync", "feed", "invite", "search"];
+    const testIds = rowIds.map((id) => `layout-expand-${id}`);
+    const sequence = [
+      "invite",
+      "feed",
+      "invite",
+      "feed",
+      "invite",
+      "feed",
+      "invite",
+      "feed",
+      "invite",
+      "feed",
+      "invite",
+      "feed",
+      "invite",
+      "feed",
+    ] as const;
+
+    await runAction(page, "setExpandedDetail", "feed");
+    await waitForState(page, "expandedDetailId", "feed");
+    await page.waitForTimeout(450);
+
+    let previousTops = await readElementTops(page, testIds);
+
+    for (const target of sequence) {
+      const samples = await sampledActionLayoutBoxes(
+        page,
+        "setExpandedDetail",
+        target,
+        testIds,
+      );
+      await waitForState(page, "expandedDetailId", target);
+      await page.waitForTimeout(450);
+
+      const nextTops = await readElementTops(page, testIds);
+      const movedSiblingIds = rowIds.filter((id) => {
+        if (target !== null && id === target) return false;
+
+        const testId = `layout-expand-${id}`;
+        const previousTop = previousTops[testId] ?? null;
+        const nextTop = nextTops[testId] ?? null;
+
+        return (
+          previousTop !== null &&
+          nextTop !== null &&
+          Math.abs(nextTop - previousTop) > 8
+        );
+      });
+
+      expect(
+        movedSiblingIds.length,
+        `No moved siblings detected for ${String(target)}.`,
+      ).toBeGreaterThan(0);
+
+      for (const id of movedSiblingIds) {
+        const testId = `layout-expand-${id}`;
+
+        expect(
+          hasContinuousLayoutMovement(
+            samples[testId] ?? [],
+            nextTops[testId] ?? null,
+          ),
+          `${String(target)} -> ${id}: ${JSON.stringify(samples[testId] ?? [])}`,
+        ).toBe(true);
+      }
+
+      previousTops = nextTops;
+    }
   });
 
   test("switching expansion from the top card to the middle card keeps sibling reflow animated", async ({
@@ -348,26 +604,38 @@ test.describe("phase2 layout", () => {
   test("shared layout shell animates on open and stays visually on top", async ({
     page,
   }) => {
-    await page.getByTestId("layout-foreground-stage").scrollIntoViewIfNeeded();
-    await runAction(page, "openForeground", "alpha");
+    await page
+      .getByTestId("layout-foreground-stage")
+      .evaluate((element) => element.scrollIntoView({ block: "center" }));
+    const samples = await sampledActionTopLayerContinuity(
+      page,
+      "openForeground",
+      "alpha",
+      "layout-foreground-modal-alpha",
+    );
     await waitForState(page, "foregroundOpenId", "alpha");
     await expect(page.getByTestId("layout-foreground-modal-alpha")).toHaveCount(
       1,
     );
 
     expect(
-      await sampledTransformAnimation(page, "layout-foreground-modal-alpha"),
+      samples.some(
+        (sample) => sample.transform !== null && sample.transform !== "none",
+      ),
     ).toBe(true);
 
-    const samples = await sampledTopLayerContinuity(
-      page,
-      "layout-foreground-modal-square-alpha",
+    const animatedSamples = samples.filter(
+      (sample) =>
+        sample.transform !== null &&
+        sample.transform !== "none" &&
+        sample.intersectsViewport,
     );
 
     expect(samples.length).toBeGreaterThan(0);
+    expect(animatedSamples.length).toBeGreaterThan(1);
     expect(
-      samples.every((sample) => sample.containsTarget),
-      JSON.stringify(samples),
+      animatedSamples.every((sample) => sample.containsTarget),
+      JSON.stringify(animatedSamples),
     ).toBe(true);
   });
 
@@ -460,5 +728,69 @@ test.describe("phase2 layout", () => {
       }),
       JSON.stringify(samples),
     ).toBe(true);
+  });
+
+  test("alternating foreground cards keeps border-radius correction on open and stays on top while closing", async ({
+    page,
+  }) => {
+    const sequence = ["alpha", "beta", "gamma", "alpha", "beta", "gamma"];
+
+    await page
+      .getByTestId("layout-foreground-stage")
+      .evaluate((element) => element.scrollIntoView({ block: "center" }));
+
+    for (const id of sequence) {
+      const openSamples = await sampledActionSharedShellContinuity(
+        page,
+        "openForeground",
+        id,
+        `layout-foreground-modal-${id}`,
+      );
+
+      await waitForState(page, "foregroundOpenId", id);
+      await expect(
+        page.getByTestId(`layout-foreground-modal-${id}`),
+      ).toHaveCount(1);
+
+      expect(openSamples.length, JSON.stringify(openSamples)).toBeGreaterThan(
+        0,
+      );
+      expect(
+        openSamples.some(
+          (sample) => sample.transform !== null && sample.transform !== "none",
+        ),
+        JSON.stringify(openSamples),
+      ).toBe(true);
+      expect(
+        openSamples.every((sample) => sample.borderTopLeftRadius !== "0px"),
+        JSON.stringify(openSamples),
+      ).toBe(true);
+
+      const closeSamples = await sampledActionTopLayerContinuity(
+        page,
+        "closeForeground",
+        null,
+        [`layout-foreground-row-${id}`, `layout-foreground-modal-${id}`],
+      );
+
+      await waitForState(page, "foregroundOpenId", null);
+
+      expect(closeSamples.length, JSON.stringify(closeSamples)).toBeGreaterThan(
+        0,
+      );
+      const animatedCloseSamples = closeSamples.filter(
+        (sample) => sample.transform !== null && sample.transform !== "none",
+      );
+      expect(
+        animatedCloseSamples.length,
+        JSON.stringify(closeSamples),
+      ).toBeGreaterThan(1);
+      expect(
+        animatedCloseSamples.slice(1).every((sample) => sample.containsTarget),
+        JSON.stringify(animatedCloseSamples),
+      ).toBe(true);
+
+      await page.waitForTimeout(220);
+    }
   });
 });

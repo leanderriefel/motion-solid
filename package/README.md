@@ -133,7 +133,9 @@ In practice:
 
 ## Practical Layout Notes
 
+- If related state lives outside the node, pass it through `layoutDependency` so Motion knows when to take a fresh measurement.
 - `borderRadius` and `boxShadow` correction only works when Motion can see those values on the projecting motion node itself through `style`, `initial`, `animate`, or `exit`.
+- Shared-layout handoff temporarily lifts the active HTML lead node above sibling rows while that `layoutId` animation is running, so close/open handoff does not disappear underneath surrounding list content.
 - If text can wrap differently between source and target, animate a shared wrapper with `layout="position"` instead of animating the text node directly.
 
 ## Installation

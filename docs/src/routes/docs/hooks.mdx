@@ -1,0 +1,39 @@
+# Hooks
+
+`motion-solid` exports hooks for presence, layout orchestration, and motion configuration.
+
+## Presence Hooks
+
+- `usePresence(subscribe?: boolean)`: `[Accessor<boolean>, VoidFunction | undefined]`
+- `useIsPresent()`: `Accessor<boolean>`
+- `usePresenceData<T>()`: `Accessor<T | undefined>`
+
+```tsx
+const [isPresent, safeToRemove] = usePresence();
+```
+
+## Layout Hooks
+
+- `useInstantLayoutTransition()`: `(callback: VoidFunction) => void`
+- `useResetProjection()`: `() => void`
+
+```tsx
+const instantLayoutTransition = useInstantLayoutTransition();
+const resetProjection = useResetProjection();
+```
+
+## Config Hooks
+
+- `useMotionConfig()`: `MotionConfigContextValue | null`
+- `useReducedMotion()`: `Accessor<boolean>`
+
+```tsx
+const config = useMotionConfig();
+const prefersReducedMotion = useReducedMotion();
+```
+
+## Notes
+
+- Presence hooks read the nearest `AnimatePresence` context.
+- `useMotionConfig()` returns `null` outside `MotionConfig`.
+- `useReducedMotion()` is safe on the server and returns `false` until the client can read the media query.

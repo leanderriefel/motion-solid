@@ -26,16 +26,21 @@ const docsNav = [
     items: [
       { href: "/docs/getting-started", label: "Getting Started" },
       { href: "/docs/demos", label: "Demos" },
+      {
+        href: "/docs/architecture-caveats",
+        label: "Architecture / Caveats",
+      },
     ],
   },
   {
     title: "Core",
     items: [
-      { href: "/docs/motion-component", label: "motion" },
+      { href: "/docs/motion-component", label: "Motion Component" },
       { href: "/docs/layout-animations", label: "Layout Animations" },
       { href: "/docs/variants", label: "Variants" },
       { href: "/docs/animate-presence", label: "AnimatePresence" },
       { href: "/docs/motion-config", label: "MotionConfig" },
+      { href: "/docs/hooks", label: "Hooks" },
     ],
   },
   {
@@ -44,10 +49,6 @@ const docsNav = [
       { href: "/docs/gestures", label: "Gestures" },
       { href: "/docs/drag", label: "Drag" },
     ],
-  },
-  {
-    title: "Reference",
-    items: [{ href: "/docs/api-reference", label: "API Reference" }],
   },
 ];
 
@@ -183,10 +184,9 @@ export default function Layout(props: ParentProps) {
                     <h4 class="font-semibold text-lg mb-1">Beta Status</h4>
                     <p class="text-sm opacity-90">
                       This library is still in early beta and the API is subject
-                      to change and may get daily breaking changes. The
-                      documentaton may not be up to date with the latest
-                      features and include missing or outdated information. You
-                      can always create an issue on{" "}
+                      to change and may get daily breaking changes. If the docs
+                      and the package disagree, prefer the package and open an
+                      issue on{" "}
                       <a
                         href="https://github.com/leanderriefel/motion-solid"
                         target="_blank"
@@ -194,8 +194,7 @@ export default function Layout(props: ParentProps) {
                       >
                         GitHub
                       </a>{" "}
-                      or even better a pull request to fix the documentation or
-                      add new features.
+                      or send a pull request with a fix.
                     </p>
                   </div>
                 </div>

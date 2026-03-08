@@ -2,6 +2,13 @@ import { AnimatePresence, LayoutGroup, motion } from "../../../../src";
 import { For, Show, createMemo, createSignal } from "solid-js";
 import type { ScenarioController, ScenarioProps } from "../types";
 
+const sharedForegroundShellStyle = {
+  position: "relative",
+  overflow: "hidden",
+  "border-radius": "24px",
+  "box-shadow": "0px 14px 34px rgba(15, 23, 42, 0.08)",
+} as const;
+
 export function LayoutScenario(props: ScenarioProps) {
   const [expanded, setExpanded] = createSignal(false);
   const [selected, setSelected] = createSignal<"a" | "b">("a");
@@ -290,6 +297,8 @@ export function LayoutScenario(props: ScenarioProps) {
                 return (
                   <motion.button
                     layout
+                    whileTap={{ scale: 0.99 }}
+                    transition={{ type: "spring", stiffness: 320, damping: 28 }}
                     type="button"
                     data-testid={`layout-expand-${item.id}`}
                     onClick={() =>
@@ -364,21 +373,40 @@ export function LayoutScenario(props: ScenarioProps) {
                           style={{
                             margin: "16px 0 0",
                             padding: "12px",
+                            display: "grid",
+                            gap: "8px",
                             "border-radius": "16px",
                             "background-color": "rgb(241, 245, 249)",
                           }}
                         >
-                          <motion.p
+                          <For each={item.details}>
+                            {(detail) => (
+                              <motion.p
+                                layout="position"
+                                style={{
+                                  margin: "0",
+                                  "font-size": "13px",
+                                  "line-height": "1.6",
+                                  color: "rgb(71, 85, 105)",
+                                }}
+                              >
+                                {detail}
+                              </motion.p>
+                            )}
+                          </For>
+                          <motion.div
                             layout="position"
                             style={{
-                              margin: "0",
-                              "font-size": "13px",
-                              "line-height": "1.6",
-                              color: "rgb(71, 85, 105)",
+                              display: "flex",
+                              gap: "12px",
+                              "margin-top": "12px",
+                              "font-size": "12px",
+                              color: "rgb(100, 116, 139)",
                             }}
                           >
-                            {item.detail}
-                          </motion.p>
+                            <span>Impact: {item.impact}</span>
+                            <span>Speed: {item.speed}</span>
+                          </motion.div>
                         </motion.div>
                       </Show>
                     </AnimatePresence>
@@ -410,77 +438,83 @@ export function LayoutScenario(props: ScenarioProps) {
                     const isOpen = () => foregroundOpenId() === card.id;
 
                     return (
-                      <motion.button
-                        layout
-                        layoutId={`foreground-card-${card.id}`}
-                        layoutDependency={foregroundOpenId()}
-                        layoutCrossfade={false}
+                      <button
                         type="button"
-                        data-testid={`layout-foreground-row-${card.id}`}
                         onClick={() => setForegroundOpenId(card.id)}
                         style={{
-                          position: "relative",
-                          overflow: "hidden",
                           display: "block",
                           width: "100%",
-                          border: "1px solid rgb(203, 213, 225)",
-                          "border-radius": "24px",
-                          padding: "16px",
+                          border: "none",
+                          background: "transparent",
+                          padding: "0",
                           "text-align": "left",
-                          "background-color": "white",
-                          "box-shadow": "0px 14px 34px rgba(15, 23, 42, 0.08)",
                           "pointer-events": isOpen() ? "none" : "auto",
                         }}
                       >
-                        <div
+                        <motion.div
+                          layout
+                          layoutId={`foreground-card-${card.id}`}
+                          layoutDependency={foregroundOpenId()}
+                          layoutCrossfade={false}
+                          data-testid={`layout-foreground-row-${card.id}`}
                           style={{
-                            display: "flex",
-                            gap: "14px",
-                            "align-items": "center",
+                            ...sharedForegroundShellStyle,
+                            width: "100%",
+                            border: "1px solid rgb(203, 213, 225)",
+                            padding: "16px",
+                            "background-color": "white",
                           }}
                         >
-                          <motion.div
-                            layoutId={`foreground-square-${card.id}`}
-                            layoutCrossfade={false}
-                            data-testid={`layout-foreground-square-${card.id}`}
+                          <div
                             style={{
-                              width: "56px",
-                              height: "56px",
-                              "border-radius": "18px",
-                              "background-color": card.color,
-                            }}
-                          />
-                          <motion.div
-                            layoutId={`foreground-text-${card.id}`}
-                            layout="position"
-                            layoutCrossfade={false}
-                            data-testid={`layout-foreground-text-${card.id}`}
-                            style={{
-                              display: "grid",
-                              gap: "4px",
+                              display: "flex",
+                              gap: "14px",
+                              "align-items": "center",
                             }}
                           >
-                            <div
+                            <motion.div
+                              layoutId={`foreground-square-${card.id}`}
+                              layoutCrossfade={false}
+                              data-testid={`layout-foreground-square-${card.id}`}
                               style={{
-                                "font-size": "15px",
-                                "font-weight": "600",
-                                color: "rgb(15, 23, 42)",
+                                width: "56px",
+                                height: "56px",
+                                "border-radius": "18px",
+                                "background-color": card.color,
+                              }}
+                            />
+                            <motion.div
+                              layoutId={`foreground-text-${card.id}`}
+                              layout="position"
+                              layoutCrossfade={false}
+                              data-testid={`layout-foreground-text-${card.id}`}
+                              style={{
+                                display: "grid",
+                                gap: "4px",
                               }}
                             >
-                              {card.title}
-                            </div>
-                            <div
-                              style={{
-                                "font-size": "13px",
-                                "line-height": "1.5",
-                                color: "rgb(100, 116, 139)",
-                              }}
-                            >
-                              {card.summary}
-                            </div>
-                          </motion.div>
-                        </div>
-                      </motion.button>
+                              <div
+                                style={{
+                                  "font-size": "15px",
+                                  "font-weight": "600",
+                                  color: "rgb(15, 23, 42)",
+                                }}
+                              >
+                                {card.title}
+                              </div>
+                              <div
+                                style={{
+                                  "font-size": "13px",
+                                  "line-height": "1.5",
+                                  color: "rgb(100, 116, 139)",
+                                }}
+                              >
+                                {card.summary}
+                              </div>
+                            </motion.div>
+                          </div>
+                        </motion.div>
+                      </button>
                     );
                   }}
                 </For>
@@ -522,88 +556,92 @@ export function LayoutScenario(props: ScenarioProps) {
                           "justify-content": "center",
                         }}
                       >
-                        <motion.div
-                          layoutId={`foreground-card-${card.id}`}
-                          layoutDependency={foregroundOpenId()}
-                          layoutCrossfade={false}
-                          data-testid={`layout-foreground-modal-${card.id}`}
+                        <div
                           style={{
-                            position: "relative",
-                            overflow: "hidden",
                             width: "100%",
-                            "max-width": "360px",
-                            border: "1px solid rgb(203, 213, 225)",
-                            "border-radius": "28px",
-                            padding: "20px",
-                            "background-color": "white",
-                            "box-shadow":
-                              "0px 30px 90px rgba(15, 23, 42, 0.22)",
+                            "max-width": "720px",
+                            filter:
+                              "drop-shadow(0px 30px 90px rgba(15, 23, 42, 0.22))",
                           }}
                         >
-                          <div
+                          <motion.div
+                            layoutId={`foreground-card-${card.id}`}
+                            layoutDependency={foregroundOpenId()}
+                            layoutCrossfade={false}
+                            data-testid={`layout-foreground-modal-${card.id}`}
                             style={{
-                              display: "flex",
-                              gap: "16px",
-                              "align-items": "flex-start",
+                              ...sharedForegroundShellStyle,
+                              width: "100%",
+                              border: "1px solid rgb(203, 213, 225)",
+                              padding: "20px",
+                              "background-color": "white",
                             }}
                           >
-                            <motion.div
-                              layoutId={`foreground-square-${card.id}`}
-                              layoutCrossfade={false}
-                              data-testid={`layout-foreground-modal-square-${card.id}`}
+                            <div
                               style={{
-                                width: "96px",
-                                height: "96px",
-                                "border-radius": "24px",
-                                "background-color": card.color,
-                              }}
-                            />
-                            <motion.div
-                              layoutId={`foreground-text-${card.id}`}
-                              layout="position"
-                              layoutCrossfade={false}
-                              data-testid={`layout-foreground-modal-text-${card.id}`}
-                              style={{
-                                display: "grid",
-                                gap: "8px",
+                                display: "flex",
+                                gap: "16px",
+                                "align-items": "flex-start",
                               }}
                             >
-                              <div
+                              <motion.div
+                                layoutId={`foreground-square-${card.id}`}
+                                layoutCrossfade={false}
+                                data-testid={`layout-foreground-modal-square-${card.id}`}
                                 style={{
-                                  "font-size": "18px",
-                                  "font-weight": "600",
-                                  color: "rgb(15, 23, 42)",
+                                  width: "96px",
+                                  height: "96px",
+                                  "border-radius": "24px",
+                                  "background-color": card.color,
+                                }}
+                              />
+                              <motion.div
+                                layoutId={`foreground-text-${card.id}`}
+                                layout="position"
+                                layoutCrossfade={false}
+                                data-testid={`layout-foreground-modal-text-${card.id}`}
+                                style={{
+                                  display: "grid",
+                                  gap: "8px",
                                 }}
                               >
-                                {card.title}
-                              </div>
-                              <div
-                                style={{
-                                  "font-size": "14px",
-                                  "line-height": "1.6",
-                                  color: "rgb(100, 116, 139)",
-                                }}
-                              >
-                                {card.summary}
-                              </div>
-                            </motion.div>
-                          </div>
+                                <div
+                                  style={{
+                                    "font-size": "18px",
+                                    "font-weight": "600",
+                                    color: "rgb(15, 23, 42)",
+                                  }}
+                                >
+                                  {card.title}
+                                </div>
+                                <div
+                                  style={{
+                                    "font-size": "14px",
+                                    "line-height": "1.6",
+                                    color: "rgb(100, 116, 139)",
+                                  }}
+                                >
+                                  {card.summary}
+                                </div>
+                              </motion.div>
+                            </div>
 
-                          <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 8 }}
-                            transition={{ duration: 0.18, delay: 0.04 }}
-                            style={{
-                              margin: "18px 0 0",
-                              "font-size": "14px",
-                              "line-height": "1.7",
-                              color: "rgb(15, 23, 42)",
-                            }}
-                          >
-                            {card.detail}
+                            <motion.div
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: 8 }}
+                              transition={{ duration: 0.18, delay: 0.04 }}
+                              style={{
+                                margin: "18px 0 0",
+                                "font-size": "14px",
+                                "line-height": "1.7",
+                                color: "rgb(15, 23, 42)",
+                              }}
+                            >
+                              {card.detail}
+                            </motion.div>
                           </motion.div>
-                        </motion.div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -647,24 +685,46 @@ const expandItems = [
     label: "Sync profile settings",
     owner: "Platform",
     score: 92,
-    detail:
+    impact: 92,
+    speed: 44,
+    details: [
       "Touches auth, preferences, and the app shell in one pass, so the card grows and nearby siblings need to reflow smoothly.",
+      "The taller expanded state is a good baseline for checking that lower rows keep a continuous transform instead of snapping.",
+    ],
   },
   {
     id: "feed",
     label: "Reduce feed jank",
     owner: "Experience",
     score: 78,
-    detail:
-      "Mostly rendering work with a small API contract change. Expanding this middle row should animate the row below, not snap it.",
+    impact: 78,
+    speed: 81,
+    details: ["Mostly rendering work with a small API contract change."],
+  },
+  {
+    id: "invite",
+    label: "Tighten invite flow",
+    owner: "Growth",
+    score: 64,
+    impact: 64,
+    speed: 88,
+    details: [
+      "Short implementation, high confidence, and strong conversion upside.",
+      "This intentionally uses a taller detail body than the feed card so switching between the two rows forces the search card below to reflow every time.",
+      "That repeated lower-sibling movement is the regression shape the browser harness samples frame-by-frame.",
+    ],
   },
   {
     id: "search",
     label: "Search result polish",
     owner: "Core",
     score: 86,
-    detail:
+    impact: 86,
+    speed: 58,
+    details: [
       "Ranking is stable; the remaining work is layout and interaction cleanup inside a denser result card.",
+      "It sits below the rows we alternate between, so it is the easiest sibling to catch snapping during repeated expansions.",
+    ],
   },
 ] as const;
 
@@ -685,5 +745,13 @@ const foregroundCards = [
     detail:
       "Closing the dialog should hand the same visual elements back into the list without duplicating the card shell.",
     color: "rgb(234, 88, 12)",
+  },
+  {
+    id: "gamma",
+    title: "Support handoff",
+    summary: "A third row to catch repeated shared-layout handoff drift.",
+    detail:
+      "Alternating across three cards should still keep the shell, square, and text on top while the modal opens and closes.",
+    color: "rgb(5, 150, 105)",
   },
 ] as const;

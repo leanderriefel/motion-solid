@@ -5,6 +5,7 @@ This file is the maintenance contract for this repo. Keep it aligned with the co
 ## What This Repo Is
 
 - `motion-solid` is a SolidJS-first Motion library built on top of upstream `motion-dom`.
+- The workspace currently pins published `motion-dom` `^12.35.1`.
 - The component runtime is not a local store-driven animation engine. Motion component state lives on upstream `motion-dom` objects.
 - The framework layer is a Solid translation of the framework-owned pieces that live in `motion/react`.
 - This repo is not a byte-for-byte port of `motion/react`. Most remaining parity bugs live in the translated orchestration layer, not the `motion-dom` engine.
@@ -42,6 +43,19 @@ Docs app note:
 
 - Client bootstrap lives in `docs/src/entry-client.tsx`.
 - The current docs build emits a Vinxi warning about a missing default export from `src/entry-client.tsx`, but the build still succeeds. If touching docs bootstrap, verify the real built site behavior, not just the warning text.
+- Current sidebar docs targets live under `docs/src/routes/docs`:
+  - `getting-started.mdx`
+  - `demos.mdx`
+  - `architecture-caveats.mdx`
+  - `motion-component.mdx`
+  - `layout-animations.mdx`
+  - `variants.mdx`
+  - `animate-presence.mdx`
+  - `motion-config.mdx`
+  - `hooks.mdx`
+  - `gestures.mdx`
+  - `drag.mdx`
+- The docs layout TOC reads `h2` and `h3` inside `.docs-content`. Demo components must not render heading tags for demo titles or internal labels, otherwise they pollute the page TOC.
 
 Package publishing note:
 
@@ -154,7 +168,7 @@ Presence and exit orchestration:
 - `AnimatePresence`
 - presence hooks
 - retained DOM exit bridge
-- `mode="sync" | "wait" | "popLayout"`
+- `mode="sync" | "wait" | "popLayout"` with `popLayout` as the current default in `motion-solid`
 - `propagate`
 - `presenceAffectsLayout`
 - `root`, `anchorX`, `anchorY` for `popLayout`
@@ -165,6 +179,7 @@ Layout orchestration:
 - `useInstantLayoutTransition`
 - `useResetProjection`
 - `layoutId` namespacing through layout group ids
+- temporary lead lifting for active HTML shared-layout nodes so the promoted/shrinking `layoutId` lead stays above sibling rows during handoff
 - Solid invalidation signals such as `forceRenderVersion`
 
 SSR and hydration translation:
@@ -312,6 +327,8 @@ Current required regression coverage includes:
 - `layoutDependency` measurement gating
 - `motion.create` ref/prop forwarding
 - browser-level shared layout and `AnimatePresence mode="popLayout"`
+- docs-route shared layout/top-layer continuity for foreground-card close handoff
+- docs-route repeated list expansion continuity for the reshuffling demo
 - browser-level drag movement and axis locking
 - browser-level scale correction for `borderRadius` and `boxShadow`
 

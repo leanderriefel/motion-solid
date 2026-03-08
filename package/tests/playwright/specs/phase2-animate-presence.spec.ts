@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   clearEvents,
   loadScenario,
@@ -7,6 +7,55 @@ import {
   waitForState,
 } from "../utils/harness-client";
 import { byType } from "../utils/event-assertions";
+
+type PopLayoutPresenceSample = {
+  frame: number;
+  aExists: boolean;
+  bExists: boolean;
+  aPopId: string | null;
+};
+
+const sampledPresenceOverlap = async (
+  page: Page,
+  action: string,
+  payload?: unknown,
+) => {
+  return page.evaluate(
+    async ({ action, payload }) => {
+      const harnessWindow = window as Window & {
+        __MOTION_HARNESS__?: {
+          act?: (action: string, payload?: unknown) => void;
+        };
+      };
+
+      const samples: PopLayoutPresenceSample[] = [];
+      harnessWindow.__MOTION_HARNESS__?.act?.(action, payload);
+
+      for (let i = 0; i < 16; i += 1) {
+        const exiting = document.querySelector(
+          '[data-testid="presence-item-a"]',
+        ) as HTMLElement | null;
+        const entering = document.querySelector(
+          '[data-testid="presence-item-b"]',
+        ) as HTMLElement | null;
+
+        samples.push({
+          frame: i,
+          aExists: exiting !== null,
+          bExists: entering !== null,
+          aPopId: exiting?.getAttribute("data-motion-pop-id") ?? null,
+        });
+
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      }
+
+      return samples;
+    },
+    { action, payload },
+  );
+};
 
 test.describe("phase2 animate-presence", () => {
   test.beforeEach(async ({ page }) => {
@@ -48,14 +97,14 @@ test.describe("phase2 animate-presence", () => {
     await clearEvents(page);
     await runAction(page, "setMode", "popLayout");
     await runAction(page, "setCurrent", "a");
-    await runAction(page, "cycle");
+    const samples = await sampledPresenceOverlap(page, "cycle");
 
-    await expect(page.getByTestId("presence-item-b")).toHaveCount(1);
-    await expect(page.getByTestId("presence-item-a")).toHaveCount(1);
-    await expect(page.getByTestId("presence-item-a")).toHaveAttribute(
-      "data-motion-pop-id",
-      /.+/,
-    );
+    expect(
+      samples.some(
+        (sample) => sample.aExists && sample.bExists && sample.aPopId !== null,
+      ),
+      JSON.stringify(samples),
+    ).toBe(true);
 
     await expect(page.getByTestId("presence-item-a")).toHaveCount(0, {
       timeout: 2_000,

@@ -294,7 +294,9 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     let hasCommittedProjectionMount = false;
     let groupProjection: IProjectionNode | undefined;
     let switchProjection: IProjectionNode | undefined;
+    let removeProjectionAnimationStartListener: VoidFunction | undefined;
     let removeProjectionAnimationCompleteListener: VoidFunction | undefined;
+    let clearSharedLayoutLeadStyles: VoidFunction | undefined;
     const isPresent = () => presence?.isPresent() ?? true;
     const [local, motionOptions, domProps] = splitProps(
       props as Record<string, unknown>,
@@ -321,6 +323,41 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       MotionOptions<ElementTag>,
       Record<string, unknown>,
     ];
+
+    const resetSharedLayoutLeadStyles = () => {
+      clearSharedLayoutLeadStyles?.();
+      clearSharedLayoutLeadStyles = undefined;
+    };
+
+    const liftSharedLayoutLead = () => {
+      resetSharedLayoutLeadStyles();
+
+      const projection = visualElement.projection;
+      const element = currentElement;
+
+      if (!projection || !projection.isLead()) return;
+      if (!(element instanceof HTMLElement)) return;
+
+      const projectionOptions = projection.options as {
+        layoutId?: string;
+      };
+      if (projectionOptions.layoutId === undefined) return;
+
+      const previousZIndex = element.style.zIndex;
+      const previousPosition = element.style.position;
+      const computedPosition = getComputedStyle(element).position;
+
+      element.style.zIndex = "2147483647";
+
+      if (!previousPosition && computedPosition === "static") {
+        element.style.position = "relative";
+      }
+
+      clearSharedLayoutLeadStyles = () => {
+        element.style.zIndex = previousZIndex;
+        element.style.position = previousPosition;
+      };
+    };
 
     const layoutId = createMemo(() =>
       layoutGroup.id && motionOptions.layoutId !== undefined
@@ -599,12 +636,12 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     });
 
     const MotionHostChildren: Component = () => {
-      const resolvedChildren = () => {
+      const renderChildren = () => {
         const value = local.children;
         return isMotionValue(value) ? value.get() : value;
       };
 
-      return resolvedChildren();
+      return renderChildren() as JSX.Element;
     };
 
     const renderMotionChildren = () => {
@@ -664,7 +701,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       );
 
       const projection = visualElement.projection;
-
       if (projection && layoutGroup.group && groupProjection !== projection) {
         layoutGroup.group.add(projection);
         groupProjection = projection;
@@ -688,6 +724,15 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         }
       }
 
+      if (projection && removeProjectionAnimationStartListener === undefined) {
+        removeProjectionAnimationStartListener = projection.addEventListener(
+          "animationStart",
+          (() => {
+            liftSharedLayoutLead();
+          }) as never,
+        );
+      }
+
       if (
         projection &&
         removeProjectionAnimationCompleteListener === undefined
@@ -695,6 +740,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         removeProjectionAnimationCompleteListener = projection.addEventListener(
           "animationComplete",
           (() => {
+            resetSharedLayoutLeadStyles();
             if (!isPresent()) {
               presence?.onExitComplete(presenceId, currentElement ?? undefined);
             }
@@ -846,6 +892,9 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       isCleaningUp = true;
       childListObserver?.disconnect();
       childListObserver = undefined;
+      resetSharedLayoutLeadStyles();
+      removeProjectionAnimationStartListener?.();
+      removeProjectionAnimationStartListener = undefined;
       removeProjectionAnimationCompleteListener?.();
       removeProjectionAnimationCompleteListener = undefined;
       animationChangesId++;

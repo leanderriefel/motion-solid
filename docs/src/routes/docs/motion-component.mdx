@@ -1,305 +1,74 @@
+import { BasicMotionDemo } from "~/components/demos/basic-motion-demo";
+
 # Motion Component
 
-The `motion` proxy exposes a component for every HTML and SVG element. Motion components accept all native props plus animation-specific props.
+The `motion` proxy gives every HTML and SVG element Motion props on top of native Solid props.
+
+## Create
 
 ```tsx
 import { motion } from "motion-solid";
 
-// HTML elements
 <motion.div />
 <motion.button />
-<motion.section />
-
-// SVG elements
 <motion.svg />
 <motion.path />
-<motion.circle />
 ```
 
-## Basic Example
+```tsx
+const Card = (props) => <div ref={props.ref} {...props} />;
+
+const MotionCard = motion.create(Card, {
+  forwardMotionProps: false,
+  type: "html",
+});
+```
+
+## Props
+
+- `initial`: `target object | variant label | string[] | false`. Initial state.
+- `animate`: `target object | variant label | string[] | animation controls`. Active state.
+- `exit`: `target object | variant label | string[]`. Exit state.
+- `transition`: `Transition`. Timing and per-value transition config.
+- `variants`: `Record<string, variant>`. Named states.
+- `custom`: `unknown`. Payload for variant functions.
+- `inherit`: `boolean`. Set `false` to stop parent variant inheritance.
+- `style`: `MotionStyle`. Regular styles plus animated values.
+- `transformTemplate`: `(transform, generatedTransform) => string`. Custom transform output.
+- `whileHover`, `whileTap`, `whileFocus`, `whileInView`, `whileDrag`: `target object | variant label | string[]`. Temporary gesture states.
+- `drag`: `boolean | "x" | "y"`. Enables drag.
+- `layout`: `boolean | "position" | "size" | "preserve-aspect"`. Enables layout projection.
+- `layoutId`: `string`. Shared-layout identity.
+- `layoutDependency`: `unknown`. Forces a fresh layout measurement when related state changes elsewhere.
+- `layoutScroll`: `boolean`. Marks a scroll container for projection.
+- `layoutRoot`: `boolean`. Marks a projection root.
+- `layoutCrossfade`: `boolean`. Controls shared-layout crossfade behavior.
+
+## Callbacks
+
+- `onUpdate`: `(latest) => void`
+- `onAnimationStart`: `(definition) => void`
+- `onAnimationComplete`: `(definition) => void`
+- `onBeforeLayoutMeasure`: `(box) => void`
+- `onLayoutMeasure`: `(box, prevBox) => void`
+- `onLayoutAnimationStart`: `() => void`
+- `onLayoutAnimationComplete`: `() => void`
+
+## Example
 
 ```tsx
 <motion.div
-  class="card"
-  initial={{ opacity: 0, y: 20 }}
+  initial={{ opacity: 0, y: 16 }}
   animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 0.4, ease: "ease-out" }}
->
-  Fade in from below
-</motion.div>
-```
-
-## Animation Props
-
-### `initial`
-
-The starting state. Can be an animation target, a variant label, or `false` to skip the initial animation.
-
-```tsx
-// Animation target
-<motion.div initial={{ opacity: 0, scale: 0.8 }} />
-
-// Variant label
-<motion.div initial="hidden" variants={variants} />
-
-// Skip initial animation
-<motion.div initial={false} animate={{ x: 100 }} />
-```
-
-### `animate`
-
-Target to animate to on mount and when props change. Can be a target object, variant label, or array of labels.
-
-```tsx
-// Animation target
-<motion.div animate={{ opacity: 1, x: 50 }} />
-
-// Variant label
-<motion.div animate="visible" variants={variants} />
-
-// Multiple variants (merged in order)
-<motion.div animate={["visible", "highlight"]} variants={variants} />
-
-// CSS custom properties
-<motion.div animate={{ "--progress": 0.5, "--color": "#ff0000" }} />
-```
-
-### `exit`
-
-Target to animate to when the component leaves. Requires [AnimatePresence](/docs/animate-presence).
-
-```tsx
-<AnimatePresence>
-  <Show when={visible()}>
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0, y: -20 }}
-    />
-  </Show>
-</AnimatePresence>
-```
-
-### `transition`
-
-Controls how values animate. Can be set per-prop or as a default.
-
-```tsx
-// Default for all values
-<motion.div
-  animate={{ x: 100, opacity: 1 }}
-  transition={{ type: "spring", stiffness: 200 }}
-/>
-
-// Per-prop overrides
-<motion.div
-  animate={{ x: 100, opacity: 1 }}
-  transition={{
-    x: { type: "spring" },
-    opacity: { duration: 0.2 },
-  }}
-/>
-
-// Using transitionEnd for final values
-<motion.div
-  animate={{ opacity: 1 }}
-  transition={{ transitionEnd: { display: "none" } }}
+  transition={{ duration: 0.25 }}
 />
 ```
 
-Transition types:
+<BasicMotionDemo />
 
-- `"spring"` - Physics-based with `stiffness`, `damping`, `mass`
-- `"tween"` - Duration-based with `duration`, `ease`
-- `"keyframes"` - Step through an array of values
-- `"inertia"` - Decelerate from initial velocity
+## Notes
 
-### `variants`
-
-Map of named animation targets. See [Variants](/docs/variants).
-
-```tsx
-const variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1 },
-};
-
-<motion.div variants={variants} initial="hidden" animate="visible" />;
-```
-
-### `custom`
-
-Data passed to variant functions. Also provided by [AnimatePresence](/docs/animate-presence).
-
-```tsx
-const variants = {
-  visible: (delay: number) => ({
-    opacity: 1,
-    transition: { delay },
-  }),
-};
-
-<motion.div variants={variants} custom={0.2} animate="visible" />;
-```
-
-### `inherit`
-
-Set to `false` to prevent inheriting variants from ancestors.
-
-```tsx
-<motion.ul variants={list} animate="show">
-  <motion.li variants={item} /> {/* inherits "show" */}
-  <motion.li inherit={false} /> {/* does not inherit */}
-</motion.ul>
-```
-
-## Layout
-
-### `layout`
-
-Enable automatic layout animations when size or position changes.
-
-```tsx
-<motion.div layout />
-<motion.div layout="position" />
-<motion.div layout="size" />
-<motion.div layout="preserve-aspect" />
-```
-
-Sibling reordering in Solid control flow, such as resorting a `For` list of `layout` items, is part of the supported layout behavior.
-
-See [Layout Animations](/docs/layout-animations) for shared-layout handoff patterns, `layoutDependency`, and distortion/correction guidance.
-
-### `layoutId`
-
-Share layout state between different elements for handoff transitions:
-
-```tsx
-<motion.div layoutId="card" />
-```
-
-### `layoutDependency`
-
-Explicitly invalidate layout measurement when related state changes outside the motion node:
-
-```tsx
-<motion.div layout layoutDependency={selectedId()} />
-```
-
-### `layoutScroll` / `layoutRoot` / `layoutCrossfade`
-
-Use Motion-compatible projection options directly on the node:
-
-```tsx
-<motion.div layout layoutScroll />
-<motion.div layout layoutRoot />
-<motion.div layoutId="card" layoutCrossfade={false} />
-```
-
-When layout projection scales a component, add `layout` or `layout="position"` to immediate children that should not appear stretched. `borderRadius` and `boxShadow` correction only applies when those values are present on the motion component itself via `style`, `initial`, `animate`, or `exit`.
-
-### Layout Callbacks
-
-```tsx
-<motion.div
-  layout
-  onBeforeLayoutMeasure={() => console.log("before measure")}
-  onLayoutMeasure={(box, prev) => console.log(box, prev)}
-  onLayoutAnimationStart={() => console.log("layout start")}
-  onLayoutAnimationComplete={() => console.log("layout done")}
-/>
-```
-
-## Style
-
-Regular Solid style object, merged with animated values. Use kebab-case for CSS and transform properties (`scale-x`, `rotate-y`, etc).
-
-```tsx
-<motion.div style={{ "background-color": "blue" }} animate={{ x: 100 }} />
-```
-
-## Lifecycle Callbacks
-
-### `onUpdate`
-
-Called on every render with the latest values:
-
-```tsx
-<motion.div animate={{ x: 100 }} onUpdate={(latest) => console.log(latest.x)} />
-```
-
-### `onAnimationStart` / `onAnimationComplete`
-
-Fired when the `animate` target starts or finishes. `onAnimationComplete` fires exactly once per completed animate cycle. If an animation is interrupted or replaced by a new reactive update before it settles, the stale cycle's callback is suppressed.
-
-```tsx
-<motion.div
-  animate={{ opacity: 1 }}
-  onAnimationStart={() => console.log("started")}
-  onAnimationComplete={() => console.log("done")}
-/>
-```
-
-## Custom Components
-
-Use `motion.create()` for custom components. The wrapped component must forward the received `ref` prop to a single DOM or SVG host node.
-
-```tsx
-const Card = (props: JSX.HTMLAttributes<HTMLDivElement>) => (
-  <div ref={props.ref} {...props} />
-);
-
-const MotionCard = motion.create(Card);
-
-<MotionCard layout animate={{ opacity: 1 }} />;
-```
-
-## Gestures and Drag
-
-Motion supports gesture animations and callbacks:
-
-- `whileHover` - Animation while hovering
-- `whileTap` - Animation while pressing
-- `whileFocus` - Animation while focused
-- `whileInView` - Animation when in viewport
-- `whileDrag` - Animation while dragging
-
-See [Gestures](/docs/gestures) and [Drag](/docs/drag) for details.
-
-```tsx
-<motion.button
-  whileHover={{ scale: 1.05 }}
-  whileTap={{ scale: 0.95 }}
-  onTap={() => console.log("clicked")}
-/>
-```
-
-## Server-Side Rendering
-
-On the server, motion components render with deterministic styles:
-
-- Uses `initial` styles if provided
-- Uses `animate` styles if `initial` is `false` or undefined
-
-```tsx
-// Server renders with opacity: 0
-<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
-
-// Server renders with opacity: 1
-<motion.div initial={false} animate={{ opacity: 1 }} />
-```
-
-## Limitations
-
-- Layout-capable custom components must forward `ref` to a single host element
-- MotionValue in `style` prop is planned
-
-## Divergence
-
-Solid disposes exiting component owners when they leave the tree. `motion-solid` keeps the DOM node for exit/layout handoff, but the exiting subtree is no longer reactively alive.
-
-This matters most with `AnimatePresence`:
-
-- exit and layout handoff still run
-- `onExitComplete` still fires
-- async `safeToRemove` flows inside an already-removed subtree are not React-identical
+- Use kebab-case transform and style keys: `scale-x`, `rotate-y`, `background-color`.
+- CSS variables (`--*`) pass through unchanged.
+- `motion.create(Component)` requires forwarding `ref` to one DOM or SVG host node.
+- See [Layout Animations](/docs/layout-animations), [Variants](/docs/variants), [Gestures](/docs/gestures), and [Drag](/docs/drag) for the feature-specific props.

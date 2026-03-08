@@ -1,95 +1,40 @@
-import { ComplexLayoutAnimation } from "~/components/demos/complex-layout-animation";
-import { ForegroundCardLayoutAnimation } from "~/components/demos/foreground-card-layout-animation";
-import { SimpleLayoutAnimation } from "~/components/demos/simple-layout-animation";
+import { LayoutTabsDemo } from "~/components/demos/layout-tabs-demo";
 
 # Layout Animations
 
-`motion-solid` exposes the same core layout surface as Motion: `layout`, `layoutId`, `layoutDependency`, `layoutScroll`, `layoutRoot`, `layoutCrossfade`, `LayoutGroup`, `useInstantLayoutTransition`, and `useResetProjection`.
+`layout` and `layoutId` give you automatic layout projection and shared-layout handoff.
 
-## Automatic Layout
+## Props
 
-Use `layout` when the same element should animate between size and position changes:
+- `layout`: `boolean | "position" | "size" | "preserve-aspect"`. Animates size and/or position changes on the same node.
+- `layoutId`: `string`. Shares layout state across different nodes.
+- `layoutDependency`: `unknown`. Forces measurement when related state changes outside the node.
+- `layoutScroll`: `boolean`. Marks a scroll container for projection.
+- `layoutRoot`: `boolean`. Marks a projection root.
+- `layoutCrossfade`: `boolean`. Controls crossfade for shared-layout handoff.
+
+## Grouping And Hooks
+
+- `LayoutGroup`: groups related layout nodes. Props: `id?: string`, `inherit?: boolean | "id"`.
+- `useInstantLayoutTransition()`: returns `(callback: VoidFunction) => void`.
+- `useResetProjection()`: returns `() => void`.
+
+## Notes
+
+- Use `layout="position"` for text and wrappers that should move without being visually scaled.
+- If related state lives outside the node, pass it through `layoutDependency` so Motion knows when to take a fresh measurement.
+- `borderRadius` and `boxShadow` correction only work when those values are visible on the projecting motion node through `style`, `initial`, `animate`, or `exit`.
+- Shared-layout handoff temporarily lifts the active HTML lead node above sibling rows while that `layoutId` animation is running.
+- Sibling reordering inside Solid control flow is supported.
+
+## Example
 
 ```tsx
-<motion.div layout />
-<motion.div layout="position" />
-<motion.div layout="size" />
-<motion.div layout="preserve-aspect" />
-```
-
-`layout="position"` is the escape hatch for text and other content that should move without being visually scaled.
-
-<SimpleLayoutAnimation />
-
-## Shared Layout
-
-Use `layoutId` when one visual element should hand off to another:
-
-```tsx
-<LayoutGroup id="cards">
-  <motion.button layoutId="card-shell" />
-  <Show when={open()}>
-    <motion.div layoutId="card-shell" />
-  </Show>
+<LayoutGroup id="tabs">
+  <button type="button">
+    <motion.div layoutId="underline" />
+  </button>
 </LayoutGroup>
 ```
 
-If you need a whole card handoff, put the shared `layoutId` on the card shell itself, not only on one inner row.
-
-If text can wrap differently between the source and target, put the `layoutId` on a shared wrapper and set that wrapper to `layout="position"` instead of animating the text node itself.
-
-If the source card also needs press or hover affordance, keep those effects off the shared shell itself. Put the click handling on a wrapper or use non-transform hover styles, otherwise the shared shell can fight the handoff transform and appear to snap on open.
-
-<ForegroundCardLayoutAnimation />
-
-## External State And `layoutDependency`
-
-Solid only re-runs a motion host when that host actually reads a signal. If layout needs to react to related state that lives outside the node, pass it through `layoutDependency` explicitly:
-
-```tsx
-<motion.button layout layoutId="card-shell" layoutDependency={selectedId()} />
-```
-
-This is especially important for shared-layout patterns where a selection signal mounts a second element elsewhere in the tree.
-
-## Distortion And Scale Correction
-
-Motion’s layout projection works by animating transforms. That means three rules matter:
-
-1. If immediate children look stretched, add `layout` or `layout="position"` to those children too.
-2. `borderRadius` and `boxShadow` correction only works when Motion can see those values on the motion component itself.
-3. For that reason, prefer inline `style`, `initial`, `animate`, or `exit` values for corrected surfaces instead of only utility classes.
-
-```tsx
-<motion.div
-  layout
-  style={{
-    "border-radius": "24px",
-    "box-shadow": "0 18px 40px rgba(15, 23, 42, 0.16)",
-  }}
-/>
-```
-
-## Scroll Roots And Portals
-
-Use the Motion projection options directly when layout lives in scroll containers or custom roots:
-
-```tsx
-<motion.div layout layoutScroll />
-<motion.div layout layoutRoot />
-<motion.div layoutId="modal" layoutCrossfade={false} />
-```
-
-## Reordering
-
-Sibling reordering in Solid control flow is supported. A typical list reorder looks like this:
-
-```tsx
-<motion.div layout>
-  <For each={sortedItems()}>
-    {(item) => <motion.div layout>{item.title}</motion.div>}
-  </For>
-</motion.div>
-```
-
-<ComplexLayoutAnimation />
+<LayoutTabsDemo />
