@@ -5,6 +5,7 @@ This file is the maintenance contract for this repo. Keep it aligned with the co
 ## What This Repo Is
 
 - `motion-solid` is a SolidJS-first Motion library built on top of upstream `motion-dom`.
+- The local package version is `0.5.0`.
 - The workspace currently pins published `motion-dom` `^12.35.1`.
 - The component runtime is not a local store-driven animation engine. Motion component state lives on upstream `motion-dom` objects.
 - The framework layer is a Solid translation of the framework-owned pieces that live in `motion/react`.
