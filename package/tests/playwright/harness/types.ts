@@ -4,6 +4,7 @@ export type HarnessScenarioName =
   | "callbacks"
   | "presence"
   | "layout"
+  | "gestures"
   | "viewport-orchestration"
   | "reduced-motion"
   | "keyboard";
@@ -12,6 +13,7 @@ export type HarnessEventType =
   | "animationStart"
   | "animationComplete"
   | "exitComplete"
+  | "springExitComplete"
   | "outerExitComplete"
   | "innerExitComplete"
   | "layoutStart"

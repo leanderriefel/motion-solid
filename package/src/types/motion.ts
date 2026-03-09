@@ -1,4 +1,4 @@
-import type { Accessor, JSX } from "solid-js";
+import type { JSX } from "solid-js";
 import type {
   AnyResolvedKeyframe,
   MotionValue,
@@ -7,8 +7,7 @@ import type {
   ValueTransition,
   VariantLabels,
 } from "motion-dom";
-import type { AnimationType } from "../animation/types";
-import type { BoundingBox } from "motion-utils";
+import type { BoundingBox, Box } from "motion-utils";
 import type { ElementTag, SVGElements } from "./elements";
 
 /**
@@ -126,7 +125,6 @@ type TransitionOverrides<Tag extends ElementTag> = Partial<
   Record<MotionTargetKey<Tag>, TransitionOverrideValue>
 > & {
   default?: ValueTransition;
-  layout?: ValueTransition;
 };
 
 export type Transition<Tag extends ElementTag = ElementTag> = BaseTransition &
@@ -175,18 +173,6 @@ export interface LegacyAnimationControls<Tag extends ElementTag = ElementTag> {
   mount(): () => void;
 }
 
-export interface MotionGesturesState {
-  hover: boolean;
-  tap: boolean;
-  focus: boolean;
-  drag: boolean;
-  inView: boolean;
-}
-
-export type MotionVariantsState = Partial<
-  Record<AnimationType | "initial", VariantLabels>
->;
-
 /**
  * SolidJS-friendly viewport options.
  * Unlike motion-dom's ViewportOptions which expects React-style refs ({ current: Element }),
@@ -227,8 +213,11 @@ export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   | "onAnimationStart"
   | "onAnimationComplete"
 > & {
+  style?: MotionStyle;
   custom?: unknown;
   dragControls?: unknown;
+  _dragX?: MotionValue<number>;
+  _dragY?: MotionValue<number>;
   viewport?: SolidViewportOptions;
   dragConstraints?: false | Partial<BoundingBox> | Element;
   transition?: Transition<Tag>;
@@ -248,47 +237,15 @@ export type MotionOptions<Tag extends ElementTag = ElementTag> = Omit<
   ) => string;
   onAnimationStart?: (definition: MotionAnimationDefinition<Tag>) => void;
   onAnimationComplete?: (definition: MotionAnimationDefinition<Tag>) => void;
-  layoutDependencies?: Accessor<unknown>[];
+  layout?: boolean | "position" | "size" | "preserve-aspect";
+  layoutId?: string;
+  layoutDependency?: unknown;
+  layoutScroll?: boolean;
+  layoutRoot?: boolean;
+  layoutCrossfade?: boolean;
+  onBeforeLayoutMeasure?: (box: Box) => void;
+  onLayoutMeasure?: (box: Box, prevBox: Box) => void;
+  onLayoutAnimationStart?: () => void;
+  onLayoutAnimationComplete?: () => void;
+  "data-framer-portal-id"?: string;
 };
-
-export interface MotionState {
-  /**
-   * The underlying DOM element reference
-   */
-  element: MotionElement | null;
-
-  /**
-   * For all the different animation keys we store the corresponding MotionValue if they exist
-   */
-  values: MotionValues;
-
-  /**
-   * For all the different animation keys we store the latest goal value
-   */
-  goals: MotionGoals;
-
-  /**
-   * Latest resolved values from MotionValues (kept in sync via subscriptions)
-   */
-  resolvedValues: MotionGoals;
-
-  /**
-   * active state of gestures (hover, tap, focus, drag, inView)
-   */
-  activeGestures: MotionGesturesState;
-
-  /**
-   * current variant names being applied for each animation type
-   */
-  activeVariants: MotionVariantsState;
-
-  /**
-   * The props/options provided to the motion component
-   */
-  options: MotionOptions;
-
-  /**
-   * parent state for variant propagation
-   */
-  parent: MotionState | null;
-}

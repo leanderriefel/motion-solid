@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   clearEvents,
   loadScenario,
@@ -7,6 +7,55 @@ import {
   waitForState,
 } from "../utils/harness-client";
 import { byType } from "../utils/event-assertions";
+
+type PopLayoutPresenceSample = {
+  frame: number;
+  aExists: boolean;
+  bExists: boolean;
+  aPopId: string | null;
+};
+
+const sampledPresenceOverlap = async (
+  page: Page,
+  action: string,
+  payload?: unknown,
+) => {
+  return page.evaluate(
+    async ({ action, payload }) => {
+      const harnessWindow = window as Window & {
+        __MOTION_HARNESS__?: {
+          act?: (action: string, payload?: unknown) => void;
+        };
+      };
+
+      const samples: PopLayoutPresenceSample[] = [];
+      harnessWindow.__MOTION_HARNESS__?.act?.(action, payload);
+
+      for (let i = 0; i < 16; i += 1) {
+        const exiting = document.querySelector(
+          '[data-testid="presence-item-a"]',
+        ) as HTMLElement | null;
+        const entering = document.querySelector(
+          '[data-testid="presence-item-b"]',
+        ) as HTMLElement | null;
+
+        samples.push({
+          frame: i,
+          aExists: exiting !== null,
+          bExists: entering !== null,
+          aPopId: exiting?.getAttribute("data-motion-pop-id") ?? null,
+        });
+
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      }
+
+      return samples;
+    },
+    { action, payload },
+  );
+};
 
 test.describe("phase2 animate-presence", () => {
   test.beforeEach(async ({ page }) => {
@@ -42,14 +91,74 @@ test.describe("phase2 animate-presence", () => {
     await expect(page.getByTestId("presence-item-b")).toHaveCount(0);
   });
 
-  test("mode popLayout replacement keeps UI stable", async ({ page }) => {
+  test("mode popLayout pins the exiting node during replacement", async ({
+    page,
+  }) => {
+    await clearEvents(page);
     await runAction(page, "setMode", "popLayout");
+    await runAction(page, "setCurrent", "a");
+    const samples = await sampledPresenceOverlap(page, "cycle");
+
+    expect(
+      samples.some(
+        (sample) => sample.aExists && sample.bExists && sample.aPopId !== null,
+      ),
+      JSON.stringify(samples),
+    ).toBe(true);
+
+    await expect(page.getByTestId("presence-item-a")).toHaveCount(0, {
+      timeout: 2_000,
+    });
+  });
+
+  test("exiting items still fire animation callbacks during AnimatePresence handoff", async ({
+    page,
+  }) => {
+    await clearEvents(page);
+    await runAction(page, "setMode", "sync");
+    await runAction(page, "setCurrent", "a");
     await runAction(page, "cycle");
 
-    await expect(page.getByTestId("presence-sibling")).toHaveCount(1);
-    await expect
-      .poll(async () => page.locator('[data-testid^="presence-item-"]').count())
-      .toBe(1);
+    await expect(page.getByTestId("presence-item-a")).toHaveCount(0, {
+      timeout: 2_000,
+    });
+
+    const events = await readEvents(page);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "animationStart" && event.node === "presence-a",
+      ),
+    ).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "animationComplete" && event.node === "presence-a",
+      ),
+    ).toBe(true);
+  });
+
+  test("spring exits without explicit duration are not cut off by a short fallback", async ({
+    page,
+  }) => {
+    await clearEvents(page);
+    await runAction(page, "showSpringExit");
+    await runAction(page, "hideSpringExit");
+
+    await page.waitForTimeout(400);
+
+    await expect(page.getByTestId("spring-exit-item")).toHaveCount(1);
+    const earlyEvents = await readEvents(page);
+    expect(
+      earlyEvents.some(
+        (event) =>
+          event.type === "springExitComplete" && event.node === "spring-exit",
+      ),
+    ).toBe(false);
+
+    await expect(page.getByTestId("spring-exit-item")).toHaveCount(0, {
+      timeout: 10_000,
+    });
   });
 
   test("nested propagate=true outer hide removes nested tree", async ({

@@ -2,8 +2,6 @@
 export {
   createMotionComponent,
   type MotionProps,
-  MotionStateContext,
-  useMotionState,
   MotionConfig,
   MotionConfigContext,
   useMotionConfig,
@@ -12,25 +10,21 @@ export {
   type ReducedMotionConfig,
   motionKeys,
   AnimatePresence,
+  LayoutGroup,
   PresenceContext,
+  usePresenceContext,
   useIsPresent,
   usePresence,
   usePresenceData,
+  useInstantLayoutTransition,
+  useResetProjection,
   type AnimatePresenceProps,
+  type AnimatePresenceMode,
+  type LayoutGroupProps,
   type PresenceContextValue,
   motion,
   type MotionProxy,
 } from "./component/index";
-
-export { useAnimationState } from "./animation";
-
-export {
-  animationTypes,
-  type AnimationType,
-  type AnimationTypeTargets,
-  type AnimationTypeValuesMap,
-  buildAnimationTypeMotionValues,
-} from "./animation";
 
 export {
   stagger,
@@ -49,10 +43,7 @@ export type {
   MotionElement,
   MotionValues,
   MotionGoals,
-  MotionGesturesState,
-  MotionVariantsState,
   MotionOptions,
-  MotionState,
   StyleTransformShortcuts,
   MotionStyle,
   Variant,
@@ -61,9 +52,7 @@ export type {
 
 export { isSVGElement, isHTMLElement } from "./types";
 
-export { createMotionState } from "./state";
-
-export { useGestures, createDragControls, type DragControls } from "./gestures";
+export { createDragControls, type DragControls } from "./gestures";
 
 export { useReducedMotion } from "./hooks";
 

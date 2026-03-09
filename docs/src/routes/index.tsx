@@ -2,9 +2,7 @@ import { A } from "@solidjs/router";
 import { createSignal, For, onCleanup, onMount } from "solid-js";
 import { AnimatePresence, motion, type StaggerFunction } from "motion-solid";
 import { AnimatedLogo } from "~/components/logo";
-import { BackgroundDots } from "~/components/background-dots";
 import { cn } from "~/utils/cn";
-import { useColorMode } from "@kobalte/core";
 
 type Token = { text: string; type: string };
 
@@ -107,14 +105,19 @@ function CodeCard() {
 
   return (
     <div class="absolute inset-0 overflow-hidden flex items-center justify-center">
-      <AnimatePresence mode="popLayout">
+      <AnimatePresence>
         <For each={currentSnippet()}>
           {(snippet) => (
             <motion.pre
-              initial={{ opacity: 0, y: -50, filter: "blur(25px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: 50, filter: "blur(25px)" }}
-              transition={{ duration: 1, ease: [0.4, 0, 0.2, 1] }}
+              initial={{
+                opacity: 0,
+                y: -24,
+                scale: 0.985,
+                filter: "blur(25px)",
+              }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: 24, scale: 0.985, filter: "blur(25px)" }}
+              transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
               class="font-mono text-[13px] leading-relaxed whitespace-pre select-none"
             >
               <For each={snippet.tokens}>
@@ -154,8 +157,8 @@ function gridStagger(
 }
 
 function PerformanceDemo() {
-  const rows = 7;
-  const cols = 7;
+  const rows = 5;
+  const cols = 5;
   const cells = Array.from({ length: rows * cols }, (_, i) => i);
 
   return (
@@ -178,17 +181,16 @@ function PerformanceDemo() {
             variants={{
               hidden: { scale: 1, opacity: 0.1 },
               visible: {
-                scale: [1, 1.25, 1],
-                opacity: [0.05, 1, 0.05],
+                scale: [1, 1.12, 1],
+                opacity: [0.12, 0.85, 0.12],
                 transition: {
-                  duration: 2.5,
+                  duration: 2.2,
                   repeat: Infinity,
                   ease: "easeInOut",
                 },
               },
             }}
-            class="size-4 rounded-sm bg-primary"
-            style={{ "box-shadow": "0 0 12px var(--primary)" }}
+            class="size-4 rounded-sm bg-primary/85"
           />
         )}
       </For>
@@ -198,8 +200,6 @@ function PerformanceDemo() {
 
 export default function Home() {
   const [toggled, setToggled] = createSignal(false);
-
-  const { colorMode } = useColorMode();
 
   onMount(() => {
     const timer = setInterval(() => {
@@ -313,28 +313,22 @@ export default function Home() {
         >
           <div class="h-48 bg-muted/30 flex items-center justify-center relative overflow-hidden">
             <div class="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[24px_24px]" />
-            <div
-              class="w-32 h-16 bg-background border border-border rounded-full p-2 flex items-center shadow-sm"
-              style={{
-                "justify-content": toggled() ? "flex-end" : "flex-start",
-              }}
-            >
+            <div class="relative w-32 h-16 bg-background border border-border rounded-full p-2 shadow-sm">
               <motion.div
-                layout
-                layoutDependencies={[toggled]}
+                animate={{ x: toggled() ? 64 : 0 }}
                 transition={{
                   type: "spring",
                   stiffness: 300,
                   damping: 20,
                 }}
-                class="size-12 bg-primary rounded-full shadow-md"
+                class="absolute left-2 top-2 bottom-2 size-12 bg-primary rounded-full shadow-md"
               />
             </div>
           </div>
           <div class="p-6 flex items-center justify-center grow">
             <p class="text-foreground font-medium text-sm text-center">
-              Silky-smooth layout animations without ViewTransitions, keeping
-              interactivity intact.
+              Solid-friendly reactive animations without wrapper components or
+              browser-only transition APIs.
             </p>
           </div>
         </motion.div>
@@ -359,7 +353,6 @@ export default function Home() {
           </div>
         </motion.div>
       </div>
-      <BackgroundDots opacity={colorMode() === "dark" ? 0.5 : 1} />
     </div>
   );
 }

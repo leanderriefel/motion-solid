@@ -32,7 +32,7 @@ export function isTransitionDefined(transition: ValueTransition): boolean {
  * Delay is inherited from root if not specified in the resolved transition.
  *
  * @param transition - The transition object from props
- * @param key - The animation key (e.g. "opacity", "x", "layout")
+ * @param key - The animation key (e.g. "opacity", "x")
  * @param fallback - Optional fallback transition if none is defined
  * @returns The resolved ValueTransition for this key
  */
@@ -50,7 +50,7 @@ export function getTransitionForKey(
   const root = transition as ValueTransition & Record<string, unknown>;
   const rootDelay = root.delay as number | undefined;
 
-  // Check for key-specific transition (e.g. transition.opacity, transition.layout)
+  // Check for key-specific transition (e.g. transition.opacity)
   const keyOverride = root[key];
 
   // Check for default transition

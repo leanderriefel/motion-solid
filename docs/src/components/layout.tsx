@@ -1,3 +1,4 @@
+import { useColorMode } from "@kobalte/core";
 import { A, useLocation, useMatch } from "@solidjs/router";
 import {
   ParentProps,
@@ -7,12 +8,11 @@ import {
   onCleanup,
   Show,
 } from "solid-js";
+import { BackgroundDots } from "~/components/background-dots";
 import { Logo } from "~/components/logo";
 import { AiFillGithub } from "solid-icons/ai";
 import { cn } from "~/utils/cn";
-import { BackgroundDots } from "~/components/background-dots";
 import { ThemeSwitcher } from "~/components/theme-switcher";
-import { useColorMode } from "@kobalte/core";
 
 type TocItem = {
   id: string;
@@ -26,15 +26,21 @@ const docsNav = [
     items: [
       { href: "/docs/getting-started", label: "Getting Started" },
       { href: "/docs/demos", label: "Demos" },
+      {
+        href: "/docs/architecture-caveats",
+        label: "Architecture / Caveats",
+      },
     ],
   },
   {
     title: "Core",
     items: [
-      { href: "/docs/motion-component", label: "motion" },
+      { href: "/docs/motion-component", label: "Motion Component" },
+      { href: "/docs/layout-animations", label: "Layout Animations" },
       { href: "/docs/variants", label: "Variants" },
       { href: "/docs/animate-presence", label: "AnimatePresence" },
       { href: "/docs/motion-config", label: "MotionConfig" },
+      { href: "/docs/hooks", label: "Hooks" },
     ],
   },
   {
@@ -44,21 +50,13 @@ const docsNav = [
       { href: "/docs/drag", label: "Drag" },
     ],
   },
-  {
-    title: "Layout",
-    items: [{ href: "/docs/layout", label: "Layout" }],
-  },
-  {
-    title: "Reference",
-    items: [{ href: "/docs/api-reference", label: "API Reference" }],
-  },
 ];
 
 export default function Layout(props: ParentProps) {
   const isDocsPage = useMatch(() => "/docs/*");
   const location = useLocation();
-  const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
   const { colorMode } = useColorMode();
+  const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
 
   createEffect(() => {
     // oxlint-disable-next-line no-unused-expressions
@@ -186,10 +184,9 @@ export default function Layout(props: ParentProps) {
                     <h4 class="font-semibold text-lg mb-1">Beta Status</h4>
                     <p class="text-sm opacity-90">
                       This library is still in early beta and the API is subject
-                      to change and may get daily breaking changes. The
-                      documentaton may not be up to date with the latest
-                      features and include missing or outdated information. You
-                      can always create an issue on{" "}
+                      to change and may get daily breaking changes. If the docs
+                      and the package disagree, prefer the package and open an
+                      issue on{" "}
                       <a
                         href="https://github.com/leanderriefel/motion-solid"
                         target="_blank"
@@ -197,8 +194,7 @@ export default function Layout(props: ParentProps) {
                       >
                         GitHub
                       </a>{" "}
-                      or even better a pull request to fix the documentation or
-                      add new features.
+                      or send a pull request with a fix.
                     </p>
                   </div>
                 </div>
@@ -249,9 +245,19 @@ export default function Layout(props: ParentProps) {
               </aside>
             </div>
           </div>
-          <BackgroundDots opacity={colorMode() === "dark" ? 0.25 : 0.5} />
         </Show>
       </main>
+      <BackgroundDots
+        opacity={
+          colorMode() === "dark"
+            ? isDocsPage()
+              ? 0.25
+              : 0.5
+            : isDocsPage()
+              ? 0.5
+              : 1
+        }
+      />
       <div class="fixed h-96 w-40 bg-radial from-primary blur-[96px] rounded-full rotate-240 -top-64 left-20 -z-40" />
       <div class="fixed h-80 w-32 bg-radial from-primary blur-[96px] rounded-full rotate-120 -top-64 left-80 -z-40" />
       <div class="fixed h-96 w-40 bg-radial from-primary blur-[96px] rounded-full rotate-240 -right-52 -bottom-40 -z-40" />

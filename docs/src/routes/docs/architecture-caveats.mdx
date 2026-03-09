@@ -1,0 +1,27 @@
+# Architecture / Caveats
+
+`motion-solid` keeps the runtime thin: animation state lives in `motion-dom`, framework behavior is translated from `motion/react`, and the public API stays Solid-native.
+
+## Runtime Split
+
+- `motion-dom` owns `VisualElement` state, projection nodes, layout stacks, feature execution, and gesture primitives.
+- `motion-solid` translates the framework layer: `motion`, `AnimatePresence`, `LayoutGroup`, `MotionConfig`, presence timing, layout timing, and SSR/hydration host wiring.
+- Local repo code stays focused on Solid-first prop handling, kebab-case style keys, variant helpers, docs demos, and helpers like `createDragControls()`.
+
+## Caveats
+
+- Solid disposes exiting owners immediately. Exit and shared-layout handoff keep the DOM node, but the removed subtree is no longer reactively alive.
+- `AnimatePresence` supports `mode="sync" | "wait" | "popLayout"`. The default in `motion-solid` is `popLayout`.
+- `borderRadius` and `boxShadow` correction only work when those values are present on the projecting motion node through `style`, `initial`, `animate`, or `exit`.
+- Layout-capable custom components must forward `ref` to a single DOM or SVG host.
+- Built-in `motion.*` elements keep the same intrinsic host shape on the server and the client.
+
+## Hydration Note
+
+- Child resolution and child-tree tracking stay inside the inner motion host boundary so layout invalidation can react to Solid control flow changes without recreating children from outer layout effects and breaking hydration.
+
+## Solid Conventions
+
+- Public transform and style keys are kebab-case first: `scale-x`, `rotate-y`, `transform-perspective`, `origin-x`.
+- CSS variables (`--*`) pass through unchanged.
+- Use `layout="position"` for text or wrappers that should move without being visually scaled.

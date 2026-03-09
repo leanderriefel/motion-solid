@@ -1,0 +1,40 @@
+import { LayoutTabsDemo } from "~/components/demos/layout-tabs-demo";
+
+# Layout Animations
+
+`layout` and `layoutId` give you automatic layout projection and shared-layout handoff.
+
+## Props
+
+- `layout`: `boolean | "position" | "size" | "preserve-aspect"`. Animates size and/or position changes on the same node.
+- `layoutId`: `string`. Shares layout state across different nodes.
+- `layoutDependency`: `unknown`. Forces measurement when related state changes outside the node.
+- `layoutScroll`: `boolean`. Marks a scroll container for projection.
+- `layoutRoot`: `boolean`. Marks a projection root.
+- `layoutCrossfade`: `boolean`. Controls crossfade for shared-layout handoff.
+
+## Grouping And Hooks
+
+- `LayoutGroup`: groups related layout nodes. Props: `id?: string`, `inherit?: boolean | "id"`.
+- `useInstantLayoutTransition()`: returns `(callback: VoidFunction) => void`.
+- `useResetProjection()`: returns `() => void`.
+
+## Notes
+
+- Use `layout="position"` for text and wrappers that should move without being visually scaled.
+- If related state lives outside the node, pass it through `layoutDependency` so Motion knows when to take a fresh measurement.
+- `borderRadius` and `boxShadow` correction only work when those values are visible on the projecting motion node through `style`, `initial`, `animate`, or `exit`.
+- Shared-layout handoff temporarily lifts the active HTML lead node above sibling rows while that `layoutId` animation is running.
+- Sibling reordering inside Solid control flow is supported.
+
+## Example
+
+```tsx
+<LayoutGroup id="tabs">
+  <button type="button">
+    <motion.div layoutId="underline" />
+  </button>
+</LayoutGroup>
+```
+
+<LayoutTabsDemo />

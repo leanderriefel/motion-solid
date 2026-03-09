@@ -1,77 +1,36 @@
 import { FirstAnimation } from "~/components/demos/first-animation";
 import { EnterAnimation } from "~/components/demos/enter-animation";
 import { ExitAnimation } from "~/components/demos/exit-animation";
+import { GestureAnimation } from "~/components/demos/gesture-animation";
 import { HoverAndTapAnimation } from "~/components/demos/hover-and-tap-animation";
-import { LayoutAnimation } from "~/components/demos/layout-animation";
-import { LayoutBorderRadius } from "~/components/demos/layout-border-radius";
-import { LayoutPositionAnimation } from "~/components/demos/layout-position-animation";
-import { LayoutUnderlineAnimation } from "~/components/demos/layout-underline-animation";
 import { ScrollAnimation } from "~/components/demos/scroll-animation";
-import { AnimatingLayoutBar } from "~/components/demos/animating-layout-bar";
+import { SimpleLayoutAnimation } from "~/components/demos/simple-layout-animation";
+import { ComplexLayoutAnimation } from "~/components/demos/complex-layout-animation";
+import { ForegroundCardLayoutAnimation } from "~/components/demos/foreground-card-layout-animation";
 
 # Demos
 
-Interactive examples demonstrating motion-solid's capabilities.
+Interactive examples for the current demo set.
+
+## Examples
 
 <div class="w-full flex justify-center items-center gap-y-6 flex-col my-12">
 
-## First Animation
-
-Basic enter animation with scale and opacity.
-
 <FirstAnimation />
-
-## Enter Animation
-
-Smooth fade-in with position offset.
 
 <EnterAnimation />
 
-## Hover & Tap
-
-Interactive button with scale feedback on hover and tap.
-
 <HoverAndTapAnimation />
 
-## Scroll Animation
-
-Elements animate as they enter the viewport using `whileInView`.
+<GestureAnimation />
 
 <ScrollAnimation />
 
-## Layout Animation
+<SimpleLayoutAnimation />
 
-Position and size changes animate smoothly.
+<ComplexLayoutAnimation />
 
-<LayoutAnimation />
-
-## Layout Border Radius
-
-Layout animation with border-radius morphing.
-
-<LayoutBorderRadius />
-
-## Layout Position
-
-Shared element position transitions.
-
-<LayoutPositionAnimation />
-
-## Layout Underline
-
-Shared `layoutId` for tab indicator underline.
-
-<LayoutUnderlineAnimation />
-
-## Animating Layout Bar
-
-Layout animation demonstrating bar resizing.
-
-<AnimatingLayoutBar />
-
-## Exit Animation
-
-Exit animation when element is removed.
+<ForegroundCardLayoutAnimation />
 
 <ExitAnimation />
 

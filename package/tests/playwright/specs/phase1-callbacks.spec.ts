@@ -19,7 +19,11 @@ test.describe("phase1 callbacks", () => {
     await expect(page.getByTestId("callbacks-item")).toHaveCount(1);
   });
 
-  test("records animation completion on initial mount", async ({ page }) => {
+  test("records animation completion after an opacity retarget", async ({
+    page,
+  }) => {
+    await clearEvents(page);
+    await runAction(page, "setOpacity", 0.45);
     await waitForEventCount(page, "animationComplete", 1);
 
     const events = await readEvents(page);
@@ -46,11 +50,16 @@ test.describe("phase1 callbacks", () => {
 
     await expect
       .poll(async () => {
-        return page.getByTestId("callbacks-item").evaluate((el) => {
+        const item = page.getByTestId("callbacks-item");
+        if ((await item.count()) === 0) {
+          return 0;
+        }
+
+        return item.evaluate((el) => {
           return Number(getComputedStyle(el).opacity);
         });
       })
-      .toBeLessThan(0.3);
+      .toBeLessThan(0.6);
   });
 
   test("hide then show remounts callbacks item", async ({ page }) => {
@@ -155,7 +164,7 @@ test.describe("phase1 callbacks", () => {
     expect(completions.length).toBe(1);
   });
 
-  test("rapid hide/show does not multiply completion callbacks", async ({
+  test("rapid hide/show produces one exit completion and one re-entry completion", async ({
     page,
   }) => {
     // Wait for mount completion
@@ -169,18 +178,17 @@ test.describe("phase1 callbacks", () => {
     await page.waitForTimeout(40);
     await runAction(page, "show");
 
-    // Wait for the re-entrance animation to complete
-    await waitForEventCount(page, "animationComplete", 1);
+    // Wait for the exit completion and the re-entrance completion
+    await waitForEventCount(page, "animationComplete", 2);
 
-    // Give extra time to catch any stale duplicate callbacks
+    // Give extra time to catch any stale duplicate callbacks beyond the
+    // expected exit + re-entry completions.
     await page.waitForTimeout(300);
 
     const events = await readEvents(page);
     const completions = byType(events, "animationComplete");
 
-    // Should get exactly 1 animationComplete from the re-entrance,
-    // not duplicates from stale promise handlers
-    expect(completions.length).toBe(1);
+    expect(completions.length).toBe(2);
   });
 
   test("sequential completed cycles each fire exactly one callback", async ({

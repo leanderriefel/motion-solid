@@ -3,6 +3,46 @@ import { render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { motion } from "../../src";
 
+const flushComponentUpdates = async () => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+const createLegacyControlsStub = (label: string) => {
+  const subscribers = new Set<{ current: Element | null }>();
+
+  const driveSubscribers = () => {
+    subscribers.forEach((visualElement) => {
+      if (visualElement.current instanceof HTMLElement) {
+        visualElement.current.setAttribute("data-driven-by", label);
+      }
+    });
+  };
+
+  return {
+    subscribers,
+    controls: {
+      subscribe(visualElement: { current: Element | null }) {
+        subscribers.add(visualElement);
+        return () => void subscribers.delete(visualElement);
+      },
+      start() {
+        driveSubscribers();
+        return Promise.resolve();
+      },
+      set() {
+        driveSubscribers();
+      },
+      stop() {
+        return undefined;
+      },
+      mount() {
+        return () => undefined;
+      },
+    },
+  };
+};
+
 describe("motion component", () => {
   describe("element rendering", () => {
     it("renders motion.div as a div element", () => {
@@ -82,6 +122,23 @@ describe("motion component", () => {
         </motion.div>
       ));
       expect(container.querySelector("div span")).toBeTruthy();
+    });
+
+    it("does not resolve JSX children more than once per render", () => {
+      const childRenderSpy = vi.fn();
+      const Child = () => {
+        childRenderSpy();
+        return <span data-testid="child">Nested</span>;
+      };
+
+      render(() => (
+        <motion.div data-testid="target">
+          <Child />
+        </motion.div>
+      ));
+
+      expect(screen.getByTestId("child").textContent).toBe("Nested");
+      expect(childRenderSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -329,6 +386,56 @@ describe("motion component", () => {
       expect(element.hasAttribute("animate")).toBe(false);
     });
 
+    it("replaces legacy animation controls subscriptions when animate changes", async () => {
+      const controlsA = createLegacyControlsStub("A");
+      const controlsB = createLegacyControlsStub("B");
+      const [animate, setAnimate] = createSignal<any>(controlsA.controls);
+
+      render(() => <motion.div data-testid="target" animate={animate()} />);
+
+      const element = screen.getByTestId("target");
+
+      await flushComponentUpdates();
+
+      expect(controlsA.subscribers.size).toBe(1);
+      expect(controlsB.subscribers.size).toBe(0);
+
+      setAnimate(controlsB.controls);
+      await flushComponentUpdates();
+
+      expect(controlsA.subscribers.size).toBe(0);
+      expect(controlsB.subscribers.size).toBe(1);
+
+      element.setAttribute("data-driven-by", "none");
+      await controlsA.controls.start();
+      expect(element.getAttribute("data-driven-by")).toBe("none");
+
+      await controlsB.controls.start();
+      expect(element.getAttribute("data-driven-by")).toBe("B");
+    });
+
+    it("clears legacy animation controls subscriptions when animate stops using controls", async () => {
+      const controls = createLegacyControlsStub("legacy");
+      const [animate, setAnimate] = createSignal<any>(controls.controls);
+
+      render(() => <motion.div data-testid="target" animate={animate()} />);
+
+      const element = screen.getByTestId("target");
+
+      await flushComponentUpdates();
+
+      expect(controls.subscribers.size).toBe(1);
+
+      setAnimate({ opacity: 0.5 });
+      await flushComponentUpdates();
+
+      expect(controls.subscribers.size).toBe(0);
+
+      element.setAttribute("data-driven-by", "none");
+      await controls.controls.start();
+      expect(element.getAttribute("data-driven-by")).toBe("none");
+    });
+
     it("does not pass exit prop to DOM", () => {
       render(() => <motion.div data-testid="target" exit={{ opacity: 0 }} />);
       const element = screen.getByTestId("target");
@@ -384,18 +491,6 @@ describe("motion component", () => {
       ));
       const element = screen.getByTestId("target");
       expect(element.hasAttribute("whileInView")).toBe(false);
-    });
-
-    it("does not pass layout prop to DOM", () => {
-      render(() => <motion.div data-testid="target" layout />);
-      const element = screen.getByTestId("target");
-      expect(element.hasAttribute("layout")).toBe(false);
-    });
-
-    it("does not pass layoutId prop to DOM", () => {
-      render(() => <motion.div data-testid="target" layoutId="test" />);
-      const element = screen.getByTestId("target");
-      expect(element.hasAttribute("layoutId")).toBe(false);
     });
 
     it("passes className to DOM", () => {

@@ -1,5 +1,5 @@
 import type { AnyResolvedKeyframe } from "motion-dom";
-import { isStringOrNumber } from "./types";
+import { isStringOrNumber } from "./utils";
 
 export const pickInitialFromKeyframes = (
   keyframes: unknown,

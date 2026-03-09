@@ -1,239 +1,383 @@
 # motion-solid (agent guide)
 
-This file is the canonical maintenance contract for the repo.
-When in doubt, follow this file and update other docs to match.
+This file is the maintenance contract for this repo. Keep it aligned with the code.
 
-## Mission and non-negotiables
+## What This Repo Is
 
-- Build a SolidJS-first Motion library that stays behaviorally aligned with Framer Motion internals where possible.
-- Keep the public API Solid-native: Accessors where reactive values are exposed, Solid component patterns, and Solid-safe SSR/hydration behavior.
-- Keep style/transform keys canonical in kebab-case for Solid usage (`scale-x`, `rotate-y`, `transform-perspective`, `origin-x`, etc).
-- Preserve compatibility with `motion-dom` internals and data flow rather than reinventing animation logic.
+- `motion-solid` is a SolidJS-first Motion library built on top of upstream `motion-dom`.
+- The local package version is `0.5.0`.
+- The workspace currently pins published `motion-dom` `^12.35.1`.
+- The component runtime is not a local store-driven animation engine. Motion component state lives on upstream `motion-dom` objects.
+- The framework layer is a Solid translation of the framework-owned pieces that live in `motion/react`.
+- This repo is not a byte-for-byte port of `motion/react`. Most remaining parity bugs live in the translated orchestration layer, not the `motion-dom` engine.
 
-## Mandatory documentation policy (strict)
+## Hard Rules
 
-- Every change in this repository MUST be documented in `AGENTS.md` in the same branch/PR.
-- Documentation must always be up to date with implementation.
-- If behavior, API, defaults, timing, or edge cases change, update all relevant docs in the same change:
+- Do not reintroduce a `createStore` / `MotionState`-style runtime for motion components.
+- Treat `motion-dom` as the source of truth for component animation state, projection state, and feature execution.
+- Treat `motion/react` as the semantic reference for framework behavior: presence, layout timing, feature mounting, and shared-layout orchestration.
+- Keep the public API Solid-native:
+  - Accessors where reactive values are exposed
+  - normal Solid `ref` prop behavior
+  - SSR/hydration-safe rendering
+  - kebab-case-first style and transform keys
+- Every change must update `AGENTS.md` in the same branch.
+- If public behavior, API, defaults, timing, caveats, or divergences change, update all relevant docs in the same change:
   - `AGENTS.md`
   - `package/README.md`
-  - docs site pages under `docs/src/routes/docs/*.mdx`
-- If a change intentionally diverges from Framer Motion semantics, add an explicit "Divergence" note in docs and tests.
-- A task is not complete until code, tests, and docs all agree.
+  - docs pages under `docs/src/routes/docs/*.mdx`
+- If a behavior intentionally differs from Motion semantics, add an explicit divergence note in docs and tests.
 
-## Repository map
+## Repository Map
 
-- Monorepo root uses Bun workspaces: `package` (library) and `docs` (site).
+- Monorepo root uses Bun workspaces:
+  - `package` = library
+  - `docs` = docs site
 - Library source: `package/src`
 - Library tests: `package/tests`
-- Docs site content: `docs/src/routes/docs`
+- Docs pages: `docs/src/routes/docs`
+- Interactive demos: `docs/src/components/demos`
 - CI workflows: `.github/workflows`
+- Upstream `motion-dom` repo: `tmp/motion-upstream`
 
-## Package manager and key commands
+Docs app note:
 
-- Package manager: `bun`
-- Install dependencies: `bun install --frozen-lockfile`
-- Root dev docs: `bun dev`
-- Root lint: `bun run lint`
-- Root lint fix: `bun run lint:fix`
-- Root format: `bun run format`
-- Root format check: `bun run format:check`
+- Client bootstrap lives in `docs/src/entry-client.tsx`.
+- The current docs build emits a Vinxi warning about a missing default export from `src/entry-client.tsx`, but the build still succeeds. If touching docs bootstrap, verify the real built site behavior, not just the warning text.
+- Current sidebar docs targets live under `docs/src/routes/docs`:
+  - `getting-started.mdx`
+  - `demos.mdx`
+  - `architecture-caveats.mdx`
+  - `motion-component.mdx`
+  - `layout-animations.mdx`
+  - `variants.mdx`
+  - `animate-presence.mdx`
+  - `motion-config.mdx`
+  - `hooks.mdx`
+  - `gestures.mdx`
+  - `drag.mdx`
+- The docs layout TOC reads `h2` and `h3` inside `.docs-content`. Demo components must not render heading tags for demo titles or internal labels, otherwise they pollute the page TOC.
 
-Library (`motion-solid`) commands:
+Package publishing note:
 
-- Build: `bun --filter motion-solid build`
-- Typecheck: `bun --filter motion-solid typecheck`
-- Test (vitest): `bun --filter motion-solid test`
-- Test watch: `bun --filter motion-solid test:watch`
-- Browser tests (playwright): `bun --filter motion-solid test:browser`
+- `package/package.json` explicitly includes `README.md` in the published `files` list so installed package contents still carry the local package readme even if pack tooling or workspace behavior changes.
 
-Docs (`@motion-solid/docs`) commands:
+## Commands
 
-- Dev: `bun --filter @motion-solid/docs dev`
-- Build: `bun --filter @motion-solid/docs build`
-- Start: `bun --filter @motion-solid/docs start`
-- Typecheck: `bun --filter @motion-solid/docs typecheck`
+Package manager:
 
-## CI expectations
+- `bun`
 
-- Test workflow runs: typecheck -> build -> vitest -> playwright chromium.
-- Publish workflow runs: typecheck -> build -> npm publish (from `package/`).
-- Local changes should be verified with the same command family before merge.
+Root:
 
-## Code style and TS policy
+- `bun install --frozen-lockfile`
+- `bun dev`
+- `bun run lint`
+- `bun run lint:fix`
+- `bun run format`
+- `bun run format:check`
 
-- 2-space indent, double quotes, trailing commas, semicolons.
-- Strict TypeScript. Do not use `any` or `as any`.
-- Prefer strongly typed wrappers at boundaries instead of casting through unknown.
-- Use type-only imports for types.
-- Keep reactive derivations in `createMemo`; use `createEffect`/`createRenderEffect` only when side effects are required.
-- Avoid unnecessary allocations and reactive churn in hot paths.
+Library:
 
-## Solid-first API conventions
+- `bun --filter motion-solid build`
+- `bun --filter motion-solid typecheck`
+- `bun --filter motion-solid test`
+- `bun --filter motion-solid test:watch`
+- `bun --filter motion-solid test:browser`
 
-- API design must feel native to SolidJS, not a React API copied over.
-- Prefer Accessors for reactive values in hooks/context (`usePresence`, `useIsPresent`, `usePresenceData`, config accessors).
-- Keep prop splitting explicit using `splitProps` and `motionKeys`.
-- Add new motion-specific props to `motionKeys` whenever MotionOptions surface grows.
-- Maintain SSR safety:
-  - avoid DOM reads on server
-  - avoid hydration mismatch by deferring client-only writes appropriately
-  - keep initial render deterministic
+Docs:
 
-## Naming and style key conventions
+- `bun --filter @motion-solid/docs dev`
+- `bun --filter @motion-solid/docs build`
+- `bun --filter @motion-solid/docs start`
+- `bun --filter @motion-solid/docs typecheck`
 
-- Canonical public style and motion keys are kebab-case.
-- Do not add new camelCase alias APIs for transforms or motion CSS keys.
-- Existing internal compatibility paths may still normalize camelCase input from `motion-dom`/ecosystem boundaries, but docs and types should prioritize kebab-case usage.
+## Architecture
+
+### 1. What Comes From `motion-dom`
+
+These are engine-owned pieces. Prefer using them directly over recreating them locally.
+
+Runtime state and rendering:
+
+- `HTMLVisualElement` / `SVGVisualElement`
+- `VisualElement` state:
+  - `latestValues`
+  - render state
+  - projection node
+  - animation state
+  - variant tree
+  - presence context
+- `createDomVisualElement()` in `package/src/component/create-dom-visual-element.ts` instantiates upstream visual elements.
+- `createVisualState()` in `package/src/component/visual-state.ts` uses upstream scraping/build helpers from `motion-dom`.
+
+Projection and layout:
+
+- `HTMLProjectionNode`
+- shared-layout stacks and promotion/relegation
+- `nodeGroup()`
+- scale correction for border radius and box shadow
+
+Features and animation primitives:
+
+- `setFeatureDefinitions()`
+- `Feature`
+- `animateVisualElement`
+- gesture primitives used by hover/press/pan/in-view/focus features
+- `animateMotionValue` from `motion-dom`, used inside drag behavior
+- legacy animation controls subscriptions are feature-owned and must dispose the previous subscription before switching `animate` controls or leaving controls mode
+
+Important consequence:
+
+- For motion components, `motion-dom` owns the live animation/projection state.
+- Local code should translate framework semantics into that engine, not duplicate the engine.
+
+### 2. What We Translate From `motion/react` Into Solid
+
+These are framework-owned behaviors. This repo has to translate them because `motion-dom` does not provide them.
+
+Component factory and host wiring:
+
+- `motion` proxy and intrinsic tag cache in `package/src/component/index.tsx`
+- `motion.create(Component, options)`
+- `createMotionComponent()` in `package/src/component/create-motion-component.tsx`
+
+Context and config:
+
+- `MotionContext`
+- `MotionConfig`
+- layout group context
+- switch layout group context
+- presence context
+
+Framework timing translation:
+
+- React `getSnapshotBeforeUpdate` equivalent:
+  - `createComputed(...)`
+  - calls `projection.willUpdate()` before Solid commits DOM updates
+  - tracks host-children render revisions inside the inner host-children component and, for nested motion child mount/unmount churn, uses a `MotionContext` callback to synchronously trigger a deduped pre-commit `projection.willUpdate()` on ancestors before the child DOM commits
+  - on child-driven or layout-triggered host rerenders, broadcasts `willUpdate(false)` across the nearest projection snapshot subtree so descendant and sibling layout nodes are dirtied in the same pre-commit window, while stale already-dirty descendant snapshots from older projection cycles are refreshed instead of being reused across interrupted reversals
+- React layout/update phase equivalent:
+  - post-commit effect flush in the same update cycle
+  - coalesces to exactly one `projection.root.didUpdate()` flush per projection root in the current frame/update turn so descendant child-content follow-up measurements cannot clear in-flight projection started by an earlier pre-commit snapshot
+  - child-list `MutationObserver` recovery remains a post-mutation fallback and must bail when the same host already entered a pre-commit measurement cycle; when it does run, it must not trigger a second same-frame root flush or it can cancel in-flight layout projection
+  - first committed projection mounts only run the recovery `didUpdate()` path when that component instance already entered its own snapshot/unmount lifecycle; snapshot history must not leak across unrelated component instances
+- mount/unmount translation:
+  - `onMount`
+  - `onCleanup`
+- animation-change scheduling:
+  - `requestAnimationFrame`
+  - `queueMicrotask`
+  - retained exit animations should preserve component-level `onAnimationStart` / `onAnimationComplete` callbacks; `onExitComplete` remains the parent aggregate exit signal
+
+Presence and exit orchestration:
+
+- `AnimatePresence`
+- presence hooks
+- retained DOM exit bridge
+- `mode="sync" | "wait" | "popLayout"` with `popLayout` as the current default in `motion-solid`
+- `propagate`
+- `presenceAffectsLayout`
+- `root`, `anchorX`, `anchorY` for `popLayout`
+
+Layout orchestration:
+
+- `LayoutGroup`
+- `useInstantLayoutTransition`
+- `useResetProjection`
+- `layoutId` namespacing through layout group ids
+- Solid invalidation signals such as `forceRenderVersion`
+
+SSR and hydration translation:
+
+- Intrinsic motion elements must render the same host shape on server and client.
+- `createMotionComponent()` must not branch to different intrinsic host implementations between SSR and client hydration.
+- Child resolution must stay inside the dedicated inner host-children component under `MotionContext`. Reading raw `props.children` in layout/effect tracking can recreate child JSX and break hydration.
+
+### 3. What Is Still Local To `motion-solid`
+
+These are repo-owned layers. They should stay thin and be kept parity-tested.
+
+Prop processing and DOM output:
+
+- prop splitting with `motionKeys`
+- prop filtering
+- Motion/Solid prop normalization
+- DOM-safe style output
+
+Solid-first API surface:
+
+- kebab-case transform/style key conventions
+- Solid-oriented types and public helpers
+- `createDragControls()` public helper
+
+Variant and target resolution:
+
+- `package/src/animation/variants.ts`
+- local target merging / transition lookup helpers
+
+Standalone helper surface:
+
+- files under `package/src/animation/*` that expose direct animation helpers
+- these are not the motion-component runtime
+
+Docs and harness:
+
+- docs demos
+- Playwright harness scenarios
+- browser regression helpers
+- optional browser-only layout timing diagnostics via `window.__MOTION_SOLID_LAYOUT_DEBUG__` or the `motion-solid-layout-debug` / `localStorage['motion-solid-layout-debug']` bootstrap in `create-motion-component.tsx`, with copy helpers exposed on `window.__MOTION_SOLID_LAYOUT_DUMP__` and `window.__MOTION_SOLID_LAYOUT_COPY__`
+
+## Key Runtime Files
+
+Public exports:
+
+- `package/src/index.ts`
+- `package/src/component/index.tsx`
+
+Motion host:
+
+- `package/src/component/create-motion-component.tsx`
+- `package/src/component/create-dom-visual-element.ts`
+- `package/src/component/visual-state.ts`
+- `package/src/component/feature-definitions.ts`
+
+Context/config:
+
+- `package/src/component/motion-context.ts`
+- `package/src/component/motion-config.tsx`
+
+Presence:
+
+- `package/src/component/presence.tsx`
+
+Layout:
+
+- `package/src/component/layout-group.tsx`
+- `package/src/component/layout-group-context.ts`
+- `package/src/component/switch-layout-group-context.ts`
+- `package/src/component/layout-hooks.ts`
+
+Variants and helper animation logic:
+
+- `package/src/animation/variants.ts`
+- `package/src/animation/index.ts`
+
+Gestures:
+
+- `package/src/features/drag-feature.ts`
+- `package/src/gestures/use-drag.ts`
+
+## Solid-Specific Contracts
+
+- Public style and transform keys are kebab-case first:
+  - `scale-x`
+  - `rotate-y`
+  - `transform-perspective`
+  - `origin-x`
+- Do not add new camelCase public aliases for Motion CSS/transform keys.
 - CSS variables (`--*`) must pass through unchanged.
+- Layout-capable custom components must forward the received `ref` prop to one DOM/SVG host.
+- Avoid client-only DOM reads on the server.
+- Keep initial SSR output deterministic.
 
-## Framer Motion parity requirements
+## Current Divergences And Caveats
 
-- Align semantics with Framer Motion internals for:
-  - variant resolution and inheritance
-  - transition overrides (`default`, per-key, `layout`)
-  - gesture layering precedence
-  - AnimatePresence lifecycle and exit handoff
-  - layout/layoutId projection behavior
-- Before changing behavior, verify parity assumptions in source and tests.
-- If parity is impossible due to Solid runtime differences, document the exact behavior and rationale.
+Exiting owners:
 
-## Architecture deep dive
+- Solid disposes exiting component owners immediately.
+- `motion-solid` retains DOM nodes for exit/layout handoff, but the exiting subtree is not reactively alive the way `motion/react` can keep it alive.
+- Exit completion therefore uses a DOM-side callback bridge rather than a live exiting subtree owner.
 
-### 1) Public surface and component factory
+Implications:
 
-- Entry exports are centralized in `package/src/index.ts`.
-- `motion` proxy in `package/src/component/index.tsx` lazily caches generated components per tag.
-- `createMotionComponent(tag)` in `package/src/component/create-motion-component.tsx` wraps intrinsic elements through `Dynamic`.
+- `exit`, `onExitComplete`, shared layout handoff, and `popLayout` are supported.
+- Long-lived async `safeToRemove` flows inside already-removed exiting subtrees are not React-identical.
 
-### 2) Prop processing and state wiring
+Layout/style correction caveat:
 
-- Motion props are split using `splitProps(..., motionKeys)`.
-- `MotionConfig` defaults are merged into per-component options.
-- Presence-aware overrides are applied (`initial`, `custom`, entrance blocking behavior).
-- A Motion state store (`createMotionState`) tracks:
-  - DOM element ref
-  - MotionValues map
-  - resolved/current goals
-  - active gestures
-  - active variants
-  - parent linkage for inheritance
+- `borderRadius` and `boxShadow` correction only works when Motion can see those values on the projecting motion node itself via `style`, `initial`, `animate`, or `exit`.
+- Class-only radius/shadow styling is not visible to Motion’s scale correctors.
 
-### 3) Animation engine flow
+Reality check:
 
-- Main hook: `useAnimationState` in `package/src/animation/use-animation-state.ts`.
-- Core responsibilities:
-  - resolve definitions (`initial`, `animate`, `exit`, `while*`) into concrete targets
-  - create missing MotionValues via `buildAnimationTypeMotionValues`
-  - schedule DOM writes through `frame.render`
-  - combine projection styles with animated styles safely
-  - manage WAAPI/native animation handoff and completion cleanup
-- Animation type priority currently follows `animationTypes` ordering in `package/src/animation/types.ts`.
-- Keep this precedence stable unless parity research and tests justify a change.
+- The runtime is upstream-backed, but the framework layer is still a translated Solid implementation.
+- When a parity bug appears after real testing, assume the issue may be in presence/layout timing or shared-layout orchestration rather than in `motion-dom` itself.
 
-### 4) Variant resolution and inheritance
+## Testing Policy
 
-- Resolution lives in `package/src/animation/variants.ts`.
-- Supports:
-  - target objects
-  - variant labels
-  - function variants
-  - parent variant inheritance when `inherit !== false`
-- Key normalization flows through transform normalization; avoid introducing duplicate key aliases that create ambiguity.
+Primary suites:
 
-### 5) Presence and exit lifecycle
+- `package/tests/animation`
+- `package/tests/component`
+- `package/tests/integration`
+- `package/tests/playwright`
 
-- Presence context and hooks live in `package/src/component/presence.tsx`.
-- `AnimatePresence` supports `mode`: `sync`, `wait`, `popLayout`.
-- Exit lifecycle relies on retained DOM + completion signaling (`onExitComplete`) and exit handoff for unmounting motion components.
-- Presence APIs expose Accessors and Solid-friendly semantics.
+Layout/browser regressions must cover more than “a transform happened”.
+Prefer assertions on:
 
-### 6) Layout projection subsystem
+- continuity of geometry across frames
+- shared-layout interrupted reopen behavior
+- non-zero corrected border radius during projection
+- sibling reflow continuity
+- position-only text wrappers avoiding scale distortion
 
-- Projection manager: `package/src/projection/projection-manager.ts`.
-- Handles:
-  - snapshot/measure/update cycles
-  - tree rebuild and parent path tracking
-  - layout and layoutId transitions
-  - crossfade/lead-follow stack behavior
-  - transform correction and scale correction
-- Changes here are high-risk; require integration + projection tests.
+Current required regression coverage includes:
 
-### 7) Gestures and viewport
+- layout projection creation/filtering
+- Solid `For` sibling reordering
+- multi-step list expansion switches
+- `layout="position"` visual-size continuity
+- interrupted shared-layout reopen continuity
+- `LayoutGroup` layout id namespacing
+- `layoutDependency` measurement gating
+- `motion.create` ref/prop forwarding
+- browser-level shared layout and `AnimatePresence mode="popLayout"`
+- exit animations without explicit duration fields must not be cut off by a guessed short timeout
+- retained exit animations must still deliver component `onAnimationStart` / `onAnimationComplete` callbacks
+- browser-level shared tab background staying behind its label during handoff
+- docs-route foreground first open after reload
+- docs-route repeated list expansion continuity for the reshuffling demo
+- docs-route rapid sync/feed list alternation driven by real clicks
+- browser-level drag movement and axis locking
+- browser-level scale correction for `borderRadius` and `boxShadow`
 
-- Gesture orchestration: `package/src/gestures/use-gestures.ts` and `package/src/gestures/use-drag.ts`.
-- Maintain parity for hover/tap/focus/pan/drag and viewport triggers.
-- Keep pointer/keyboard accessibility behavior intact.
+Browser testing note:
 
-### 8) Motion config and reduced motion
+- Tests that use `elementFromPoint()` for shared-layout/top-layer assertions must scroll the target stage into view first. Otherwise viewport misses can create fake z-order failures.
 
-- Config context: `package/src/component/motion-config.tsx`.
-- Reduced motion modes: `always`, `never`, `user`.
-- Reduced motion behavior should disable transform-heavy motion appropriately while preserving non-transform signals when possible.
-
-## Key files to update when adding/changing features
-
-- Public types: `package/src/types/motion.ts`
-- Motion prop allowlist: `package/src/component/motion-keys.ts`
-- Component wiring: `package/src/component/create-motion-component.tsx`
-- Animation behavior: `package/src/animation/use-animation-state.ts`
-- Variant logic: `package/src/animation/variants.ts`
-- Render/transform normalization: `package/src/animation/render.ts`
-- Presence behavior: `package/src/component/presence.tsx`
-- Layout projection: `package/src/projection/projection-manager.ts`
-- Public exports: `package/src/index.ts`, `package/src/component/index.tsx`
-
-## Testing policy
-
-Primary suites (all under `package/tests`):
-
-- `animation/` for transitions, keyframes, variants, stagger, defaults
-- `component/` for motion component, config, presence hooks
-- `integration/` for enter/exit, orchestration, gestures, viewport, layout animation
-- `projection/` for geometry, scheduling, style correction, transform math
-- `playwright/` for browser-level race/layout/keyboard/reduced-motion scenarios
-
-Required verification after meaningful library changes:
+Verification after meaningful library changes:
 
 - `bun --filter motion-solid typecheck`
 - `bun --filter motion-solid test`
 - `bun --filter motion-solid build`
-- `bun --filter motion-solid test:browser` (for gesture/presence/layout changes)
+- `bun --filter motion-solid test:browser`
 
-If docs are changed:
+If docs pages are changed:
 
 - `bun --filter @motion-solid/docs build`
 
-## Performance and correctness guardrails
+Hydration changes must be verified in a real hydratable browser build. The Vitest/jsdom setup in this repo does not reliably catch hydration-specific failures.
 
-- Minimize layout thrash: batch reads and writes, avoid repeated computed-style reads in loops.
-- Keep render scheduling explicit (`frame.render`, microtask/raf boundaries).
-- Do not regress exit handoff correctness.
-- Do not regress layout projection cleanup/reset behavior.
-- Preserve pointer-events/opacity/transform composition semantics when projection is active.
+## Change Checklist
 
-## Change workflow checklist (must follow)
+- Confirm which part of the stack owns the behavior:
+  - `motion-dom` engine
+  - `motion/react` semantics being translated
+  - local Solid-specific helper layer
+- Prefer deleting legacy local behavior over layering another runtime on top of `motion-dom`.
+- Keep public API Solid-native and kebab-case first.
+- Add or update regression tests for the real failure mode.
+- Update `AGENTS.md` and other relevant docs in the same change.
+- Run the appropriate verification commands.
+- Document divergences explicitly if they remain.
 
-- Confirm intended behavior against Framer Motion semantics.
-- Implement with Solid-compatible API and kebab-case-first key handling.
-- Update relevant tests or add new ones.
-- Update docs (`AGENTS.md`, package README, docs site pages) in same change.
-- Run verification commands.
-- If any divergence remains, explicitly document it.
+## Definition Of Done
 
-## Definition of done
-
-- Code, types, tests, and docs are aligned.
-- `AGENTS.md` has been updated for the change.
-- Behavior remains Framer Motion-aligned or divergence is explicitly documented.
-- API remains SolidJS-native (Accessors, kebab-case conventions, Solid reactive design choices).
-
-## Recent updates (2026-02-20)
-
-- `onAnimationComplete` now fires exactly once per completed animate cycle; stale/cancelled/replaced animation runs from reactive reruns no longer invoke duplicate callbacks. Completion scheduling is guarded by per-type cycle IDs inside `startAnimations()`.
-- Motion target typings now accept CSS custom property keys (`--*`) in `initial`/`animate`/`exit` targets, matching runtime behavior.
-- `AnimatePresence` `mode="popLayout"` now restores root inline `position`, `min-width`, and `min-height` after the last exit completes.
-- Shared `layoutId` handoff now synchronizes projection-node presence so exiting leads relegate to a still-present member instead of self-selecting.
-- Function variant resolvers that return variant labels now resolve those labels against local `variants` instead of being discarded.
-- Nested `AnimatePresence` now gates parent-driven child exit handoff behind `propagate`, so `propagate={false}` does not trigger nested child exits on parent removal.
-- Projection transform building now sanitizes zero/non-finite tree scales before translate and inverse-scale math to avoid `Infinity`/`NaN` transform output.
+- Code, tests, and docs describe the same behavior.
+- `AGENTS.md` is updated.
+- The architecture description stays truthful:
+  - what `motion-dom` owns
+  - what is translated from `motion/react`
+  - what remains local to `motion-solid`
+- Public API remains Solid-native even when internal behavior follows Motion semantics.

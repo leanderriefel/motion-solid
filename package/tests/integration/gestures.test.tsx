@@ -16,6 +16,20 @@ function createPointerEvent(
   });
 }
 
+function mockFocusVisible(element: Element) {
+  const matches = Element.prototype.matches;
+
+  return vi.spyOn(element, "matches").mockImplementation(function (
+    this: Element,
+    selector: string,
+  ) {
+    if (selector === ":focus-visible") return true;
+    return matches.call(this, selector);
+  });
+}
+
+const settleInitialMotionFrame = () => vi.advanceTimersByTimeAsync(20);
+
 describe("gestures", () => {
   describe("whileHover", () => {
     it("activates on pointerenter with mouse", async () => {
@@ -24,6 +38,7 @@ describe("gestures", () => {
       ));
 
       const element = screen.getByTestId("target");
+      await settleInitialMotionFrame();
       element.dispatchEvent(
         createPointerEvent("pointerenter", { pointerType: "mouse" }),
       );
@@ -100,6 +115,7 @@ describe("gestures", () => {
       ));
 
       const element = screen.getByTestId("target");
+      await settleInitialMotionFrame();
       element.dispatchEvent(createPointerEvent("pointerdown"));
 
       await vi.advanceTimersByTimeAsync(50);
@@ -235,6 +251,8 @@ describe("gestures", () => {
       ));
 
       const element = screen.getByTestId("target");
+      mockFocusVisible(element);
+      await settleInitialMotionFrame();
       fireEvent.focus(element);
 
       await vi.advanceTimersByTimeAsync(50);
@@ -269,6 +287,8 @@ describe("gestures", () => {
       ));
 
       const element = screen.getByTestId("target");
+      mockFocusVisible(element);
+      await settleInitialMotionFrame();
       fireEvent.focus(element);
 
       await vi.advanceTimersByTimeAsync(50);
@@ -588,6 +608,8 @@ describe("gestures", () => {
       ));
 
       const element = screen.getByTestId("target");
+      mockFocusVisible(element);
+      await settleInitialMotionFrame();
 
       fireEvent.focus(element);
       await vi.advanceTimersByTimeAsync(50);

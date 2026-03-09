@@ -1,32 +1,41 @@
 # API Reference
 
-Public surface exported from `motion-solid`.
+High-level docs live in the topic pages. This page is the short export list.
 
 ## Components
 
-- `motion` - Proxy exposing `motion.div`, `motion.svg`, and all HTML/SVG tags
-- `AnimatePresence` - Enables exit animations
-- `MotionConfig` - Global defaults for transitions and reduced motion
+- `motion`
+- `AnimatePresence`
+- `LayoutGroup`
+- `MotionConfig`
 
 ## Hooks
 
-- `usePresence` - Presence state plus `safeToRemove` callback for manual exit control
-- `useIsPresent` - Just the presence accessor
-- `usePresenceData` - Access the `custom` payload from AnimatePresence
-- `useReducedMotion` - System preference for reduced motion as a Solid accessor
-- `useMotionConfig` - Current MotionConfig context
+- `usePresence`
+- `useIsPresent`
+- `usePresenceData`
+- `useInstantLayoutTransition`
+- `useResetProjection`
+- `useMotionConfig`
+- `useReducedMotion`
 
 ## Utilities
 
-- `createDragControls` - Programmatic drag controller
-- `stagger` - Helper for orchestrating variants (e.g., `stagger(0.1, { from: "center" })`)
+- `createDragControls`
+- `stagger`
+- `isStaggerFunction`
 
 ## Types
 
-Common types: `MotionProps`, `AnimatePresenceProps`, `MotionConfigProps`.
-
-Motion Solid re-exports types from `motion-dom`: `Variant`, `Variants`, `Transition`, etc.
+- `MotionProps`
+- `AnimatePresenceProps`
+- `MotionConfigProps`
+- `Variant`
+- `Variants`
+- `Transition`
 
 ## Notes
 
-CSS custom properties (`--*`) are supported in `initial`, `animate`, and `exit` targets.
+- `AnimatePresence` defaults to `mode="popLayout"` in `motion-solid`.
+- Public transform and style keys are kebab-case first.
+- Exit/layout handoff retains the DOM node, but Solid still disposes the exiting subtree owner.

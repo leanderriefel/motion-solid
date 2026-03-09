@@ -10,6 +10,7 @@ export const Animation: Component<{
   name?: string;
   source?: string;
   class?: string;
+  wrapperClass?: string;
   showReloadButton?: boolean;
   containerRef?: ComponentProps<"div">["ref"];
   scrollable?: boolean;
@@ -53,9 +54,9 @@ export const Animation: Component<{
       <Show when={hasHeader()}>
         <div class="sticky top-0 z-20 shrink-0 flex items-center gap-3 border-b border-border bg-card px-3 h-12 backdrop-blur">
           <Show when={props.name}>
-            <h3 class="text-sm font-medium text-muted-foreground">
+            <div class="text-sm font-medium text-muted-foreground">
               {props.name}
-            </h3>
+            </div>
           </Show>
           <div class="ml-auto flex items-center gap-2">
             <Show when={props.source}>
@@ -92,10 +93,13 @@ export const Animation: Component<{
       </Show>
       <Show when={mounted()}>
         <div
-          class={cn({
-            "px-3 pb-3": props.scrollable,
-            "flex flex-1 items-center justify-center p-6": !props.scrollable,
-          })}
+          class={cn(
+            {
+              "px-3 pb-3": props.scrollable,
+              "flex flex-1 items-center justify-center p-6": !props.scrollable,
+            },
+            props.wrapperClass,
+          )}
         >
           {props.children}
         </div>

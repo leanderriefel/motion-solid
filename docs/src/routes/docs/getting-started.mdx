@@ -1,36 +1,22 @@
+import { BasicMotionDemo } from "~/components/demos/basic-motion-demo";
+
 # Getting Started
 
-motion-solid is a [SolidJS](https://solidjs.com) animation library built on [Motion](https://motion.dev). It provides declarative animations, gestures, drag, and layout animations with a Solid-native API.
+`motion-solid` gives Solid apps Motion's animation, layout, presence, gesture, and drag APIs with Solid-native props.
 
-## Features
-
-- **Declarative animations** - Define animations with `initial`, `animate`, and `exit` props
-- **Variants** - Name and orchestrate complex animation sequences
-- **Gestures** - Hover, tap, focus, and viewport-triggered animations
-- **Drag** - Built-in draggable elements with constraints and momentum
-- **Layout animations** - Smoothly animate elements when they move or resize
-- **Exit animations** - Animate elements out when they leave the tree
-- **SSR-ready** - Server-side rendering with correct initial styles
-
-## Installation
+## Install
 
 ```bash
-# npm
 npm install motion-solid
+```
 
-# yarn
+```bash
 yarn add motion-solid
-
-# pnpm
 pnpm add motion-solid
-
-# bun
 bun add motion-solid
 ```
 
-## Quick Start
-
-Import the `motion` proxy and use `motion.div`, `motion.button`, etc:
+## First Component
 
 ```tsx
 import { motion } from "motion-solid";
@@ -38,97 +24,41 @@ import { motion } from "motion-solid";
 function App() {
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
-    >
-      Hello, motion!
-    </motion.div>
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+    />
   );
 }
 ```
 
-## Key Concepts
+<BasicMotionDemo />
 
-### Animation Props
+## Core Props
 
-- `initial` - Starting state (or `false` to skip)
-- `animate` - Target state to animate to
-- `exit` - State to animate to when leaving (requires AnimatePresence)
-- `transition` - How to animate (spring, tween, keyframes)
+- `initial`: `target object | variant label | string[] | false`. Starting state.
+- `animate`: `target object | variant label | string[]`. Target state.
+- `exit`: `target object | variant label | string[]`. Exit state. Use inside `AnimatePresence`.
+- `transition`: `Transition`. Timing, easing, spring, and keyframe config.
+- `style`: `MotionStyle`. Regular styles plus animated values.
 
-### Style Keys
+## Notes
 
-Use kebab-case for transform properties to match Solid conventions:
+- `motion.div`, `motion.button`, `motion.svg`, and the rest of the HTML/SVG tags are available from the `motion` proxy.
+- `motion.create(Component, options)` wraps custom components. Layout-capable custom components must forward `ref` to one DOM or SVG host node.
+- Public transform and style keys are kebab-case first: `scale-x`, `rotate-y`, `transform-perspective`, `origin-x`.
+- `AnimatePresence` defaults to `mode="popLayout"` in `motion-solid`.
+- Server and client render the same intrinsic host shape for built-in `motion.*` elements.
 
-```tsx
-<motion.div animate={{ "scale-x": 1.2, "rotate-y": 45 }} />
-```
+## Pages
 
-Supported transform keys include: `x`, `y`, `z`, `scale`, `scale-x`, `scale-y`, `rotate`, `rotate-x`, `rotate-y`, `rotate-z`, `skew-x`, `skew-y`, `transform-perspective`, `origin-x`, `origin-y`, `origin-z`.
-
-### Reactivity
-
-Animation values can be reactive:
-
-```tsx
-const [isOpen, setIsOpen] = createSignal(false);
-
-<motion.div
-  animate={{ height: isOpen() ? 200 : 0 }}
-  transition={{ type: "spring" }}
-/>;
-```
-
-## Exit Animations
-
-Wrap with `AnimatePresence` to enable exit animations:
-
-```tsx
-import { AnimatePresence, motion } from "motion-solid";
-import { Show } from "solid-js";
-
-function Modal() {
-  const [open, setOpen] = createSignal(true);
-
-  return (
-    <AnimatePresence>
-      <Show when={open()}>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-        >
-          Modal content
-        </motion.div>
-      </Show>
-    </AnimatePresence>
-  );
-}
-```
-
-## Server-Side Rendering
-
-Motion components render deterministically on the server. They use `initial` styles when provided, or `animate` styles if `initial` is `false` or undefined.
-
-```tsx
-// Server renders with translateX(100px)
-<motion.div initial={false} animate={{ x: 100 }} />
-
-// Server renders with opacity: 0; transform: scale(0);
-<motion.div
-  initial={{ opacity: 0, scale: 0 }}
-  animate={{ opacity: 1, scale: 1 }}
-/>
-```
-
-## Next Steps
-
-- [Motion Component](/docs/motion-component) - All props and options
-- [Variants](/docs/variants) - Orchestrate complex animations
-- [Gestures](/docs/gestures) - Hover, tap, focus interactions
-- [Drag](/docs/drag) - Draggable elements
-- [Layout](/docs/layout) - Animate layout changes
-- [AnimatePresence](/docs/animate-presence) - Exit animations
-- [MotionConfig](/docs/motion-config) - Global configuration
-- [Demos](/docs/demos) - Interactive examples
+- [Demos](/docs/demos)
+- [Architecture / Caveats](/docs/architecture-caveats)
+- [Motion Component](/docs/motion-component)
+- [Layout Animations](/docs/layout-animations)
+- [Variants](/docs/variants)
+- [AnimatePresence](/docs/animate-presence)
+- [MotionConfig](/docs/motion-config)
+- [Hooks](/docs/hooks)
+- [Gestures](/docs/gestures)
+- [Drag](/docs/drag)

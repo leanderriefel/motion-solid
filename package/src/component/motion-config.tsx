@@ -29,8 +29,8 @@ export interface MotionConfigProps {
    * - "always": Always reduce motion (useful for debugging)
    * - "never": Never reduce motion (default)
    *
-   * When reduced motion is active, transform and layout animations are
-   * disabled while other animations like opacity and colors persist.
+   * When reduced motion is active, transform-heavy animations are disabled
+   * while other animations like opacity and colors persist.
    */
   reducedMotion?: ReducedMotionConfig;
   children?: JSX.Element;

@@ -1,11 +1,3 @@
-export { useAnimationState } from "./use-animation-state";
-export {
-  animationTypes,
-  type AnimationType,
-  type AnimationTypeTargets,
-  type AnimationTypeValuesMap,
-  buildAnimationTypeMotionValues,
-} from "./types";
 export {
   pickInitialFromKeyframes,
   pickFinalFromKeyframes,

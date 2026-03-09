@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(currentDir, "../..");
+const repoRoot = resolve(packageRoot, "..");
 const isCI = Boolean(process.env.CI);
 
 export default defineConfig({
@@ -36,13 +37,23 @@ export default defineConfig({
     video: "retain-on-failure",
     viewport: { width: 1280, height: 900 },
   },
-  webServer: {
-    command: "bun run test:browser:harness",
-    cwd: packageRoot,
-    url: "http://127.0.0.1:4173",
-    reuseExistingServer: !isCI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: "bun run test:browser:harness",
+      cwd: packageRoot,
+      url: "http://127.0.0.1:4173",
+      reuseExistingServer: !isCI,
+      timeout: 120_000,
+    },
+    {
+      command:
+        "bun --filter @motion-solid/docs dev --host 127.0.0.1 --port 4311",
+      cwd: repoRoot,
+      url: "http://127.0.0.1:4311",
+      reuseExistingServer: !isCI,
+      timeout: 180_000,
+    },
+  ],
   projects: [
     {
       name: "chromium",
