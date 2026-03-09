@@ -205,7 +205,7 @@ describe("layout runtime", () => {
     expect(didUpdate).toHaveBeenCalled();
   });
 
-  it("flushes the projection root when a shared layout target mounts after snapshots already exist", async () => {
+  it("does not flush the projection root when a new shared layout instance mounts after another instance already snapshotted", async () => {
     const [layoutDependency, setLayoutDependency] = createSignal(0);
     const [showTarget, setShowTarget] = createSignal(false);
 
@@ -244,7 +244,7 @@ describe("layout runtime", () => {
     await Promise.resolve();
 
     expect(screen.getByTestId("shared-target")).toBeTruthy();
-    expect(didUpdate).toHaveBeenCalled();
+    expect(didUpdate).not.toHaveBeenCalled();
   });
 
   it("supports layout-capable custom components created with motion.create", () => {

@@ -4,11 +4,14 @@ export const useInstantLayoutTransition = () => {
   return (callback: VoidFunction) => {
     const root = rootProjectionNode.current;
     root?.blockUpdate();
-    callback();
-    queueMicrotask(() => {
-      root?.unblockUpdate();
-      root?.didUpdate();
-    });
+    try {
+      callback();
+    } finally {
+      queueMicrotask(() => {
+        root?.unblockUpdate();
+        root?.didUpdate();
+      });
+    }
   };
 };
 

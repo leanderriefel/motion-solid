@@ -511,8 +511,6 @@ const refreshSharedLayoutSnapshotFromResumeSource = (
   return true;
 };
 
-let hasTakenAnySnapshot = false;
-
 const copyRawValuesOnly = (
   target: TransformStyle,
   source: MotionStyle | undefined,
@@ -798,6 +796,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     let scheduledInitialAnimationFrame: number | null = null;
     let clearChildListRecoverySuppressionFrame: number | null = null;
     let clearChildRenderMeasurementSuppressionFrame: number | null = null;
+    let hasTakenAnySnapshot = false;
     let hasCommittedProjectionMount = false;
     let groupProjection: IProjectionNode | undefined;
     let switchProjection: IProjectionNode | undefined;

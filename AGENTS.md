@@ -125,6 +125,7 @@ Features and animation primitives:
 - `animateVisualElement`
 - gesture primitives used by hover/press/pan/in-view/focus features
 - `animateMotionValue` from `motion-dom`, used inside drag behavior
+- legacy animation controls subscriptions are feature-owned and must dispose the previous subscription before switching `animate` controls or leaving controls mode
 
 Important consequence:
 
@@ -160,6 +161,7 @@ Framework timing translation:
   - post-commit effect flush in the same update cycle
   - coalesces to exactly one `projection.root.didUpdate()` flush per projection root in the current frame/update turn so descendant child-content follow-up measurements cannot clear in-flight projection started by an earlier pre-commit snapshot
   - child-list `MutationObserver` recovery remains a post-mutation fallback and must bail when the same host already entered a pre-commit measurement cycle; when it does run, it must not trigger a second same-frame root flush or it can cancel in-flight layout projection
+  - first committed projection mounts only run the recovery `didUpdate()` path when that component instance already entered its own snapshot/unmount lifecycle; snapshot history must not leak across unrelated component instances
 - mount/unmount translation:
   - `onMount`
   - `onCleanup`

@@ -13,7 +13,14 @@ export class AnimationFeature extends Feature<unknown> {
     node.animationState ||= createAnimationState(node);
   }
 
+  private clearControlsSubscription() {
+    this.unmountControls?.();
+    this.unmountControls = undefined;
+  }
+
   private updateControlsSubscription() {
+    this.clearControlsSubscription();
+
     const { animate } = this.node.getProps();
     if (isAnimationControls(animate)) {
       this.unmountControls = animate.subscribe(this.node);
@@ -34,6 +41,6 @@ export class AnimationFeature extends Feature<unknown> {
 
   override unmount() {
     this.node.animationState?.reset();
-    this.unmountControls?.();
+    this.clearControlsSubscription();
   }
 }
