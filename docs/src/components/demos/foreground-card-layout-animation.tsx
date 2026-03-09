@@ -62,7 +62,7 @@ export const ForegroundCardLayoutAnimation = () => {
       source={source}
     >
       <LayoutGroup id="simple-foreground-card-demo">
-        <div class="relative w-full">
+        <div class="relative w-full" data-testid="layout-foreground-stage">
           <div>
             <p class="text-sm font-semibold text-foreground">
               Three stacked rows
@@ -92,6 +92,7 @@ export const ForegroundCardLayoutAnimation = () => {
                       layoutId={partId(card.id, "card")}
                       layoutDependency={selectedId()}
                       layoutCrossfade={false}
+                      data-testid={`layout-foreground-row-${card.id}`}
                       transition={{
                         type: "spring",
                         stiffness: 320,
@@ -104,6 +105,7 @@ export const ForegroundCardLayoutAnimation = () => {
                         <motion.div
                           layoutId={partId(card.id, "square")}
                           layoutCrossfade={false}
+                          data-testid={`layout-foreground-square-${card.id}`}
                           class="size-14 shrink-0"
                           style={{
                             background: card.color,
@@ -115,6 +117,7 @@ export const ForegroundCardLayoutAnimation = () => {
                           layoutId={partId(card.id, "text")}
                           layout="position"
                           layoutCrossfade={false}
+                          data-testid={`layout-foreground-text-${card.id}`}
                           class="min-w-0"
                         >
                           <p class="text-base font-semibold text-foreground">
@@ -135,7 +138,10 @@ export const ForegroundCardLayoutAnimation = () => {
           <AnimatePresence initial={false} mode="sync">
             <Show when={selectedCard()} keyed>
               {(card) => (
-                <div class="absolute inset-0 z-20">
+                <div
+                  class="absolute inset-0 z-20"
+                  data-testid="layout-foreground-overlay"
+                >
                   <motion.button
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -159,6 +165,7 @@ export const ForegroundCardLayoutAnimation = () => {
                         layoutId={partId(card.id, "card")}
                         layoutDependency={selectedId()}
                         layoutCrossfade={false}
+                        data-testid={`layout-foreground-modal-${card.id}`}
                         class="w-full border border-border bg-card p-5 md:p-6"
                         style={sharedCardShellStyle}
                       >
@@ -167,6 +174,7 @@ export const ForegroundCardLayoutAnimation = () => {
                             <motion.div
                               layoutId={partId(card.id, "square")}
                               layoutCrossfade={false}
+                              data-testid={`layout-foreground-modal-square-${card.id}`}
                               class="size-24 shrink-0"
                               style={{
                                 background: card.color,
@@ -178,6 +186,7 @@ export const ForegroundCardLayoutAnimation = () => {
                               layoutId={partId(card.id, "text")}
                               layout="position"
                               layoutCrossfade={false}
+                              data-testid={`layout-foreground-modal-text-${card.id}`}
                               class="min-w-0"
                             >
                               <p class="text-base font-semibold text-foreground">

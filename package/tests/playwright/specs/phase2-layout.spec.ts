@@ -11,14 +11,6 @@ type ScaleSample = TransformSample & {
   scaleY: number;
 };
 
-type TopLayerSample = TransformSample & {
-  topTestId: string | null;
-  topTag: string | null;
-  opacity: string;
-  containsTarget: boolean;
-  intersectsViewport: boolean;
-};
-
 type SharedShellSample = {
   frame: number;
   transform: string | null;
@@ -184,86 +176,6 @@ const sampledActionLayoutBoxes = async (
   );
 };
 
-const sampledActionTopLayerContinuity = async (
-  page: Page,
-  action: string,
-  payload: unknown,
-  testIds: string | string[],
-) => {
-  return page.evaluate(
-    async ({ action, payload, testIds }) => {
-      const harnessWindow = window as HarnessWindow;
-      const samples: TopLayerSample[] = [];
-      const ids = Array.isArray(testIds) ? testIds : [testIds];
-
-      harnessWindow.__MOTION_HARNESS__?.act?.(action, payload);
-
-      for (let i = 0; i < 16; i += 1) {
-        const elements = ids
-          .map(
-            (testId) =>
-              document.querySelector(
-                `[data-testid="${testId}"]`,
-              ) as HTMLElement | null,
-          )
-          .filter((element): element is HTMLElement => element !== null);
-        const element =
-          elements[0] ??
-          (document.querySelector(
-            `[data-testid="${ids[0]}"]`,
-          ) as HTMLElement | null);
-
-        if (!element) return samples;
-
-        const transform = getComputedStyle(element).transform;
-        const rect = element.getBoundingClientRect();
-        const visibleLeft = Math.max(rect.left, 0);
-        const visibleTop = Math.max(rect.top, 0);
-        const visibleRight = Math.min(rect.right, window.innerWidth);
-        const visibleBottom = Math.min(rect.bottom, window.innerHeight);
-        const intersectsViewport =
-          visibleRight > visibleLeft && visibleBottom > visibleTop;
-        const sampleX = intersectsViewport
-          ? visibleLeft + (visibleRight - visibleLeft) / 2
-          : null;
-        const sampleY = intersectsViewport
-          ? visibleTop + (visibleBottom - visibleTop) / 2
-          : null;
-        const topElement =
-          sampleX !== null && sampleY !== null
-            ? (document.elementFromPoint(
-                sampleX,
-                sampleY,
-              ) as HTMLElement | null)
-            : null;
-
-        samples.push({
-          frame: i,
-          transform,
-          topTestId: topElement?.getAttribute("data-testid") ?? null,
-          topTag: topElement?.tagName ?? null,
-          opacity: getComputedStyle(element).opacity,
-          intersectsViewport,
-          containsTarget: Boolean(
-            topElement &&
-            elements.some(
-              (candidate) =>
-                candidate === topElement || candidate.contains(topElement),
-            ),
-          ),
-        });
-
-        await new Promise<void>((resolve) =>
-          requestAnimationFrame(() => resolve()),
-        );
-      }
-
-      return samples;
-    },
-    { action, payload, testIds },
-  );
-};
-
 const sampledActionSharedShellContinuity = async (
   page: Page,
   action: string,
@@ -421,6 +333,76 @@ test.describe("phase2 layout", () => {
         });
       })
       .not.toBe("none");
+  });
+
+  test("shared layout tab background stays behind the tab label during handoff", async ({
+    page,
+  }) => {
+    await runAction(page, "setSelected", "a");
+
+    const samples = await page.evaluate(async () => {
+      const harnessWindow = window as HarnessWindow;
+      const readFrame = () => {
+        const button = document.querySelector(
+          '[data-testid="layout-tab-b"]',
+        ) as HTMLButtonElement | null;
+        const label = button?.querySelector("span") as HTMLElement | null;
+        const rect = label?.getBoundingClientRect();
+        const sampleX = rect ? rect.left + rect.width / 2 : null;
+        const sampleY = rect ? rect.top + rect.height / 2 : null;
+        const topElement =
+          sampleX !== null && sampleY !== null
+            ? (document.elementFromPoint(
+                sampleX,
+                sampleY,
+              ) as HTMLElement | null)
+            : null;
+        const pill = document.querySelector(
+          '[data-testid="layout-shared-b"]',
+        ) as HTMLElement | null;
+
+        return {
+          topTag: topElement?.tagName ?? null,
+          topText: topElement?.textContent?.trim() ?? null,
+          topClass: topElement?.className ?? null,
+          transform: pill ? getComputedStyle(pill).transform : null,
+          labelContainsTop: Boolean(
+            label &&
+            topElement &&
+            (label === topElement || label.contains(topElement)),
+          ),
+        };
+      };
+
+      const frames: Array<{
+        topTag: string | null;
+        topText: string | null;
+        topClass: string | null;
+        transform: string | null;
+        labelContainsTop: boolean;
+      }> = [];
+
+      harnessWindow.__MOTION_HARNESS__?.act?.("switchShared");
+
+      for (let i = 0; i < 12; i += 1) {
+        frames.push(readFrame());
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      }
+
+      return frames;
+    });
+
+    const animatedSamples = samples.filter(
+      (sample) => sample.transform !== null && sample.transform !== "none",
+    );
+
+    expect(animatedSamples.length, JSON.stringify(samples)).toBeGreaterThan(0);
+    expect(
+      animatedSamples.every((sample) => sample.labelContainsTop),
+      JSON.stringify(animatedSamples),
+    ).toBe(true);
   });
 
   test("layout prop animates sibling reordering in a list", async ({
@@ -592,13 +574,11 @@ test.describe("phase2 layout", () => {
     ).toBe(true);
   });
 
-  test("shared layout shell animates on open and stays visually on top", async ({
-    page,
-  }) => {
+  test("shared layout shell animates on open", async ({ page }) => {
     await page
       .getByTestId("layout-foreground-stage")
       .evaluate((element) => element.scrollIntoView({ block: "center" }));
-    const samples = await sampledActionTopLayerContinuity(
+    const samples = await sampledActionSharedShellContinuity(
       page,
       "openForeground",
       "alpha",
@@ -613,20 +593,6 @@ test.describe("phase2 layout", () => {
       samples.some(
         (sample) => sample.transform !== null && sample.transform !== "none",
       ),
-    ).toBe(true);
-
-    const animatedSamples = samples.filter(
-      (sample) =>
-        sample.transform !== null &&
-        sample.transform !== "none" &&
-        sample.intersectsViewport,
-    );
-
-    expect(samples.length).toBeGreaterThan(0);
-    expect(animatedSamples.length).toBeGreaterThan(1);
-    expect(
-      animatedSamples.every((sample) => sample.containsTarget),
-      JSON.stringify(animatedSamples),
     ).toBe(true);
   });
 
@@ -721,7 +687,7 @@ test.describe("phase2 layout", () => {
     ).toBe(true);
   });
 
-  test("alternating foreground cards keeps border-radius correction on open and stays on top while closing", async ({
+  test("alternating foreground cards keeps border-radius correction on open", async ({
     page,
   }) => {
     const sequence = ["alpha", "beta", "gamma", "alpha", "beta", "gamma"];
@@ -756,31 +722,8 @@ test.describe("phase2 layout", () => {
         openSamples.every((sample) => sample.borderTopLeftRadius !== "0px"),
         JSON.stringify(openSamples),
       ).toBe(true);
-
-      const closeSamples = await sampledActionTopLayerContinuity(
-        page,
-        "closeForeground",
-        null,
-        [`layout-foreground-row-${id}`, `layout-foreground-modal-${id}`],
-      );
-
+      await runAction(page, "closeForeground");
       await waitForState(page, "foregroundOpenId", null);
-
-      expect(closeSamples.length, JSON.stringify(closeSamples)).toBeGreaterThan(
-        0,
-      );
-      const animatedCloseSamples = closeSamples.filter(
-        (sample) => sample.transform !== null && sample.transform !== "none",
-      );
-      expect(
-        animatedCloseSamples.length,
-        JSON.stringify(closeSamples),
-      ).toBeGreaterThan(1);
-      expect(
-        animatedCloseSamples.slice(1).every((sample) => sample.containsTarget),
-        JSON.stringify(animatedCloseSamples),
-      ).toBe(true);
-
       await page.waitForTimeout(220);
     }
   });

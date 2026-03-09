@@ -116,7 +116,6 @@ type LayoutDebugPhase =
   | "willUpdate"
   | "didUpdate"
   | "mutationRecovery"
-  | "sharedLeadLift"
   | "animationStart"
   | "animationComplete"
   | "firstAnimatedFrame";
@@ -804,7 +803,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     let switchProjection: IProjectionNode | undefined;
     let removeProjectionAnimationStartListener: VoidFunction | undefined;
     let removeProjectionAnimationCompleteListener: VoidFunction | undefined;
-    let clearSharedLayoutLeadStyles: VoidFunction | undefined;
     let debugRectBeforeMutation: LayoutDebugRect | null = null;
     let debugDidRunWillUpdate = false;
     let debugRecoveredByMutationObserver = false;
@@ -839,11 +837,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       MotionOptions<ElementTag>,
       Record<string, unknown>,
     ];
-
-    const resetSharedLayoutLeadStyles = () => {
-      clearSharedLayoutLeadStyles?.();
-      clearSharedLayoutLeadStyles = undefined;
-    };
 
     const scheduleProjectionMeasurement = (
       measurementReasons: string[],
@@ -968,53 +961,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     const notifyParentLayoutWillChange = (reason: string) => {
       parentContext.onChildLayoutWillChange?.(reason);
-    };
-
-    const liftSharedLayoutLead = () => {
-      resetSharedLayoutLeadStyles();
-
-      const projection = visualElement.projection;
-      const element = currentElement;
-
-      if (!projection || !projection.isLead()) return;
-      if (!(element instanceof HTMLElement)) return;
-
-      const projectionOptions = projection.options as {
-        layoutId?: string;
-      };
-      if (projectionOptions.layoutId === undefined) return;
-
-      emitLayoutDebugEvent({
-        phase: "sharedLeadLift",
-        projectionId: projection.id,
-        layoutId: projectionOptions.layoutId,
-        testId: getProjectionTestId(element),
-        debugId: getProjectionDebugId(element),
-        rectBeforeMutation: toLayoutDebugRect(element),
-        ...getProjectionDebugState(projection),
-        ...getScrollDebugState(),
-        refreshedResumeSnapshot: debugRefreshedResumeSnapshot,
-        didRunWillUpdate: debugDidRunWillUpdate,
-        recoveredByMutationObserver: debugRecoveredByMutationObserver,
-        mutationRecoveryOnly:
-          !debugDidRunWillUpdate && debugRecoveredByMutationObserver,
-        measurementReasons: debugMeasurementReasons,
-      });
-
-      const previousZIndex = element.style.zIndex;
-      const previousPosition = element.style.position;
-      const computedPosition = getComputedStyle(element).position;
-
-      element.style.zIndex = "2147483647";
-
-      if (!previousPosition && computedPosition === "static") {
-        element.style.position = "relative";
-      }
-
-      clearSharedLayoutLeadStyles = () => {
-        element.style.zIndex = previousZIndex;
-        element.style.position = previousPosition;
-      };
     };
 
     const layoutId = createMemo(() =>
@@ -1447,7 +1393,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
                 !debugDidRunWillUpdate && debugRecoveredByMutationObserver,
               measurementReasons: debugMeasurementReasons,
             });
-            liftSharedLayoutLead();
           }) as never,
         );
       }
@@ -1477,7 +1422,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
                 !debugDidRunWillUpdate && debugRecoveredByMutationObserver,
               measurementReasons: debugMeasurementReasons,
             });
-            resetSharedLayoutLeadStyles();
             if (!isPresent()) {
               presence?.onExitComplete(presenceId, currentElement ?? undefined);
             }
@@ -1740,7 +1684,6 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       hasPendingProjectionMeasurement = false;
       childListObserver?.disconnect();
       childListObserver = undefined;
-      resetSharedLayoutLeadStyles();
       removeProjectionAnimationStartListener?.();
       removeProjectionAnimationStartListener = undefined;
       removeProjectionAnimationCompleteListener?.();

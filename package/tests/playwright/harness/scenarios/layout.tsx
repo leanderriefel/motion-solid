@@ -735,7 +735,7 @@ const foregroundCards = [
     summary:
       "Shared shell, square, and text should all animate into the dialog.",
     detail:
-      "The card background should not snap on open. The moving square and text should stay visually on top while the shell projects into the modal.",
+      "The card background should not snap on open. The shared shell, square, and text should project into the modal without being replaced by unrelated DOM.",
     color: "rgb(37, 99, 235)",
   },
   {
@@ -751,7 +751,7 @@ const foregroundCards = [
     title: "Support handoff",
     summary: "A third row to catch repeated shared-layout handoff drift.",
     detail:
-      "Alternating across three cards should still keep the shell, square, and text on top while the modal opens and closes.",
+      "Alternating across three cards should still keep the shell, square, and text visually continuous while the modal opens and closes.",
     color: "rgb(5, 150, 105)",
   },
 ] as const;

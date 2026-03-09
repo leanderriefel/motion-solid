@@ -182,7 +182,6 @@ Layout orchestration:
 - `useInstantLayoutTransition`
 - `useResetProjection`
 - `layoutId` namespacing through layout group ids
-- temporary lead lifting for active HTML shared-layout nodes so the promoted/shrinking `layoutId` lead stays above sibling rows during handoff
 - Solid invalidation signals such as `forceRenderVersion`
 
 SSR and hydration translation:
@@ -318,7 +317,6 @@ Prefer assertions on:
 - non-zero corrected border radius during projection
 - sibling reflow continuity
 - position-only text wrappers avoiding scale distortion
-- top-layer continuity for shared descendants during handoff
 
 Current required regression coverage includes:
 
@@ -331,7 +329,7 @@ Current required regression coverage includes:
 - `layoutDependency` measurement gating
 - `motion.create` ref/prop forwarding
 - browser-level shared layout and `AnimatePresence mode="popLayout"`
-- docs-route shared layout/top-layer continuity for foreground-card close handoff
+- browser-level shared tab background staying behind its label during handoff
 - docs-route foreground first open after reload
 - docs-route repeated list expansion continuity for the reshuffling demo
 - docs-route rapid sync/feed list alternation driven by real clicks
