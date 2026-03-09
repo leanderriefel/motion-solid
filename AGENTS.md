@@ -168,6 +168,7 @@ Framework timing translation:
 - animation-change scheduling:
   - `requestAnimationFrame`
   - `queueMicrotask`
+  - retained exit animations should preserve component-level `onAnimationStart` / `onAnimationComplete` callbacks; `onExitComplete` remains the parent aggregate exit signal
 
 Presence and exit orchestration:
 
@@ -332,6 +333,8 @@ Current required regression coverage includes:
 - `layoutDependency` measurement gating
 - `motion.create` ref/prop forwarding
 - browser-level shared layout and `AnimatePresence mode="popLayout"`
+- exit animations without explicit duration fields must not be cut off by a guessed short timeout
+- retained exit animations must still deliver component `onAnimationStart` / `onAnimationComplete` callbacks
 - browser-level shared tab background staying behind its label during handoff
 - docs-route foreground first open after reload
 - docs-route repeated list expansion continuity for the reshuffling demo

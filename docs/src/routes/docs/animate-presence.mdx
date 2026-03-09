@@ -26,6 +26,8 @@ import { PresenceDemo } from "~/components/demos/presence-demo";
 
 - Solid disposes exiting owners immediately. Exit and shared-layout handoff keep the DOM node, but the removed subtree no longer updates reactively.
 - `sync` is available, but `popLayout` is the safer default for the Solid exit model.
+- Retained exiting nodes still fire their own `onAnimationStart` and `onAnimationComplete` callbacks. Use `onExitComplete` for the parent-level "all exits finished" signal.
+- Durationless spring exits wait for the actual animation to settle instead of using a short guessed timeout.
 
 ## Example
 

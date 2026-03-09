@@ -13,6 +13,7 @@ export type HarnessEventType =
   | "animationStart"
   | "animationComplete"
   | "exitComplete"
+  | "springExitComplete"
   | "outerExitComplete"
   | "innerExitComplete"
   | "layoutStart"

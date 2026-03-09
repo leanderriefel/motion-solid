@@ -126,10 +126,12 @@ In practice:
 
 - `exit` still works
 - `onExitComplete` still works
+- retained exit animations still fire component `onAnimationStart` and `onAnimationComplete` callbacks
 - shared layout handoff still works
 - `popLayout` still works
 - long-lived async `safeToRemove` flows inside an already-removed exiting subtree are not React-identical
 - `mode="sync"` will look differently since we cannot "unexit" a component once it has started exiting, since we only have access to the DOM node, not the underlying exiting subtree. This is the reason why `mode="popLayout"` is the default.
+- durationless spring exits wait for the actual animation to settle instead of being cut off by a short fixed fallback
 
 ## Practical Layout Notes
 

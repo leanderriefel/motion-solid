@@ -164,7 +164,7 @@ test.describe("phase1 callbacks", () => {
     expect(completions.length).toBe(1);
   });
 
-  test("rapid hide/show does not multiply completion callbacks", async ({
+  test("rapid hide/show produces one exit completion and one re-entry completion", async ({
     page,
   }) => {
     // Wait for mount completion
@@ -178,18 +178,17 @@ test.describe("phase1 callbacks", () => {
     await page.waitForTimeout(40);
     await runAction(page, "show");
 
-    // Wait for the re-entrance animation to complete
-    await waitForEventCount(page, "animationComplete", 1);
+    // Wait for the exit completion and the re-entrance completion
+    await waitForEventCount(page, "animationComplete", 2);
 
-    // Give extra time to catch any stale duplicate callbacks
+    // Give extra time to catch any stale duplicate callbacks beyond the
+    // expected exit + re-entry completions.
     await page.waitForTimeout(300);
 
     const events = await readEvents(page);
     const completions = byType(events, "animationComplete");
 
-    // Should get exactly 1 animationComplete from the re-entrance,
-    // not duplicates from stale promise handlers
-    expect(completions.length).toBe(1);
+    expect(completions.length).toBe(2);
   });
 
   test("sequential completed cycles each fire exactly one callback", async ({

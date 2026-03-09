@@ -111,6 +111,56 @@ test.describe("phase2 animate-presence", () => {
     });
   });
 
+  test("exiting items still fire animation callbacks during AnimatePresence handoff", async ({
+    page,
+  }) => {
+    await clearEvents(page);
+    await runAction(page, "setMode", "sync");
+    await runAction(page, "setCurrent", "a");
+    await runAction(page, "cycle");
+
+    await expect(page.getByTestId("presence-item-a")).toHaveCount(0, {
+      timeout: 2_000,
+    });
+
+    const events = await readEvents(page);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "animationStart" && event.node === "presence-a",
+      ),
+    ).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "animationComplete" && event.node === "presence-a",
+      ),
+    ).toBe(true);
+  });
+
+  test("spring exits without explicit duration are not cut off by a short fallback", async ({
+    page,
+  }) => {
+    await clearEvents(page);
+    await runAction(page, "showSpringExit");
+    await runAction(page, "hideSpringExit");
+
+    await page.waitForTimeout(400);
+
+    await expect(page.getByTestId("spring-exit-item")).toHaveCount(1);
+    const earlyEvents = await readEvents(page);
+    expect(
+      earlyEvents.some(
+        (event) =>
+          event.type === "springExitComplete" && event.node === "spring-exit",
+      ),
+    ).toBe(false);
+
+    await expect(page.getByTestId("spring-exit-item")).toHaveCount(0, {
+      timeout: 10_000,
+    });
+  });
+
   test("nested propagate=true outer hide removes nested tree", async ({
     page,
   }) => {

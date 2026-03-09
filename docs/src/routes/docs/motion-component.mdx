@@ -71,4 +71,5 @@ const MotionCard = motion.create(Card, {
 - Use kebab-case transform and style keys: `scale-x`, `rotate-y`, `background-color`.
 - CSS variables (`--*`) pass through unchanged.
 - `motion.create(Component)` requires forwarding `ref` to one DOM or SVG host node.
+- Under `AnimatePresence`, retained exit animations still fire `onAnimationStart` and `onAnimationComplete` on the exiting component.
 - See [Layout Animations](/docs/layout-animations), [Variants](/docs/variants), [Gestures](/docs/gestures), and [Drag](/docs/drag) for the feature-specific props.

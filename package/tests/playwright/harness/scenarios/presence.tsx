@@ -19,6 +19,7 @@ export function PresenceScenario(props: ScenarioProps) {
   const [nested, setNested] = createSignal(false);
   const [propagate, setPropagate] = createSignal(false);
   const [initialFalseItems, setInitialFalseItems] = createSignal([1]);
+  const [springExitVisible, setSpringExitVisible] = createSignal(true);
 
   let sequenceTimer: number | null = null;
   let rapidTimer: number | null = null;
@@ -175,6 +176,12 @@ export function PresenceScenario(props: ScenarioProps) {
         case "resetInitialFalse":
           setInitialFalseItems([1]);
           return;
+        case "showSpringExit":
+          setSpringExitVisible(true);
+          return;
+        case "hideSpringExit":
+          setSpringExitVisible(false);
+          return;
         case "reset":
           clearTimers();
           setMode("sync");
@@ -184,6 +191,7 @@ export function PresenceScenario(props: ScenarioProps) {
           setNested(false);
           setPropagate(false);
           setInitialFalseItems([1]);
+          setSpringExitVisible(true);
           return;
       }
     },
@@ -201,6 +209,7 @@ export function PresenceScenario(props: ScenarioProps) {
         propagate: propagate(),
         mountedItemCount: modeItems ?? 0,
         initialFalseItemCount: initialFalseItems().length,
+        springExitVisible: springExitVisible(),
       };
     },
   };
@@ -317,6 +326,39 @@ export function PresenceScenario(props: ScenarioProps) {
               />
             )}
           </For>
+        </AnimatePresence>
+      </div>
+
+      <div class="harness-stage" data-testid="spring-exit-stage">
+        <div class="harness-subtitle">Spring exit watchdog</div>
+        <AnimatePresence
+          initial={false}
+          onExitComplete={() => {
+            props.log({ type: "springExitComplete", node: "spring-exit" });
+          }}
+        >
+          <Show when={springExitVisible()}>
+            <motion.div
+              data-testid="spring-exit-item"
+              animate={{ x: 0 }}
+              exit={{
+                x: 240,
+                transition: {
+                  type: "spring",
+                  stiffness: 18,
+                  damping: 4,
+                  restSpeed: 0.001,
+                  restDelta: 0.001,
+                },
+              }}
+              style={{
+                width: "140px",
+                height: "36px",
+                "background-color": "rgb(14, 165, 233)",
+                "border-radius": "10px",
+              }}
+            />
+          </Show>
         </AnimatePresence>
       </div>
     </div>

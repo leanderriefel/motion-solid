@@ -722,21 +722,26 @@ const getTransitionRuntimeMs = (definition: unknown) => {
       typeof transition !== "object" ||
       Array.isArray(transition)
     ) {
-      return 0;
+      return Number.NaN;
     }
 
     const source = transition as Record<string, unknown>;
-    const duration = typeof source.duration === "number" ? source.duration : 0;
+    const hasExplicitDuration = typeof source.duration === "number";
+    const duration = hasExplicitDuration ? (source.duration as number) : 0;
     const delay = typeof source.delay === "number" ? source.delay : 0;
     const repeat = typeof source.repeat === "number" ? source.repeat : 0;
     const repeatDelay =
       typeof source.repeatDelay === "number" ? source.repeatDelay : 0;
-    let max = delay + duration * Math.max(repeat + 1, 1) + repeatDelay * repeat;
+    let max = hasExplicitDuration
+      ? delay + duration * Math.max(repeat + 1, 1) + repeatDelay * repeat
+      : Number.NaN;
 
     for (const key in source) {
       const value = source[key];
       if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-      max = Math.max(max, readDuration(value));
+      const childDuration = readDuration(value);
+      if (!Number.isFinite(childDuration)) continue;
+      max = Number.isFinite(max) ? Math.max(max, childDuration) : childDuration;
     }
 
     return max;
@@ -744,22 +749,25 @@ const getTransitionRuntimeMs = (definition: unknown) => {
 
   const readTargetDuration = (target: unknown): number => {
     if (!target || typeof target !== "object" || Array.isArray(target)) {
-      return 0.3;
+      return Number.NaN;
     }
 
     const source = target as { transition?: unknown };
-    return readDuration(source.transition) || 0.3;
+    return readDuration(source.transition);
   };
 
   if (Array.isArray(definition)) {
-    return (
-      Math.max(...definition.map((entry) => readTargetDuration(entry)), 0.3) *
-        1000 +
-      100
-    );
+    const maxDuration = definition.reduce((max, entry) => {
+      const duration = readTargetDuration(entry);
+      if (!Number.isFinite(duration)) return max;
+      return Number.isFinite(max) ? Math.max(max, duration) : duration;
+    }, Number.NaN);
+
+    return Number.isFinite(maxDuration) ? maxDuration * 1000 + 100 : undefined;
   }
 
-  return readTargetDuration(definition) * 1000 + 100;
+  const duration = readTargetDuration(definition);
+  return Number.isFinite(duration) ? duration * 1000 + 100 : undefined;
 };
 
 export const createMotionComponent = <Tag extends ElementTag = "div">(
@@ -983,16 +991,12 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         onAnimationStart:
           typeof onAnimationStart === "function"
             ? (definition: MotionAnimationDefinition) => {
-                const marker = currentElement as MotionExitMarker | null;
-                if (marker?.__motionShouldExit || !isPresent()) return;
                 onAnimationStart(definition);
               }
             : undefined,
         onAnimationComplete:
           typeof onAnimationComplete === "function"
             ? (definition: MotionAnimationDefinition) => {
-                const marker = currentElement as MotionExitMarker | null;
-                if (marker?.__motionShouldExit || !isPresent()) return;
                 onAnimationComplete(definition);
               }
             : undefined,
@@ -1789,7 +1793,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
           visualElement.unmount();
         };
 
-        exitTimeout = setTimeout(completeExit, exitTimeoutMs);
+        exitTimeout = setTimeout(completeExit, exitTimeoutMs ?? 10_000);
 
         const exitAnimationPromise =
           visualElement.animationState?.setActive("exit", true, {
