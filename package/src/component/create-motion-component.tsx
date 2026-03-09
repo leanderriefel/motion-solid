@@ -1,4 +1,5 @@
 import { mergeRefs } from "@solid-primitives/refs";
+import { resolveElements } from "@solid-primitives/refs";
 import {
   HTMLProjectionNode,
   HTMLVisualElement,
@@ -102,6 +103,413 @@ type MotionExitMarker = Element & {
   __motionPresenceId?: string;
   __motionShouldExit?: boolean;
   __motionHandleExitComplete?: VoidFunction;
+};
+
+type LayoutDebugRect = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+};
+
+type LayoutDebugPhase =
+  | "willUpdate"
+  | "didUpdate"
+  | "mutationRecovery"
+  | "sharedLeadLift"
+  | "animationStart"
+  | "animationComplete"
+  | "firstAnimatedFrame";
+
+type LayoutDebugEvent = {
+  time: number;
+  phase: LayoutDebugPhase;
+  projectionId: number | null;
+  layoutId: string | null;
+  testId: string | null;
+  debugId?: string | null;
+  rectBeforeMutation: LayoutDebugRect | null;
+  afterRect?: LayoutDebugRect | null;
+  snapshotRect?: LayoutDebugRect | null;
+  layoutRect?: LayoutDebugRect | null;
+  targetRect?: LayoutDebugRect | null;
+  didRunWillUpdate?: boolean;
+  recoveredByMutationObserver?: boolean;
+  mutationRecoveryOnly?: boolean;
+  measurementReasons?: string[];
+  broadcastedNodes?: number;
+  mutationRecordCount?: number;
+  refreshedResumeSnapshot?: boolean;
+  scrollX?: number;
+  scrollY?: number;
+  isLead?: boolean;
+  isLayoutDirty?: boolean;
+  hasCurrentAnimation?: boolean;
+  transform?: string | null;
+  boxChanged?: boolean | null;
+  firstAnimatedFrameTransformNoneWithBoxChange?: boolean | null;
+};
+
+type LayoutDebugConfig = {
+  events?: LayoutDebugEvent[];
+  onEvent?: (event: LayoutDebugEvent) => void;
+  console?: boolean;
+  panel?: boolean;
+  maxEvents?: number;
+};
+
+declare global {
+  interface Window {
+    __MOTION_SOLID_LAYOUT_DEBUG__?: boolean | LayoutDebugConfig;
+    __MOTION_SOLID_LAYOUT_DUMP__?: (filter?: string) => string;
+    __MOTION_SOLID_LAYOUT_COPY__?: (filter?: string) => Promise<string>;
+    __MOTION_SOLID_LAYOUT_CLEAR__?: () => void;
+  }
+}
+
+const getLayoutDebugMode = () => {
+  if (typeof window === "undefined") return undefined;
+
+  try {
+    const fromQuery = new URLSearchParams(window.location.search).get(
+      "motion-solid-layout-debug",
+    );
+    if (fromQuery) return fromQuery;
+
+    return (
+      window.localStorage.getItem("motion-solid-layout-debug") ?? undefined
+    );
+  } catch {
+    return undefined;
+  }
+};
+
+const layoutDebugMatchesFilter = (
+  event: LayoutDebugEvent,
+  filter: string | undefined,
+) => {
+  if (!filter) return true;
+
+  const loweredFilter = filter.toLowerCase();
+  const values = [
+    event.debugId,
+    event.testId,
+    event.layoutId,
+    event.phase,
+  ].filter((value): value is string => Boolean(value));
+
+  return values.some((value) => value.toLowerCase().includes(loweredFilter));
+};
+
+const createLayoutDebugDump = (config: LayoutDebugConfig, filter?: string) => {
+  const events = (config.events ?? []).filter((event) =>
+    layoutDebugMatchesFilter(event, filter),
+  );
+
+  return JSON.stringify(
+    {
+      filter: filter ?? null,
+      count: events.length,
+      events,
+    },
+    null,
+    2,
+  );
+};
+
+const ensureLayoutDebugHelpers = (config: LayoutDebugConfig) => {
+  if (typeof window === "undefined") return;
+
+  window.__MOTION_SOLID_LAYOUT_DUMP__ = (filter?: string) =>
+    createLayoutDebugDump(config, filter);
+  window.__MOTION_SOLID_LAYOUT_COPY__ = async (filter?: string) => {
+    const output = createLayoutDebugDump(config, filter);
+    await navigator.clipboard.writeText(output);
+    return output;
+  };
+  window.__MOTION_SOLID_LAYOUT_CLEAR__ = () => {
+    config.events?.splice(0, config.events.length);
+  };
+};
+
+const getLayoutDebugConfig = () => {
+  if (typeof window === "undefined") return undefined;
+  const existing = window.__MOTION_SOLID_LAYOUT_DEBUG__;
+  if (existing) return existing;
+
+  const debugMode = getLayoutDebugMode();
+  if (!debugMode) return undefined;
+
+  const config: LayoutDebugConfig = {
+    events: [],
+    console: false,
+    panel: debugMode === "panel",
+    maxEvents: 200,
+  };
+
+  window.__MOTION_SOLID_LAYOUT_DEBUG__ = config;
+  ensureLayoutDebugHelpers(config);
+  return config;
+};
+
+const ensureLayoutDebugPanel = (config: LayoutDebugConfig) => {
+  if (typeof document === "undefined" || config.panel === false) return;
+
+  let panel = document.getElementById("motion-solid-layout-debug-panel");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "motion-solid-layout-debug-panel";
+    panel.setAttribute(
+      "style",
+      [
+        "position:fixed",
+        "right:12px",
+        "bottom:12px",
+        "z-index:2147483647",
+        "width:min(560px, calc(100vw - 24px))",
+        "background:rgba(15,23,42,0.96)",
+        "color:#e5e7eb",
+        "border:1px solid rgba(148,163,184,0.35)",
+        "border-radius:12px",
+        "box-shadow:0 20px 40px rgba(0,0,0,0.35)",
+        "font:12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace",
+      ].join(";"),
+    );
+
+    const header = document.createElement("div");
+    header.setAttribute(
+      "style",
+      "display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(148,163,184,0.2)",
+    );
+
+    const title = document.createElement("div");
+    title.textContent = "motion-solid layout debug";
+    title.setAttribute(
+      "style",
+      "font-weight:600;text-transform:lowercase;letter-spacing:0.02em",
+    );
+    header.append(title);
+
+    const actions = document.createElement("div");
+    actions.setAttribute("style", "display:flex;gap:6px");
+
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.textContent = "Copy";
+    copyButton.setAttribute(
+      "style",
+      "border:1px solid rgba(148,163,184,0.35);background:#111827;color:#e5e7eb;border-radius:8px;padding:4px 8px;cursor:pointer",
+    );
+    copyButton.addEventListener("click", async () => {
+      const textarea = document.getElementById(
+        "motion-solid-layout-debug-output",
+      ) as HTMLTextAreaElement | null;
+      if (!textarea) return;
+      textarea.select();
+      try {
+        await navigator.clipboard.writeText(textarea.value);
+      } catch {
+        document.execCommand("copy");
+      }
+    });
+    actions.append(copyButton);
+
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.textContent = "Clear";
+    clearButton.setAttribute(
+      "style",
+      "border:1px solid rgba(148,163,184,0.35);background:#111827;color:#e5e7eb;border-radius:8px;padding:4px 8px;cursor:pointer",
+    );
+    clearButton.addEventListener("click", () => {
+      config.events?.splice(0, config.events.length);
+      updateLayoutDebugPanel(config);
+    });
+    actions.append(clearButton);
+
+    header.append(actions);
+    panel.append(header);
+
+    const hint = document.createElement("div");
+    hint.textContent =
+      "Right-click the log to copy, or use Copy. Without the panel, use window.__MOTION_SOLID_LAYOUT_COPY__('reshuffle').";
+    hint.setAttribute(
+      "style",
+      "padding:8px 10px 0;color:#94a3b8;font-size:11px",
+    );
+    panel.append(hint);
+
+    const textarea = document.createElement("textarea");
+    textarea.id = "motion-solid-layout-debug-output";
+    textarea.readOnly = true;
+    textarea.setAttribute(
+      "style",
+      "display:block;width:calc(100% - 20px);height:260px;margin:8px 10px 10px;padding:10px;background:#020617;color:#e2e8f0;border:1px solid rgba(148,163,184,0.2);border-radius:8px;resize:vertical;white-space:pre;overflow:auto",
+    );
+    panel.append(textarea);
+
+    document.body.append(panel);
+  }
+
+  updateLayoutDebugPanel(config);
+};
+
+const updateLayoutDebugPanel = (config: LayoutDebugConfig) => {
+  if (typeof document === "undefined" || config.panel === false) return;
+
+  const textarea = document.getElementById(
+    "motion-solid-layout-debug-output",
+  ) as HTMLTextAreaElement | null;
+  if (!textarea) return;
+
+  const events = config.events ?? [];
+  const output = {
+    note: "Filter for reshuffle-row / reshuffle-detail / layoutId in your editor if needed.",
+    count: events.length,
+    events: events.slice(-80),
+  };
+
+  textarea.value = JSON.stringify(output, null, 2);
+};
+
+const isLayoutDebugEnabled = () => Boolean(getLayoutDebugConfig());
+
+const emitLayoutDebugEvent = (event: Omit<LayoutDebugEvent, "time">) => {
+  const config = getLayoutDebugConfig();
+  if (!config) return;
+
+  const fullEvent: LayoutDebugEvent = {
+    ...event,
+    time: typeof performance !== "undefined" ? performance.now() : Date.now(),
+  };
+
+  if (config === true) {
+    console.debug("[motion-solid][layout]", fullEvent);
+    return;
+  }
+
+  ensureLayoutDebugHelpers(config);
+
+  if (config.panel !== false) {
+    ensureLayoutDebugPanel(config);
+  }
+
+  if (config.events) {
+    config.events.push(fullEvent);
+    const maxEvents = config.maxEvents ?? 200;
+    if (config.events.length > maxEvents) {
+      config.events.splice(0, config.events.length - maxEvents);
+    }
+  }
+  config.onEvent?.(fullEvent);
+
+  if (config.console) {
+    console.debug("[motion-solid][layout]", fullEvent);
+  }
+
+  if (config.panel !== false) {
+    updateLayoutDebugPanel(config);
+  }
+};
+
+const toLayoutDebugRect = (
+  element: Element | null | undefined,
+): LayoutDebugRect | null => {
+  if (!element) return null;
+
+  const rect = element.getBoundingClientRect();
+  return {
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+  };
+};
+
+const toLayoutDebugRectFromBox = (
+  box:
+    | {
+        x: { min: number; max: number };
+        y: { min: number; max: number };
+      }
+    | undefined,
+): LayoutDebugRect | null => {
+  if (!box) return null;
+
+  return {
+    top: box.y.min,
+    left: box.x.min,
+    width: box.x.max - box.x.min,
+    height: box.y.max - box.y.min,
+  };
+};
+
+const hasLayoutDebugBoxChanged = (
+  beforeRect: LayoutDebugRect,
+  afterRect: LayoutDebugRect,
+) => {
+  const threshold = 0.5;
+
+  return (
+    Math.abs(beforeRect.top - afterRect.top) > threshold ||
+    Math.abs(beforeRect.left - afterRect.left) > threshold ||
+    Math.abs(beforeRect.width - afterRect.width) > threshold ||
+    Math.abs(beforeRect.height - afterRect.height) > threshold
+  );
+};
+
+const getProjectionLayoutId = (projection: IProjectionNode | undefined) => {
+  const projectionOptions = projection?.options as { layoutId?: string };
+  return projectionOptions?.layoutId ?? null;
+};
+
+const getProjectionTestId = (element: Element | null | undefined) =>
+  element?.getAttribute("data-testid") ?? null;
+
+const getProjectionDebugId = (element: Element | null | undefined) =>
+  element?.getAttribute("data-motion-debug-id") ?? null;
+
+const canMeasureProjectionInstance = (node: IProjectionNode | undefined) => {
+  if (!node?.instance) return false;
+  if (typeof Element === "undefined") return true;
+  return node.instance instanceof Element && node.instance.isConnected;
+};
+
+const getScrollDebugState = () => ({
+  scrollX: typeof window === "undefined" ? 0 : window.scrollX,
+  scrollY: typeof window === "undefined" ? 0 : window.scrollY,
+});
+
+const getProjectionDebugState = (projection: IProjectionNode | undefined) => ({
+  snapshotRect: toLayoutDebugRectFromBox(projection?.snapshot?.layoutBox),
+  layoutRect: toLayoutDebugRectFromBox(projection?.layout?.layoutBox),
+  targetRect: toLayoutDebugRectFromBox(projection?.target),
+  isLead: projection?.isLead() ?? false,
+  isLayoutDirty: projection?.isLayoutDirty ?? false,
+  hasCurrentAnimation: Boolean(projection?.currentAnimation),
+});
+
+const refreshSharedLayoutSnapshotFromResumeSource = (
+  projection: IProjectionNode | undefined,
+) => {
+  if (!projection?.options.layoutId) return false;
+
+  const resumeFrom = projection.resumeFrom;
+  if (!resumeFrom || resumeFrom === projection) return false;
+  if (!canMeasureProjectionInstance(resumeFrom)) return false;
+
+  prepareProjectionSnapshotPath(resumeFrom);
+  resumeFrom.clearSnapshot();
+  resumeFrom.updateSnapshot();
+
+  if (!resumeFrom.snapshot) return false;
+
+  projection.resumeFrom = resumeFrom;
+  projection.snapshot = resumeFrom.snapshot;
+  projection.snapshot.latestValues =
+    resumeFrom.animationValues || resumeFrom.latestValues;
+
+  return true;
 };
 
 let hasTakenAnySnapshot = false;
@@ -209,6 +617,102 @@ const getProjectionSnapshotRoot = (projection: IProjectionNode) => {
   return snapshotRoot;
 };
 
+const canBroadcastProjectionWillUpdate = (node: IProjectionNode) => {
+  const options = node.options as {
+    layout?: unknown;
+    layoutId?: string;
+  };
+
+  if (!options.layout && options.layoutId === undefined) {
+    return false;
+  }
+
+  if (typeof Element === "undefined") {
+    return true;
+  }
+
+  return node.instance instanceof Element && node.instance.isConnected;
+};
+
+const prepareProjectionSnapshotPath = (node: IProjectionNode) => {
+  const root = node.root ?? node;
+
+  if (!root.isUpdating) {
+    root.startUpdate();
+  }
+
+  for (const ancestor of node.path) {
+    ancestor.shouldResetTransform = true;
+    ancestor.updateScroll("snapshot");
+  }
+};
+
+type ProjectionRootDidUpdateState = IProjectionNode & {
+  __motionSolidDidUpdateSuppressed?: boolean;
+  __motionSolidDidUpdateSuppressionQueued?: boolean;
+};
+
+const flushProjectionRootDidUpdate = (projection: IProjectionNode) => {
+  const root = (projection.root ?? projection) as ProjectionRootDidUpdateState;
+
+  if (root.__motionSolidDidUpdateSuppressed) {
+    return false;
+  }
+
+  root.__motionSolidDidUpdateSuppressed = true;
+
+  if (!root.__motionSolidDidUpdateSuppressionQueued) {
+    root.__motionSolidDidUpdateSuppressionQueued = true;
+    queueMicrotask(() => {
+      queueMicrotask(() => {
+        root.__motionSolidDidUpdateSuppressed = false;
+        root.__motionSolidDidUpdateSuppressionQueued = false;
+      });
+    });
+  }
+
+  root.didUpdate();
+  return true;
+};
+
+const broadcastProjectionSubtreeWillUpdate = (
+  root: IProjectionNode,
+  source: IProjectionNode,
+) => {
+  const queue = [root];
+  let broadcastedNodes = 0;
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (!node) continue;
+
+    if (node !== source && canBroadcastProjectionWillUpdate(node)) {
+      prepareProjectionSnapshotPath(node);
+      const rootAnimationId = node.root?.animationId;
+
+      const needsFreshSnapshotThisCycle =
+        rootAnimationId !== undefined &&
+        node.snapshot?.animationId !== undefined &&
+        node.snapshot.animationId !== rootAnimationId &&
+        (node.isLayoutDirty || Boolean(node.currentAnimation) || !!node.target);
+
+      if (needsFreshSnapshotThisCycle) {
+        node.clearSnapshot();
+        node.isLayoutDirty = false;
+      }
+
+      if (!node.isLayoutDirty) {
+        node.willUpdate(false);
+        broadcastedNodes += 1;
+      }
+    }
+
+    queue.push(...node.children);
+  }
+
+  return broadcastedNodes;
+};
+
 const shouldCreateProjectionNode = (props: MotionOptions) =>
   Boolean(
     props.layout || props.layoutId || props.layoutScroll || props.layoutRoot,
@@ -285,18 +789,30 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     let childListObserver: MutationObserver | undefined;
     let isSyncingChildListLayout = false;
     let hasScheduledChildListSync = false;
+    const [childRenderVersion, setChildRenderVersion] = createSignal(0);
     const [latestDidUpdateId, setLatestDidUpdateId] = createSignal(0);
     const [hasMounted, setHasMounted] = createSignal(false);
+    let canTrackChildRenderChanges = false;
     let isCleaningUp = false;
     let animationChangesId = 0;
     let hasScheduledInitialAnimation = false;
     let scheduledInitialAnimationFrame: number | null = null;
+    let clearChildListRecoverySuppressionFrame: number | null = null;
+    let clearChildRenderMeasurementSuppressionFrame: number | null = null;
     let hasCommittedProjectionMount = false;
     let groupProjection: IProjectionNode | undefined;
     let switchProjection: IProjectionNode | undefined;
     let removeProjectionAnimationStartListener: VoidFunction | undefined;
     let removeProjectionAnimationCompleteListener: VoidFunction | undefined;
     let clearSharedLayoutLeadStyles: VoidFunction | undefined;
+    let debugRectBeforeMutation: LayoutDebugRect | null = null;
+    let debugDidRunWillUpdate = false;
+    let debugRecoveredByMutationObserver = false;
+    let debugMeasurementReasons: string[] = [];
+    let debugRefreshedResumeSnapshot = false;
+    let hasPendingProjectionMeasurement = false;
+    let suppressChildListRecovery = false;
+    let suppressChildRenderMeasurement = false;
     const isPresent = () => presence?.isPresent() ?? true;
     const [local, motionOptions, domProps] = splitProps(
       props as Record<string, unknown>,
@@ -329,6 +845,131 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       clearSharedLayoutLeadStyles = undefined;
     };
 
+    const scheduleProjectionMeasurement = (
+      measurementReasons: string[],
+      options: {
+        includeSubtreeBroadcast?: boolean;
+        suppressNextChildRenderMeasurement?: boolean;
+        promotePresenceChanges?: boolean;
+      } = {},
+    ) => {
+      const projection = visualElement.projection;
+      if (!hasMounted() || !projection) return false;
+
+      const element = currentElement as Element | null;
+      if (
+        typeof Element !== "undefined" &&
+        (!element || !element.isConnected)
+      ) {
+        return false;
+      }
+
+      const isExplicitForceRender = measurementReasons.includes(
+        "layoutGroup:forceRender",
+      );
+
+      if (
+        hasPendingProjectionMeasurement &&
+        projection.root?.isUpdating &&
+        !isExplicitForceRender
+      ) {
+        debugMeasurementReasons = Array.from(
+          new Set([...debugMeasurementReasons, ...measurementReasons]),
+        );
+        return true;
+      }
+
+      hasPendingProjectionMeasurement = true;
+      hasTakenAnySnapshot = true;
+      debugRectBeforeMutation = toLayoutDebugRect(element);
+      debugDidRunWillUpdate = true;
+      debugRecoveredByMutationObserver = false;
+
+      if (options.suppressNextChildRenderMeasurement) {
+        suppressChildRenderMeasurement = true;
+        if (clearChildRenderMeasurementSuppressionFrame !== null) {
+          cancelAnimationFrame(clearChildRenderMeasurementSuppressionFrame);
+        }
+        clearChildRenderMeasurementSuppressionFrame = requestAnimationFrame(
+          () => {
+            clearChildRenderMeasurementSuppressionFrame = null;
+            suppressChildRenderMeasurement = false;
+          },
+        );
+      }
+
+      suppressChildListRecovery = true;
+      if (clearChildListRecoverySuppressionFrame !== null) {
+        cancelAnimationFrame(clearChildListRecoverySuppressionFrame);
+      }
+      clearChildListRecoverySuppressionFrame = requestAnimationFrame(() => {
+        clearChildListRecoverySuppressionFrame = null;
+        suppressChildListRecovery = false;
+      });
+      debugRefreshedResumeSnapshot =
+        refreshSharedLayoutSnapshotFromResumeSource(projection) ||
+        debugRefreshedResumeSnapshot;
+
+      projection.willUpdate();
+
+      let broadcastedNodes = 0;
+      if (options.includeSubtreeBroadcast) {
+        const subtreeRoot = getProjectionSnapshotRoot(
+          projection.parent ?? projection,
+        );
+
+        broadcastedNodes = broadcastProjectionSubtreeWillUpdate(
+          subtreeRoot,
+          projection,
+        );
+      }
+
+      debugMeasurementReasons =
+        broadcastedNodes > 0
+          ? [...measurementReasons, "children:broadcast"]
+          : measurementReasons;
+
+      emitLayoutDebugEvent({
+        phase: "willUpdate",
+        projectionId: projection.id,
+        layoutId: getProjectionLayoutId(projection),
+        testId: getProjectionTestId(element),
+        debugId: getProjectionDebugId(element),
+        rectBeforeMutation: debugRectBeforeMutation,
+        ...getProjectionDebugState(projection),
+        ...getScrollDebugState(),
+        refreshedResumeSnapshot: debugRefreshedResumeSnapshot,
+        didRunWillUpdate: true,
+        recoveredByMutationObserver: false,
+        mutationRecoveryOnly: false,
+        measurementReasons: debugMeasurementReasons,
+        broadcastedNodes,
+      });
+
+      if (
+        options.promotePresenceChanges &&
+        measurementReasons.includes("presence:changed")
+      ) {
+        if (isPresent()) {
+          projection.promote();
+        } else if (!projection.relegate()) {
+          frame.postRender(() => {
+            const stack = projection.getStack();
+            if (!stack || !stack.members.length) {
+              presence?.onExitComplete(presenceId, currentElement ?? undefined);
+            }
+          });
+        }
+      }
+
+      setLatestDidUpdateId((value: number) => value + 1);
+      return true;
+    };
+
+    const notifyParentLayoutWillChange = (reason: string) => {
+      parentContext.onChildLayoutWillChange?.(reason);
+    };
+
     const liftSharedLayoutLead = () => {
       resetSharedLayoutLeadStyles();
 
@@ -342,6 +983,23 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         layoutId?: string;
       };
       if (projectionOptions.layoutId === undefined) return;
+
+      emitLayoutDebugEvent({
+        phase: "sharedLeadLift",
+        projectionId: projection.id,
+        layoutId: projectionOptions.layoutId,
+        testId: getProjectionTestId(element),
+        debugId: getProjectionDebugId(element),
+        rectBeforeMutation: toLayoutDebugRect(element),
+        ...getProjectionDebugState(projection),
+        ...getScrollDebugState(),
+        refreshedResumeSnapshot: debugRefreshedResumeSnapshot,
+        didRunWillUpdate: debugDidRunWillUpdate,
+        recoveredByMutationObserver: debugRecoveredByMutationObserver,
+        mutationRecoveryOnly:
+          !debugDidRunWillUpdate && debugRecoveredByMutationObserver,
+        measurementReasons: debugMeasurementReasons,
+      });
 
       const previousZIndex = element.style.zIndex;
       const previousPosition = element.style.position;
@@ -494,18 +1152,21 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     const initialProjectionOptions = untrack(resolvedMotionOptions);
     ensureProjectionNode(initialProjectionOptions);
     updateProjectionOptions(initialProjectionOptions);
+    notifyParentLayoutWillChange("children:descendant-mount");
 
     createComputed<
       | {
           layoutDependency: unknown;
           isPresent: boolean;
           forceRenderVersion: number;
+          childRenderVersion: number;
         }
       | undefined
     >((prev) => {
       const props = resolvedMotionOptions();
       const currentIsPresent = isPresent();
       const forceRenderVersion = layoutGroup.forceRenderVersion?.() ?? 0;
+      const nextChildRenderVersion = childRenderVersion();
 
       local.class;
       local.classList;
@@ -518,6 +1179,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
           layoutDependency: props.layoutDependency,
           isPresent: currentIsPresent,
           forceRenderVersion,
+          childRenderVersion: nextChildRenderVersion,
         };
       }
 
@@ -527,39 +1189,60 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       // interrupted shared-layout promotions can still resume from the lead
       // that is animating out of the previous state.
 
-      const shouldMeasure =
-        props.layoutDependency === undefined ||
-        prev?.layoutDependency !== props.layoutDependency ||
-        prev?.isPresent !== currentIsPresent ||
+      const hasUndefinedLayoutDependency = props.layoutDependency === undefined;
+      const hasLayoutDependencyChange =
+        prev?.layoutDependency !== props.layoutDependency;
+      const hasPresenceChange = prev?.isPresent !== currentIsPresent;
+      const hasForceRenderVersionChange =
         prev?.forceRenderVersion !== forceRenderVersion;
+      const hasChildRenderChange =
+        prev?.childRenderVersion !== nextChildRenderVersion;
+      const measurementReasons: string[] = [];
 
-      if (shouldMeasure) {
-        hasTakenAnySnapshot = true;
-        visualElement.projection.willUpdate();
+      if (hasUndefinedLayoutDependency) {
+        measurementReasons.push("layoutDependency:undefined");
+      }
 
-        if (prev?.isPresent !== currentIsPresent) {
-          if (currentIsPresent) {
-            visualElement.projection.promote();
-          } else if (!visualElement.projection.relegate()) {
-            frame.postRender(() => {
-              const stack = visualElement.projection?.getStack();
-              if (!stack || !stack.members.length) {
-                presence?.onExitComplete(
-                  presenceId,
-                  currentElement ?? undefined,
-                );
-              }
-            });
-          }
-        }
+      if (hasLayoutDependencyChange) {
+        measurementReasons.push("layoutDependency:changed");
+      }
 
-        setLatestDidUpdateId((value: number) => value + 1);
+      if (hasPresenceChange) {
+        measurementReasons.push("presence:changed");
+      }
+
+      if (hasForceRenderVersionChange) {
+        measurementReasons.push("layoutGroup:forceRender");
+      }
+
+      if (hasChildRenderChange) {
+        measurementReasons.push("children:changed");
+      }
+
+      const shouldMeasure = measurementReasons.length > 0;
+      const shouldSkipChildRenderFollowUpMeasurement =
+        suppressChildRenderMeasurement &&
+        hasChildRenderChange &&
+        !hasLayoutDependencyChange &&
+        !hasPresenceChange &&
+        !hasForceRenderVersionChange;
+
+      if (shouldMeasure && !shouldSkipChildRenderFollowUpMeasurement) {
+        scheduleProjectionMeasurement(measurementReasons, {
+          includeSubtreeBroadcast:
+            hasChildRenderChange ||
+            hasLayoutDependencyChange ||
+            hasPresenceChange ||
+            hasForceRenderVersionChange,
+          promotePresenceChanges: true,
+        });
       }
 
       return {
         layoutDependency: props.layoutDependency,
         isPresent: currentIsPresent,
         forceRenderVersion,
+        childRenderVersion: nextChildRenderVersion,
       };
     });
 
@@ -636,12 +1319,19 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     });
 
     const MotionHostChildren: Component = () => {
-      const renderChildren = () => {
+      const resolvedChildren = createMemo(() => {
         const value = local.children;
         return isMotionValue(value) ? value.get() : value;
-      };
+      });
+      const resolvedChildElements = resolveElements(resolvedChildren).toArray;
 
-      return renderChildren() as JSX.Element;
+      createComputed(() => {
+        resolvedChildElements();
+        if (!canTrackChildRenderChanges) return;
+        setChildRenderVersion((value) => value + 1);
+      });
+
+      return resolvedChildren() as JSX.Element;
     };
 
     const renderMotionChildren = () => {
@@ -654,6 +1344,12 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
           value={{
             ...treeVariants(),
             visualElement,
+            onChildLayoutWillChange: (reason) => {
+              scheduleProjectionMeasurement([reason], {
+                includeSubtreeBroadcast: true,
+                suppressNextChildRenderMeasurement: true,
+              });
+            },
           }}
         >
           <MotionHostChildren />
@@ -686,6 +1382,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
 
     onMount(() => {
       setHasMounted(true);
+      canTrackChildRenderChanges = true;
     });
 
     createRenderEffect(() => {
@@ -701,6 +1398,10 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       );
 
       const projection = visualElement.projection;
+      debugRefreshedResumeSnapshot =
+        refreshSharedLayoutSnapshotFromResumeSource(projection) ||
+        debugRefreshedResumeSnapshot;
+
       if (projection && layoutGroup.group && groupProjection !== projection) {
         layoutGroup.group.add(projection);
         groupProjection = projection;
@@ -720,7 +1421,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         hasCommittedProjectionMount = true;
 
         if (hasTakenAnySnapshot) {
-          projection.root?.didUpdate();
+          flushProjectionRootDidUpdate(projection);
         }
       }
 
@@ -728,6 +1429,24 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         removeProjectionAnimationStartListener = projection.addEventListener(
           "animationStart",
           (() => {
+            emitLayoutDebugEvent({
+              phase: "animationStart",
+              projectionId: projection.id,
+              layoutId: getProjectionLayoutId(projection),
+              testId: getProjectionTestId(currentElement as Element | null),
+              debugId: getProjectionDebugId(currentElement as Element | null),
+              rectBeforeMutation: toLayoutDebugRect(
+                currentElement as Element | null,
+              ),
+              ...getProjectionDebugState(projection),
+              ...getScrollDebugState(),
+              refreshedResumeSnapshot: debugRefreshedResumeSnapshot,
+              didRunWillUpdate: debugDidRunWillUpdate,
+              recoveredByMutationObserver: debugRecoveredByMutationObserver,
+              mutationRecoveryOnly:
+                !debugDidRunWillUpdate && debugRecoveredByMutationObserver,
+              measurementReasons: debugMeasurementReasons,
+            });
             liftSharedLayoutLead();
           }) as never,
         );
@@ -740,6 +1459,24 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         removeProjectionAnimationCompleteListener = projection.addEventListener(
           "animationComplete",
           (() => {
+            emitLayoutDebugEvent({
+              phase: "animationComplete",
+              projectionId: projection.id,
+              layoutId: getProjectionLayoutId(projection),
+              testId: getProjectionTestId(currentElement as Element | null),
+              debugId: getProjectionDebugId(currentElement as Element | null),
+              rectBeforeMutation: toLayoutDebugRect(
+                currentElement as Element | null,
+              ),
+              ...getProjectionDebugState(projection),
+              ...getScrollDebugState(),
+              refreshedResumeSnapshot: debugRefreshedResumeSnapshot,
+              didRunWillUpdate: debugDidRunWillUpdate,
+              recoveredByMutationObserver: debugRecoveredByMutationObserver,
+              mutationRecoveryOnly:
+                !debugDidRunWillUpdate && debugRecoveredByMutationObserver,
+              measurementReasons: debugMeasurementReasons,
+            });
             resetSharedLayoutLeadStyles();
             if (!isPresent()) {
               presence?.onExitComplete(presenceId, currentElement ?? undefined);
@@ -779,6 +1516,7 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
           hasScheduledChildListSync = false;
 
           if (isCleaningUp || isSyncingChildListLayout) return;
+          if (suppressChildListRecovery) return;
 
           const currentProjection = visualElement.projection;
           if (!currentProjection || !currentElement?.isConnected) return;
@@ -787,15 +1525,52 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
           const root = projection.root;
           if (!root || root.isUpdateBlocked()) return;
 
+          if (
+            debugDidRunWillUpdate ||
+            root.isUpdating ||
+            currentProjection.snapshot
+          ) {
+            return;
+          }
+
           const hasSnapshot =
             snapshotProjectionSubtreeFromCurrentLayout(projection);
           if (!hasSnapshot) return;
+
+          if (!debugRectBeforeMutation) {
+            debugRectBeforeMutation = toLayoutDebugRect(
+              currentElement as Element | null,
+            );
+          }
+
+          debugRecoveredByMutationObserver = true;
+
+          if (!debugDidRunWillUpdate) {
+            debugMeasurementReasons = ["mutation-observer"];
+          }
+
+          emitLayoutDebugEvent({
+            phase: "mutationRecovery",
+            projectionId: currentProjection.id,
+            layoutId: getProjectionLayoutId(currentProjection),
+            testId: getProjectionTestId(currentElement as Element | null),
+            debugId: getProjectionDebugId(currentElement as Element | null),
+            rectBeforeMutation: debugRectBeforeMutation,
+            ...getProjectionDebugState(currentProjection),
+            ...getScrollDebugState(),
+            refreshedResumeSnapshot: debugRefreshedResumeSnapshot,
+            didRunWillUpdate: debugDidRunWillUpdate,
+            recoveredByMutationObserver: true,
+            mutationRecoveryOnly:
+              !debugDidRunWillUpdate && debugRecoveredByMutationObserver,
+            measurementReasons: debugMeasurementReasons,
+            mutationRecordCount: records.length,
+          });
 
           isSyncingChildListLayout = true;
           hasTakenAnySnapshot = true;
 
           root.startUpdate();
-          root.didUpdate();
           setLatestDidUpdateId((value) => value + 1);
 
           queueMicrotask(() => {
@@ -850,29 +1625,100 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
       });
     });
 
-    createRenderEffect(() => {
+    createEffect(() => {
       const didUpdateId = latestDidUpdateId();
       if (!didUpdateId || !visualElement.projection) return;
 
-      queueMicrotask(() => {
-        if (!visualElement.projection) return;
-        if (didUpdateId !== latestDidUpdateId()) return;
+      if (didUpdateId !== latestDidUpdateId()) return;
 
-        if (hasTakenAnySnapshot) {
-          visualElement.projection.root?.didUpdate();
+      if (hasTakenAnySnapshot) {
+        const projection = visualElement.projection;
+        const didRunWillUpdate = debugDidRunWillUpdate;
+        const recoveredByMutationObserver = debugRecoveredByMutationObserver;
+        const measurementReasons = debugMeasurementReasons;
+        const refreshedResumeSnapshot = debugRefreshedResumeSnapshot;
+        const rectBeforeMutation = debugRectBeforeMutation;
+
+        emitLayoutDebugEvent({
+          phase: "didUpdate",
+          projectionId: projection.id,
+          layoutId: getProjectionLayoutId(projection),
+          testId: getProjectionTestId(currentElement as Element | null),
+          debugId: getProjectionDebugId(currentElement as Element | null),
+          rectBeforeMutation,
+          ...getProjectionDebugState(projection),
+          ...getScrollDebugState(),
+          refreshedResumeSnapshot,
+          didRunWillUpdate,
+          recoveredByMutationObserver,
+          mutationRecoveryOnly:
+            !didRunWillUpdate && recoveredByMutationObserver,
+          measurementReasons,
+        });
+
+        flushProjectionRootDidUpdate(projection);
+
+        if (
+          isLayoutDebugEnabled() &&
+          rectBeforeMutation &&
+          currentElement instanceof Element
+        ) {
+          const trackedElement = currentElement;
+          const trackedProjectionId = projection.id;
+          const trackedLayoutId = getProjectionLayoutId(projection);
+
+          requestAnimationFrame(() => {
+            if (isCleaningUp || !trackedElement.isConnected) return;
+
+            const transform = getComputedStyle(trackedElement).transform;
+            const nextRect = toLayoutDebugRect(trackedElement);
+            const boxChanged =
+              nextRect === null
+                ? null
+                : hasLayoutDebugBoxChanged(rectBeforeMutation, nextRect);
+
+            emitLayoutDebugEvent({
+              phase: "firstAnimatedFrame",
+              projectionId: trackedProjectionId,
+              layoutId: trackedLayoutId,
+              testId: getProjectionTestId(trackedElement),
+              debugId: getProjectionDebugId(trackedElement),
+              rectBeforeMutation,
+              afterRect: nextRect,
+              ...getProjectionDebugState(visualElement.projection),
+              ...getScrollDebugState(),
+              refreshedResumeSnapshot,
+              didRunWillUpdate,
+              recoveredByMutationObserver,
+              mutationRecoveryOnly:
+                !didRunWillUpdate && recoveredByMutationObserver,
+              measurementReasons,
+              transform,
+              boxChanged,
+              firstAnimatedFrameTransformNoneWithBoxChange:
+                boxChanged === null ? null : boxChanged && transform === "none",
+            });
+          });
         }
 
-        queueMicrotask(() => {
-          const projection = visualElement.projection;
-          if (
-            projection &&
-            !projection.currentAnimation &&
-            projection.isLead() &&
-            !isPresent()
-          ) {
-            presence?.onExitComplete(presenceId, currentElement ?? undefined);
-          }
-        });
+        debugDidRunWillUpdate = false;
+        debugRecoveredByMutationObserver = false;
+        debugMeasurementReasons = [];
+        debugRefreshedResumeSnapshot = false;
+        debugRectBeforeMutation = null;
+        hasPendingProjectionMeasurement = false;
+      }
+
+      queueMicrotask(() => {
+        const projection = visualElement.projection;
+        if (
+          projection &&
+          !projection.currentAnimation &&
+          projection.isLead() &&
+          !isPresent()
+        ) {
+          presence?.onExitComplete(presenceId, currentElement ?? undefined);
+        }
       });
     });
 
@@ -889,7 +1735,9 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
     };
 
     onCleanup(() => {
+      notifyParentLayoutWillChange("children:descendant-unmount");
       isCleaningUp = true;
+      hasPendingProjectionMeasurement = false;
       childListObserver?.disconnect();
       childListObserver = undefined;
       resetSharedLayoutLeadStyles();
@@ -902,6 +1750,16 @@ export const createMotionComponent = <Tag extends ElementTag = "div">(
         cancelAnimationFrame(scheduledInitialAnimationFrame);
         scheduledInitialAnimationFrame = null;
       }
+      if (clearChildListRecoverySuppressionFrame !== null) {
+        cancelAnimationFrame(clearChildListRecoverySuppressionFrame);
+        clearChildListRecoverySuppressionFrame = null;
+      }
+      if (clearChildRenderMeasurementSuppressionFrame !== null) {
+        cancelAnimationFrame(clearChildRenderMeasurementSuppressionFrame);
+        clearChildRenderMeasurementSuppressionFrame = null;
+      }
+      suppressChildListRecovery = false;
+      suppressChildRenderMeasurement = false;
 
       const projection = visualElement.projection;
       const element = currentElement;

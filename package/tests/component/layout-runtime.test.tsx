@@ -193,6 +193,11 @@ describe("layout runtime", () => {
     expect(projectionC).toBeTruthy();
 
     const didUpdate = vi.spyOn(listProjection!.root!, "didUpdate");
+
+    await Promise.resolve();
+    await Promise.resolve();
+    didUpdate.mockClear();
+
     setSortByImpact(false);
     await Promise.resolve();
     await Promise.resolve();

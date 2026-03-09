@@ -5,6 +5,7 @@ export interface MotionContextValue<Instance = unknown> {
   visualElement?: VisualElement<Instance>;
   initial?: false | string | string[];
   animate?: string | string[];
+  onChildLayoutWillChange?: (reason: string) => void;
 }
 
 export const MotionContext = createContext<MotionContextValue>({});

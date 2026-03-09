@@ -102,7 +102,11 @@ export const ComplexLayoutAnimation = () => {
           </div>
         </div>
 
-        <motion.div layout class="flex flex-col gap-3">
+        <motion.div
+          layout
+          class="flex flex-col gap-3"
+          data-motion-debug-id="reshuffle-list"
+        >
           <For each={sortedQueue()}>
             {(item) => {
               const isExpanded = () => expandedId() === item.id;
@@ -114,6 +118,7 @@ export const ComplexLayoutAnimation = () => {
                   whileTap={{ scale: 0.99 }}
                   transition={{ type: "spring", stiffness: 320, damping: 28 }}
                   type="button"
+                  data-motion-debug-id={`reshuffle-row-${item.id}`}
                   class="border border-border bg-card p-4 text-left"
                   style={{
                     "border-radius": "24px",
@@ -128,8 +133,12 @@ export const ComplexLayoutAnimation = () => {
                   <motion.div
                     layout="position"
                     class="flex items-start justify-between gap-4"
+                    data-motion-debug-id={`reshuffle-header-row-${item.id}`}
                   >
-                    <motion.div layout="position">
+                    <motion.div
+                      layout="position"
+                      data-motion-debug-id={`reshuffle-header-${item.id}`}
+                    >
                       <p class="text-sm font-semibold text-foreground">
                         {item.title}
                       </p>
@@ -140,6 +149,7 @@ export const ComplexLayoutAnimation = () => {
                     <motion.div
                       layout="position"
                       class="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground"
+                      data-motion-debug-id={`reshuffle-pill-${item.id}`}
                     >
                       {sortBy() === "impact" ? "Impact" : "Speed"}{" "}
                       {currentValue()}
@@ -149,11 +159,13 @@ export const ComplexLayoutAnimation = () => {
                   <motion.div
                     layout
                     class="mt-4 h-2 bg-muted"
+                    data-motion-debug-id={`reshuffle-progress-track-${item.id}`}
                     style={{ "border-radius": "999px" }}
                   >
                     <motion.div
                       layout
                       class={`h-full ${item.accent}`}
+                      data-motion-debug-id={`reshuffle-progress-fill-${item.id}`}
                       style={{
                         width: `${currentValue()}%`,
                         "border-radius": "999px",
@@ -165,6 +177,7 @@ export const ComplexLayoutAnimation = () => {
                     <Show when={isExpanded()}>
                       <motion.div
                         layout
+                        data-motion-debug-id={`reshuffle-detail-${item.id}`}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 8 }}

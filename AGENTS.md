@@ -153,9 +153,12 @@ Framework timing translation:
 - React `getSnapshotBeforeUpdate` equivalent:
   - `createComputed(...)`
   - calls `projection.willUpdate()` before Solid commits DOM updates
+  - tracks host-children render revisions inside the inner host-children component and, for nested motion child mount/unmount churn, uses a `MotionContext` callback to synchronously trigger a deduped pre-commit `projection.willUpdate()` on ancestors before the child DOM commits
+  - on child-driven or layout-triggered host rerenders, broadcasts `willUpdate(false)` across the nearest projection snapshot subtree so descendant and sibling layout nodes are dirtied in the same pre-commit window, while stale already-dirty descendant snapshots from older projection cycles are refreshed instead of being reused across interrupted reversals
 - React layout/update phase equivalent:
-  - post-commit microtask flush
-  - calls `projection.root.didUpdate()`
+  - post-commit effect flush in the same update cycle
+  - coalesces to exactly one `projection.root.didUpdate()` flush per projection root in the current frame/update turn so descendant child-content follow-up measurements cannot clear in-flight projection started by an earlier pre-commit snapshot
+  - child-list `MutationObserver` recovery remains a post-mutation fallback and must bail when the same host already entered a pre-commit measurement cycle; when it does run, it must not trigger a second same-frame root flush or it can cancel in-flight layout projection
 - mount/unmount translation:
   - `onMount`
   - `onCleanup`
@@ -220,6 +223,7 @@ Docs and harness:
 - docs demos
 - Playwright harness scenarios
 - browser regression helpers
+- optional browser-only layout timing diagnostics via `window.__MOTION_SOLID_LAYOUT_DEBUG__` or the `motion-solid-layout-debug` / `localStorage['motion-solid-layout-debug']` bootstrap in `create-motion-component.tsx`, with copy helpers exposed on `window.__MOTION_SOLID_LAYOUT_DUMP__` and `window.__MOTION_SOLID_LAYOUT_COPY__`
 
 ## Key Runtime Files
 
@@ -328,7 +332,9 @@ Current required regression coverage includes:
 - `motion.create` ref/prop forwarding
 - browser-level shared layout and `AnimatePresence mode="popLayout"`
 - docs-route shared layout/top-layer continuity for foreground-card close handoff
+- docs-route foreground first open after reload
 - docs-route repeated list expansion continuity for the reshuffling demo
+- docs-route rapid sync/feed list alternation driven by real clicks
 - browser-level drag movement and axis locking
 - browser-level scale correction for `borderRadius` and `boxShadow`
 

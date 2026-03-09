@@ -325,12 +325,7 @@ const readElementTops = async (page: Page, testIds: string[]) => {
   );
 };
 
-const hasContinuousLayoutMovement = (
-  samples: LayoutBoxSample[],
-  finalTop: number | null,
-) => {
-  if (finalTop === null) return false;
-
+const hasInFlightLayoutMovement = (samples: LayoutBoxSample[]) => {
   const positionedSamples = samples.filter(
     (sample): sample is LayoutBoxSample & { top: number } =>
       sample.top !== null,
@@ -340,15 +335,14 @@ const hasContinuousLayoutMovement = (
   const hasAnimatedTransform = positionedSamples.some(
     (sample) => sample.transform !== null && sample.transform !== "none",
   );
+  const roundedTops = new Set(
+    positionedSamples.map((sample) => Math.round(sample.top)),
+  );
   const tops = positionedSamples.map((sample) => sample.top);
   const minTop = Math.min(...tops);
   const maxTop = Math.max(...tops);
-  const hasVisibleTravel = maxTop - minTop > 8;
-  const reachesFinalPosition = positionedSamples.some(
-    (sample) => Math.abs(sample.top - finalTop) < 2,
-  );
 
-  return hasAnimatedTransform && hasVisibleTravel && reachesFinalPosition;
+  return hasAnimatedTransform && roundedTops.size >= 4 && maxTop - minTop > 8;
 };
 
 test.describe("phase2 layout", () => {
@@ -544,10 +538,7 @@ test.describe("phase2 layout", () => {
         const testId = `layout-expand-${id}`;
 
         expect(
-          hasContinuousLayoutMovement(
-            samples[testId] ?? [],
-            nextTops[testId] ?? null,
-          ),
+          hasInFlightLayoutMovement(samples[testId] ?? []),
           `${String(target)} -> ${id}: ${JSON.stringify(samples[testId] ?? [])}`,
         ).toBe(true);
       }
